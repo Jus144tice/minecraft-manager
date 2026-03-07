@@ -356,7 +356,7 @@ function renderMods() {
     const ver = md?.versionNumber || '';
 
     return `<div class="mod-card ${mod.enabled ? '' : 'mod-disabled'}">
-      ${md?.iconUrl ? `<img class="mod-icon" src="${esc(md.iconUrl)}" alt="" loading="lazy" />` : '<div class="mod-icon-placeholder"></div>'}
+      ${md?.iconUrl ? `<img class="mod-icon" src="${esc(md.iconUrl)}" alt="" loading="lazy" onerror="this.replaceWith(Object.assign(document.createElement('div'),{className:'mod-icon-placeholder'}))" />` : '<div class="mod-icon-placeholder"></div>'}
       <div class="mod-info">
         <div class="mod-title">
           <span>${esc(title)}</span>
@@ -444,7 +444,7 @@ $('browse-next').addEventListener('click', () => {
 // Auto-load popular mods (no query) when the tab first opens
 async function browseLoad() {
   if (browseLoaded && browseOffset === 0 && !$('browse-query').value.trim()) {
-    // Already loaded, don't reload unless paginating
+    return; // Already loaded, don't reload unless paginating
   }
   $('browse-heading').textContent = 'Popular server-compatible Forge mods';
   $('browse-results').innerHTML = '<p class="dim">Loading popular mods...</p>';
@@ -504,7 +504,7 @@ function renderBrowseResults(hits) {
     const latestVer = (hit.versions || []).filter(v => /^\d/.test(v)).slice(-1)[0] || '';
     const cats = (hit.categories || []).filter(c => c !== 'forge').slice(0, 3);
     return `<div class="mod-card browse-card">
-      ${hit.icon_url ? `<img class="mod-icon" src="${esc(hit.icon_url)}" alt="" loading="lazy" />` : '<div class="mod-icon-placeholder"></div>'}
+      ${hit.icon_url ? `<img class="mod-icon" src="${esc(hit.icon_url)}" alt="" loading="lazy" onerror="this.replaceWith(Object.assign(document.createElement('div'),{className:'mod-icon-placeholder'}))" />` : '<div class="mod-icon-placeholder"></div>'}
       <div class="mod-info">
         <div class="mod-title">
           <span>${esc(hit.title)}</span>
