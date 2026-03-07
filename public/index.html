@@ -1,0 +1,355 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Minecraft Server Manager</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+
+<!-- LOGIN SCREEN -->
+<div id="login-screen" class="login-screen">
+  <div class="login-box">
+    <div class="login-logo">
+      <span class="logo-icon">&#9733;</span>
+      <h1>Minecraft Manager</h1>
+      <p>Server Control Panel</p>
+    </div>
+    <div class="form-group">
+      <label>Password</label>
+      <input type="password" id="login-password" placeholder="Enter web password" autocomplete="current-password" />
+    </div>
+    <button class="btn btn-primary btn-full" id="login-btn">Log In</button>
+    <p id="login-error" class="error-msg hidden"></p>
+  </div>
+</div>
+
+<!-- MAIN APP -->
+<div id="app" class="hidden">
+  <!-- Top nav -->
+  <header class="topbar">
+    <div class="topbar-left">
+      <span class="logo-icon">&#9733;</span>
+      <span class="site-name">Minecraft Manager</span>
+    </div>
+    <nav class="tab-nav">
+      <button class="tab-btn active" data-tab="dashboard">Dashboard</button>
+      <button class="tab-btn" data-tab="console">Console</button>
+      <button class="tab-btn" data-tab="mods">Mods</button>
+      <button class="tab-btn" data-tab="players">Players</button>
+      <button class="tab-btn" data-tab="settings">Settings</button>
+    </nav>
+    <div class="topbar-right">
+      <span id="server-badge" class="badge badge-stopped">Stopped</span>
+      <button class="btn btn-sm btn-ghost" id="logout-btn">Logout</button>
+    </div>
+  </header>
+
+  <!-- Tab: Dashboard -->
+  <section id="tab-dashboard" class="tab-content active">
+    <div class="page-header">
+      <h2>Dashboard</h2>
+    </div>
+    <div class="stat-grid">
+      <div class="stat-card">
+        <div class="stat-label">Server Status</div>
+        <div class="stat-value" id="stat-status">Stopped</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">Players Online</div>
+        <div class="stat-value" id="stat-players">-</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">Uptime</div>
+        <div class="stat-value" id="stat-uptime">-</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">RCON</div>
+        <div class="stat-value" id="stat-rcon">-</div>
+      </div>
+    </div>
+
+    <div class="control-section">
+      <h3>Server Control</h3>
+      <div class="btn-row">
+        <button class="btn btn-success" id="btn-start">Start Server</button>
+        <button class="btn btn-danger" id="btn-stop">Stop Server</button>
+        <button class="btn btn-warning" id="btn-restart">Restart</button>
+        <button class="btn btn-ghost" id="btn-kill">Force Kill</button>
+      </div>
+      <p id="control-msg" class="control-msg"></p>
+    </div>
+
+    <div class="control-section">
+      <h3>Quick Broadcast</h3>
+      <div class="input-row">
+        <input type="text" id="say-input" placeholder="Message to all players..." />
+        <button class="btn btn-primary" id="btn-say">Send</button>
+      </div>
+    </div>
+
+    <div class="control-section">
+      <h3>Online Players</h3>
+      <div id="online-players-list" class="player-chips">
+        <span class="dim">Refresh to load</span>
+      </div>
+      <button class="btn btn-sm btn-ghost mt-sm" id="btn-refresh-online">Refresh</button>
+    </div>
+  </section>
+
+  <!-- Tab: Console -->
+  <section id="tab-console" class="tab-content hidden">
+    <div class="page-header">
+      <h2>Server Console</h2>
+      <div class="header-actions">
+        <label class="toggle-label">
+          <input type="checkbox" id="console-autoscroll" checked />
+          Auto-scroll
+        </label>
+        <button class="btn btn-sm btn-ghost" id="btn-clear-console">Clear</button>
+      </div>
+    </div>
+    <div class="console-wrap">
+      <div id="console-output" class="console-output"></div>
+    </div>
+    <div class="console-input-bar">
+      <span class="console-prompt">&gt;</span>
+      <input type="text" id="console-cmd" placeholder="Type a command and press Enter..." />
+      <button class="btn btn-primary" id="btn-send-cmd">Send</button>
+    </div>
+    <p class="dim console-hint">Commands are sent via RCON when the server is running. Use the raw stdin option only if RCON is unavailable.</p>
+  </section>
+
+  <!-- Tab: Mods -->
+  <section id="tab-mods" class="tab-content hidden">
+    <div class="page-header">
+      <h2>Mod Manager</h2>
+      <div class="header-actions">
+        <button class="btn btn-sm btn-ghost" id="btn-lookup-mods">Identify Mods (Modrinth)</button>
+        <button class="btn btn-sm btn-ghost" id="btn-refresh-mods">Refresh List</button>
+      </div>
+    </div>
+
+    <!-- Sub-tabs -->
+    <div class="subtab-nav">
+      <button class="subtab-btn active" data-subtab="installed">Installed Mods</button>
+      <button class="subtab-btn" data-subtab="browse">Browse Modrinth</button>
+    </div>
+
+    <!-- Installed mods -->
+    <div id="subtab-installed" class="subtab-content">
+      <div class="filter-bar">
+        <input type="text" id="mod-filter" placeholder="Filter by name..." />
+        <select id="mod-side-filter">
+          <option value="all">All Sides</option>
+          <option value="both">Client + Server</option>
+          <option value="server">Server-only</option>
+          <option value="client">Client-only</option>
+          <option value="unknown">Unknown</option>
+        </select>
+        <label class="toggle-label">
+          <input type="checkbox" id="mod-show-disabled" checked />
+          Show disabled
+        </label>
+      </div>
+      <div id="mod-lookup-progress" class="hidden">
+        <div class="progress-bar"><div class="progress-fill" id="lookup-progress-fill"></div></div>
+        <p class="dim">Looking up mods on Modrinth...</p>
+      </div>
+      <div id="mods-list" class="mods-list">
+        <p class="dim">Loading...</p>
+      </div>
+    </div>
+
+    <!-- Browse Modrinth -->
+    <div id="subtab-browse" class="subtab-content hidden">
+      <div class="filter-bar">
+        <input type="text" id="browse-query" placeholder="Search Modrinth for Forge mods..." />
+        <select id="browse-side">
+          <option value="all">Any Side</option>
+          <option value="both">Client + Server</option>
+          <option value="server">Server-only</option>
+          <option value="client">Client-only</option>
+        </select>
+        <button class="btn btn-primary" id="btn-browse-search">Search</button>
+      </div>
+      <div id="browse-results" class="browse-results">
+        <p class="dim">Search for mods above.</p>
+      </div>
+      <div class="pagination-bar hidden" id="browse-pagination">
+        <button class="btn btn-sm btn-ghost" id="browse-prev">Previous</button>
+        <span id="browse-page-info"></span>
+        <button class="btn btn-sm btn-ghost" id="browse-next">Next</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- Tab: Players -->
+  <section id="tab-players" class="tab-content hidden">
+    <div class="page-header">
+      <h2>Player Management</h2>
+    </div>
+    <div class="subtab-nav">
+      <button class="subtab-btn active" data-subtab="ops">Operators</button>
+      <button class="subtab-btn" data-subtab="whitelist">Whitelist</button>
+      <button class="subtab-btn" data-subtab="bans">Bans</button>
+    </div>
+
+    <!-- Ops -->
+    <div id="subtab-ops" class="subtab-content">
+      <div class="legend-box">
+        <strong>Op Levels:</strong>
+        Level 1 = bypass spawn protection &nbsp;|&nbsp;
+        Level 2 = most commands &nbsp;|&nbsp;
+        Level 3 = /kick, /ban, manage players &nbsp;|&nbsp;
+        Level 4 = /stop, all commands
+      </div>
+      <div class="add-row">
+        <input type="text" id="op-name" placeholder="Player name" />
+        <select id="op-level">
+          <option value="4">Level 4 (Admin)</option>
+          <option value="3">Level 3 (Moderator)</option>
+          <option value="2">Level 2 (Builder)</option>
+          <option value="1">Level 1 (Basic)</option>
+        </select>
+        <button class="btn btn-primary" id="btn-add-op">Add Operator</button>
+      </div>
+      <div id="ops-list" class="player-table-wrap">
+        <p class="dim">Loading...</p>
+      </div>
+    </div>
+
+    <!-- Whitelist -->
+    <div id="subtab-whitelist" class="subtab-content hidden">
+      <div class="legend-box">
+        When whitelist is enabled in server.properties, only listed players can join.
+      </div>
+      <div class="add-row">
+        <input type="text" id="wl-name" placeholder="Player name" />
+        <button class="btn btn-primary" id="btn-add-wl">Add to Whitelist</button>
+      </div>
+      <div id="whitelist-list" class="player-table-wrap">
+        <p class="dim">Loading...</p>
+      </div>
+    </div>
+
+    <!-- Bans -->
+    <div id="subtab-bans" class="subtab-content hidden">
+      <div class="add-row">
+        <input type="text" id="ban-name" placeholder="Player name" />
+        <input type="text" id="ban-reason" placeholder="Reason (optional)" />
+        <button class="btn btn-danger" id="btn-ban">Ban Player</button>
+      </div>
+      <div id="bans-list" class="player-table-wrap">
+        <p class="dim">Loading...</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- Tab: Settings -->
+  <section id="tab-settings" class="tab-content hidden">
+    <div class="page-header">
+      <h2>Settings</h2>
+    </div>
+    <div class="subtab-nav">
+      <button class="subtab-btn active" data-subtab="app-cfg">App Config</button>
+      <button class="subtab-btn" data-subtab="server-props">server.properties</button>
+    </div>
+
+    <!-- App config -->
+    <div id="subtab-app-cfg" class="subtab-content">
+      <form id="app-config-form" class="settings-form">
+        <div class="form-group">
+          <label>Minecraft Server Path</label>
+          <input type="text" name="serverPath" placeholder="/home/minecraft/server" />
+          <span class="hint">Absolute path to the folder containing server.jar / run.sh</span>
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label>RCON Host</label>
+            <input type="text" name="rconHost" placeholder="127.0.0.1" />
+          </div>
+          <div class="form-group">
+            <label>RCON Port</label>
+            <input type="number" name="rconPort" placeholder="25575" />
+          </div>
+        </div>
+        <div class="form-group">
+          <label>RCON Password</label>
+          <input type="password" name="rconPassword" placeholder="(from server.properties)" />
+          <span class="hint">Must match rcon.password in server.properties</span>
+        </div>
+        <div class="form-group">
+          <label>Server Start Command</label>
+          <input type="text" name="startCommand" placeholder="java -Xms6G -Xmx10G @user_jvm_args.txt ..." />
+          <span class="hint">Modern Forge: use the @arguments file method. Old Forge: java -Xmx10G -jar forge-*.jar nogui</span>
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label>Minecraft Version</label>
+            <input type="text" name="minecraftVersion" placeholder="1.20.1" />
+          </div>
+          <div class="form-group">
+            <label>Web UI Port</label>
+            <input type="number" name="webPort" placeholder="3000" />
+            <span class="hint">Restart manager after changing</span>
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label>Mods Folder Name</label>
+            <input type="text" name="modsFolder" placeholder="mods" />
+          </div>
+          <div class="form-group">
+            <label>Disabled Mods Folder</label>
+            <input type="text" name="disabledModsFolder" placeholder="mods_disabled" />
+          </div>
+        </div>
+        <div class="form-group">
+          <label>Change Web Password</label>
+          <input type="password" name="webPassword" placeholder="Leave blank to keep current" />
+        </div>
+        <div class="btn-row">
+          <button type="submit" class="btn btn-primary">Save App Config</button>
+          <button type="button" class="btn btn-ghost" id="btn-reconnect-rcon">Reconnect RCON</button>
+        </div>
+        <p id="app-cfg-msg" class="control-msg"></p>
+      </form>
+    </div>
+
+    <!-- server.properties -->
+    <div id="subtab-server-props" class="subtab-content hidden">
+      <p class="legend-box">
+        Key settings. Enable RCON here for the manager to send commands while the server is running.
+        <strong>Restart the Minecraft server</strong> after saving changes.
+      </p>
+      <form id="props-form" class="settings-form">
+        <div id="props-fields">
+          <p class="dim">Loading...</p>
+        </div>
+        <div class="btn-row">
+          <button type="submit" class="btn btn-primary">Save server.properties</button>
+        </div>
+        <p id="props-msg" class="control-msg"></p>
+      </form>
+    </div>
+  </section>
+
+  <!-- Version info modal for mod downloads -->
+  <div id="version-modal" class="modal-overlay hidden">
+    <div class="modal">
+      <div class="modal-header">
+        <h3 id="modal-title">Select Version to Download</h3>
+        <button class="btn btn-ghost btn-sm" id="modal-close">&times;</button>
+      </div>
+      <div id="modal-versions" class="modal-body">
+        <p class="dim">Loading versions...</p>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script src="app.js"></script>
+</body>
+</html>
