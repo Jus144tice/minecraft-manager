@@ -87,6 +87,11 @@ $('logout-btn').addEventListener('click', () => {
   $('login-password').value = '';
 });
 
+// Show demo hint on login page if demo mode is active (public endpoint, no auth)
+fetch('/api/demo').then(r => r.json()).then(d => {
+  if (d.demoMode) show('demo-hint');
+}).catch(() => {});
+
 // Auto-login if token exists
 if (token) {
   GET('/status').then(() => {
@@ -138,17 +143,26 @@ function onSubtabActivate(subtab) {
   if (subtab === 'bans') loadBans();
   if (subtab === 'server-props') loadServerProps();
   if (subtab === 'app-cfg') loadAppConfig();
+  if (subtab === 'browse') browseLoad(); // auto-load popular mods on first open
 }
 
 // --- App init ---
 async function initApp() {
   connectWs();
   loadStatus();
+  loadOnlinePlayers(); // populate immediately without needing a manual refresh
   setInterval(loadStatus, 15000);
-  // Show demo banner if in demo mode
+  // Show demo banner if in demo mode; also stash demoMode for UI decisions
   try {
     const cfg = await GET('/config');
-    if (cfg.demoMode) show('demo-banner');
+    if (cfg.demoMode) {
+      show('demo-banner');
+      window._demoMode = true;
+      // In demo mode the identify button is unnecessary — mods come pre-identified
+      hide('btn-lookup-mods');
+    } else {
+      window._demoMode = false;
+    }
   } catch { /* ignore */ }
 }
 
@@ -295,6 +309,13 @@ async function loadMods() {
   try {
     const data = await GET('/mods');
     allMods = data.mods;
+    // Auto-populate modrinthData from the response (pre-identified in demo mode,
+    // or if the server already has cached data from a previous lookup)
+    for (const mod of allMods) {
+      if (mod.modrinthData) {
+        currentModData[mod.filename] = { modrinth: mod.modrinthData, enabled: mod.enabled };
+      }
+    }
     renderMods();
   } catch (err) {
     $('mods-list').innerHTML = `<p class="error-msg">${esc(err.message)}</p>`;
@@ -309,13 +330,15 @@ function renderMods() {
   let mods = allMods.filter(m => {
     if (!showDisabled && !m.enabled) return false;
     if (filterText && !m.filename.toLowerCase().includes(filterText)) return false;
+    // Always exclude client-only mods — they don't belong on a server
+    const md = currentModData[m.filename]?.modrinth;
+    if (md && md.serverSide === 'unsupported') return false;
+    // Side filter
     if (sideFilter !== 'all') {
-      const md = currentModData[m.filename]?.modrinth;
       if (!md) return sideFilter === 'unknown';
       const { cls } = sideLabel(md.clientSide, md.serverSide);
       if (sideFilter === 'both' && cls !== 'side-both') return false;
       if (sideFilter === 'server' && cls !== 'side-server') return false;
-      if (sideFilter === 'client' && cls !== 'side-client') return false;
     }
     return true;
   });
@@ -402,36 +425,70 @@ $('btn-lookup-mods').addEventListener('click', async () => {
 });
 
 // --- Browse Modrinth ---
+let browseLoaded = false; // only auto-load once per session
+
 $('btn-browse-search').addEventListener('click', () => { browseOffset = 0; browseSearch(); });
 $('browse-query').addEventListener('keydown', e => { if (e.key === 'Enter') { browseOffset = 0; browseSearch(); } });
 
 $('browse-prev').addEventListener('click', () => {
   browseOffset = Math.max(0, browseOffset - BROWSE_LIMIT);
-  browseSearch();
+  const q = $('browse-query').value.trim();
+  q ? browseSearch() : browseLoad();
 });
 $('browse-next').addEventListener('click', () => {
   browseOffset = Math.min(browseOffset + BROWSE_LIMIT, browseTotal - BROWSE_LIMIT);
-  browseSearch();
+  const q = $('browse-query').value.trim();
+  q ? browseSearch() : browseLoad();
 });
+
+// Auto-load popular mods (no query) when the tab first opens
+async function browseLoad() {
+  if (browseLoaded && browseOffset === 0 && !$('browse-query').value.trim()) {
+    // Already loaded, don't reload unless paginating
+  }
+  $('browse-heading').textContent = 'Popular server-compatible Forge mods';
+  $('browse-results').innerHTML = '<p class="dim">Loading popular mods...</p>';
+  hide('browse-pagination');
+  try {
+    const params = new URLSearchParams({ limit: BROWSE_LIMIT, offset: browseOffset });
+    const data = await GET(`/modrinth/browse?${params}`);
+    browseTotal = data.total_hits || 0;
+    renderBrowseResults(data.hits || []);
+    updateBrowsePagination();
+    browseLoaded = true;
+  } catch (err) {
+    $('browse-results').innerHTML = `<p class="error-msg">${esc(err.message)}</p>`;
+  }
+}
 
 async function browseSearch() {
   const q = $('browse-query').value.trim();
+  if (!q) { browseOffset = 0; return browseLoad(); }
   const side = $('browse-side').value;
-  $('browse-results').innerHTML = '<p class="dim">Searching...</p>';
+  $('browse-heading').textContent = `Search results for "${q}"`;
+  $('browse-results').innerHTML = '<p class="dim">Searching Modrinth...</p>';
   hide('browse-pagination');
   try {
     const params = new URLSearchParams({ q, side, limit: BROWSE_LIMIT, offset: browseOffset });
     const data = await GET(`/modrinth/search?${params}`);
     browseTotal = data.total_hits || 0;
     renderBrowseResults(data.hits || []);
-    if (browseTotal > BROWSE_LIMIT) {
-      show('browse-pagination');
-      $('browse-page-info').textContent = `${browseOffset + 1}–${Math.min(browseOffset + BROWSE_LIMIT, browseTotal)} of ${browseTotal}`;
-      $('browse-prev').disabled = browseOffset === 0;
-      $('browse-next').disabled = browseOffset + BROWSE_LIMIT >= browseTotal;
-    }
+    updateBrowsePagination();
   } catch (err) {
     $('browse-results').innerHTML = `<p class="error-msg">${esc(err.message)}</p>`;
+  }
+}
+
+function updateBrowsePagination() {
+  if (browseTotal > BROWSE_LIMIT) {
+    show('browse-pagination');
+    const page = Math.floor(browseOffset / BROWSE_LIMIT) + 1;
+    const totalPages = Math.ceil(browseTotal / BROWSE_LIMIT);
+    $('browse-page-info').textContent = `Page ${page} of ${totalPages} (${browseTotal.toLocaleString()} mods)`;
+    $('browse-prev').disabled = browseOffset === 0;
+    $('browse-next').disabled = browseOffset + BROWSE_LIMIT >= browseTotal;
+  } else {
+    hide('browse-pagination');
   }
 }
 
@@ -442,18 +499,24 @@ function renderBrowseResults(hits) {
   }
   $('browse-results').innerHTML = hits.map(hit => {
     const side = sideLabel(hit.client_side, hit.server_side);
+    const downloads = Number(hit.downloads || 0).toLocaleString();
+    const follows = Number(hit.follows || 0).toLocaleString();
+    const latestVer = (hit.versions || []).filter(v => /^\d/.test(v)).slice(-1)[0] || '';
+    const cats = (hit.categories || []).filter(c => c !== 'forge').slice(0, 3);
     return `<div class="mod-card browse-card">
       ${hit.icon_url ? `<img class="mod-icon" src="${esc(hit.icon_url)}" alt="" loading="lazy" />` : '<div class="mod-icon-placeholder"></div>'}
       <div class="mod-info">
         <div class="mod-title">
           <span>${esc(hit.title)}</span>
           <span class="side-badge ${side.cls}">${side.text}</span>
+          ${cats.map(c => `<span class="cat-badge">${esc(c)}</span>`).join('')}
         </div>
-        <div class="mod-desc">${esc((hit.description || '').slice(0, 150))}</div>
+        <div class="mod-desc">${esc((hit.description || '').slice(0, 160))}</div>
         <div class="mod-meta">
-          <span class="dim">by ${esc(hit.author)}</span>
-          <span class="dim">${Number(hit.downloads).toLocaleString()} downloads</span>
-          <span class="dim">${hit.versions?.slice(-1)[0] || ''}</span>
+          <span class="dim" title="Author">by <strong>${esc(hit.author)}</strong></span>
+          <span class="dim" title="Downloads">&#11015; ${downloads}</span>
+          <span class="dim" title="Followers">&#9829; ${follows}</span>
+          ${latestVer ? `<span class="dim" title="Latest version">${esc(latestVer)}</span>` : ''}
         </div>
       </div>
       <div class="mod-actions">

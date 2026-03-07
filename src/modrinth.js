@@ -16,38 +16,42 @@ async function modrinthFetch(path, options = {}) {
 }
 
 /**
- * Search for mods on Modrinth
+ * Search for mods on Modrinth.
+ * Always excludes client-only mods (server_side:unsupported) — these cannot run on a server.
  * @param {string} query - Search term
  * @param {object} opts
  * @param {string} opts.mcVersion - e.g. "1.20.1"
  * @param {string} opts.loader - e.g. "forge"
- * @param {string} opts.side - "client" | "server" | "both" | "all"
+ * @param {string} opts.side - "server" | "both" | "all"  (client-only is never shown)
  * @param {number} opts.limit
  * @param {number} opts.offset
+ * @param {string} opts.index - "relevance" | "downloads" | "follows" | "newest" | "updated"
  */
-export async function searchMods(query, { mcVersion, loader = 'forge', side = 'all', limit = 20, offset = 0 } = {}) {
+export async function searchMods(query, { mcVersion, loader = 'forge', side = 'all', limit = 20, offset = 0, index = 'relevance' } = {}) {
   const facets = [['project_type:mod']];
 
   if (loader) facets.push([`categories:${loader}`]);
   if (mcVersion) facets.push([`versions:${mcVersion}`]);
 
-  if (side === 'client') {
-    facets.push(['client_side:required', 'client_side:optional']);
-    facets.push(['server_side:unsupported']);
-  } else if (side === 'server') {
-    facets.push(['server_side:required', 'server_side:optional']);
+  // Always exclude client-only mods — they cannot be installed on a server
+  // server_side must be required, optional, or unknown (not unsupported)
+  facets.push(['server_side:required', 'server_side:optional', 'server_side:unknown']);
+
+  if (side === 'server') {
+    // Server-only: client_side is unsupported
     facets.push(['client_side:unsupported']);
   } else if (side === 'both') {
+    // Must work on both: client_side is required or optional AND server_side already filtered above
     facets.push(['client_side:required', 'client_side:optional']);
-    facets.push(['server_side:required', 'server_side:optional']);
   }
+  // side === 'all': just the server_side filter above is enough
 
   const params = new URLSearchParams({
     query,
     facets: JSON.stringify(facets),
     limit: String(limit),
     offset: String(offset),
-    index: 'relevance',
+    index,
   });
 
   return modrinthFetch(`/search?${params}`);

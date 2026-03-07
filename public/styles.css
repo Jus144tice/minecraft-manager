@@ -83,6 +83,15 @@ body {
 .login-logo h1 { font-size: 1.4rem; color: var(--text); }
 .login-logo p { color: var(--text-dim); font-size: 0.85rem; }
 .logo-icon { color: var(--primary); font-size: 1.5rem; }
+.demo-hint {
+  background: #2a1f00;
+  border: 1px solid #6b4f00;
+  border-radius: var(--radius);
+  color: #e3b341;
+  font-size: 0.82rem;
+  padding: 0.5rem 0.75rem;
+  text-align: center;
+}
 
 /* --- Topbar --- */
 .topbar {
@@ -377,6 +386,16 @@ input:focus, select:focus, textarea:focus {
 .progress-fill { background: var(--primary); border-radius: 20px; height: 100%; transition: width 0.3s; width: 0; }
 
 .pagination-bar { display: flex; align-items: center; gap: 1rem; justify-content: center; margin-top: 1rem; }
+.browse-heading { font-size: 0.82rem; margin-bottom: 0.6rem; }
+.cat-badge {
+  font-size: 0.68rem;
+  padding: 0.1rem 0.4rem;
+  border-radius: 20px;
+  background: var(--surface2);
+  color: var(--text-dim);
+  border: 1px solid var(--border);
+  text-transform: capitalize;
+}
 
 /* --- Players --- */
 .player-table-wrap { overflow-x: auto; }

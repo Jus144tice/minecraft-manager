@@ -20,6 +20,7 @@
       <label>Password</label>
       <input type="password" id="login-password" placeholder="Enter web password" autocomplete="current-password" />
     </div>
+    <p id="demo-hint" class="demo-hint hidden">Demo mode is active &mdash; use password <strong>changeme</strong> (or any password)</p>
     <button class="btn btn-primary btn-full" id="login-btn">Log In</button>
     <p id="login-error" class="error-msg hidden"></p>
   </div>
@@ -152,7 +153,6 @@
           <option value="all">All Sides</option>
           <option value="both">Client + Server</option>
           <option value="server">Server-only</option>
-          <option value="client">Client-only</option>
           <option value="unknown">Unknown</option>
         </select>
         <label class="toggle-label">
@@ -172,17 +172,17 @@
     <!-- Browse Modrinth -->
     <div id="subtab-browse" class="subtab-content hidden">
       <div class="filter-bar">
-        <input type="text" id="browse-query" placeholder="Search Modrinth for Forge mods..." />
+        <input type="text" id="browse-query" placeholder="Search Modrinth for server-compatible Forge mods..." />
         <select id="browse-side">
           <option value="all">Any Side</option>
           <option value="both">Client + Server</option>
           <option value="server">Server-only</option>
-          <option value="client">Client-only</option>
         </select>
         <button class="btn btn-primary" id="btn-browse-search">Search</button>
       </div>
+      <p id="browse-heading" class="browse-heading dim">Popular server-compatible Forge mods</p>
       <div id="browse-results" class="browse-results">
-        <p class="dim">Search for mods above.</p>
+        <p class="dim">Loading popular mods...</p>
       </div>
       <div class="pagination-bar hidden" id="browse-pagination">
         <button class="btn btn-sm btn-ghost" id="browse-prev">Previous</button>

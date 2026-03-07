@@ -198,9 +198,19 @@ if (config.demoMode) {
 // Broadcast status every 10 seconds
 setInterval(broadcastStatus, 10000);
 
+// --- Public endpoint: demo mode flag (no auth needed, used by login page) ---
+app.get('/api/demo', (req, res) => {
+  res.json({ demoMode: !!config.demoMode });
+});
+
 // --- Auth ---
 app.post('/api/auth', (req, res) => {
   const { password } = req.body;
+  // In demo mode accept any non-empty password (the hint says "changeme")
+  if (config.demoMode) {
+    if (!password) return res.status(401).json({ error: 'Enter any password to enter demo mode' });
+    return res.json({ token: createSession() });
+  }
   if (!password || password !== config.webPassword) {
     return res.status(401).json({ error: 'Wrong password' });
   }
@@ -501,8 +511,8 @@ app.post('/api/players/say', async (req, res) => {
 // --- Mods ---
 app.get('/api/mods', async (req, res) => {
   if (config.demoMode) {
-    // Return mods without modrinthData (user hits "Identify" to get that)
-    return res.json({ mods: Demo.DEMO_MODS.map(({ modrinthData, ...rest }) => ({ ...rest, modrinthData: null })) });
+    // Return mods with modrinthData pre-populated so no lookup step is needed
+    return res.json({ mods: Demo.DEMO_MODS });
   }
   try {
     const mods = await SF.listMods(config.serverPath, config.modsFolder, config.disabledModsFolder);
@@ -554,6 +564,33 @@ app.delete('/api/mods/:filename', async (req, res) => {
   try {
     await SF.deleteMod(config.serverPath, req.params.filename, config.modsFolder, config.disabledModsFolder);
     res.json({ ok: true });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// --- Modrinth browse (default paginated list, sorted by popularity) ---
+// In demo mode returns seed data; in real mode hits Modrinth with empty query
+app.get('/api/modrinth/browse', async (req, res) => {
+  const { limit = 20, offset = 0 } = req.query;
+  if (config.demoMode) {
+    const start = parseInt(offset);
+    const end = start + parseInt(limit);
+    return res.json({
+      ...Demo.DEMO_BROWSE_RESULTS,
+      hits: Demo.DEMO_BROWSE_RESULTS.hits.slice(start, end),
+      offset: start,
+      limit: parseInt(limit),
+    });
+  }
+  try {
+    const results = await Modrinth.searchMods('', {
+      mcVersion: config.minecraftVersion,
+      loader: 'forge',
+      side: 'all',
+      limit: parseInt(limit),
+      offset: parseInt(offset),
+      index: 'downloads',
+    });
+    res.json(results);
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
