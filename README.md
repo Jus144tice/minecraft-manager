@@ -2,6 +2,8 @@
 
 A self-hosted web control panel for a Minecraft Forge server running on Linux. Built for small modpacks (tested with ~200 mods) and a small group of players (2–8).
 
+**Defaults to demo mode** — clone, install, and run to see a fully working demo with seed data. No Minecraft server required to try it out. Disable demo mode in Settings when you're ready to connect for real.
+
 **Features:**
 - Start / stop / restart the server from a browser
 - Live streaming console with command input
@@ -61,6 +63,22 @@ npm install
 ---
 
 ## Configuration
+
+### Step 0 — Try demo mode first (optional)
+
+The app ships in demo mode by default. You can run it immediately after `npm install` without any Minecraft server:
+
+```bash
+cp config.example.json config.json
+node server.js
+# Open http://localhost:3000 — password is "changeme"
+```
+
+You'll see a fully interactive UI with seed data: 26 fake mods with client/server/both tags, online players, ops, whitelist, bans, a live-scrolling console, and server start/stop simulation. Modrinth search and mod install flows use the real Modrinth API even in demo mode.
+
+When you're ready to go real, continue with Steps 1–3 below, then uncheck **Demo Mode** in **Settings → App Config** and save.
+
+---
 
 ### Step 1 — Create config.json
 

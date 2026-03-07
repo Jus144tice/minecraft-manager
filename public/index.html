@@ -27,6 +27,13 @@
 
 <!-- MAIN APP -->
 <div id="app" class="hidden">
+  <!-- Demo mode banner -->
+  <div id="demo-banner" class="demo-banner hidden">
+    <span class="demo-banner-icon">&#9432;</span>
+    <span><strong>Demo Mode</strong> &mdash; Showing seed data. No real server connection. Go to <strong>Settings &rarr; App Config</strong> to configure and disable demo mode.</span>
+    <button class="demo-banner-close" id="demo-banner-close">&times;</button>
+  </div>
+
   <!-- Top nav -->
   <header class="topbar">
     <div class="topbar-left">
@@ -309,6 +316,14 @@
         <div class="form-group">
           <label>Change Web Password</label>
           <input type="password" name="webPassword" placeholder="Leave blank to keep current" />
+        </div>
+        <div class="form-group">
+          <label class="checkbox-label">
+            <input type="checkbox" name="demoMode" id="cfg-demo-mode" />
+            <span>Demo Mode</span>
+            <span class="badge-important">Shows seed data, no real server connection</span>
+          </label>
+          <span class="hint">Uncheck and save to connect to your real Minecraft server. Requires a restart of the manager app.</span>
         </div>
         <div class="btn-row">
           <button type="submit" class="btn btn-primary">Save App Config</button>

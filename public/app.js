@@ -99,6 +99,9 @@ if (token) {
   });
 }
 
+// Demo banner dismiss
+$('demo-banner-close').addEventListener('click', () => hide('demo-banner'));
+
 // --- Tab navigation ---
 document.querySelectorAll('.tab-btn').forEach(btn => {
   btn.addEventListener('click', () => {
@@ -138,10 +141,15 @@ function onSubtabActivate(subtab) {
 }
 
 // --- App init ---
-function initApp() {
+async function initApp() {
   connectWs();
   loadStatus();
   setInterval(loadStatus, 15000);
+  // Show demo banner if in demo mode
+  try {
+    const cfg = await GET('/config');
+    if (cfg.demoMode) show('demo-banner');
+  } catch { /* ignore */ }
 }
 
 // --- WebSocket (live console) ---
@@ -623,7 +631,9 @@ async function loadAppConfig() {
     const form = $('app-config-form');
     for (const [k, v] of Object.entries(cfg)) {
       const el = form.elements[k];
-      if (el && el.type !== 'password') el.value = v;
+      if (!el || el.type === 'password') continue;
+      if (el.type === 'checkbox') { el.checked = !!v; }
+      else { el.value = v; }
     }
   } catch (err) { console.error('Config load failed', err); }
 }
@@ -633,13 +643,23 @@ $('app-config-form').addEventListener('submit', async (e) => {
   const form = e.target;
   const data = {};
   for (const el of form.elements) {
-    if (el.name && el.value !== '') data[el.name] = el.type === 'number' ? Number(el.value) : el.value;
+    if (!el.name) continue;
+    if (el.type === 'checkbox') { data[el.name] = el.checked; }
+    else if (el.type === 'number' && el.value !== '') { data[el.name] = Number(el.value); }
+    else if (el.value !== '') { data[el.name] = el.value; }
   }
-  // Don't send empty password
   if (!data.webPassword) delete data.webPassword;
   try {
     await POST('/config', data);
-    flash('app-cfg-msg', 'Config saved! Restart the manager for port/path changes to take effect.');
+    if (data.demoMode === false) {
+      hide('demo-banner');
+      flash('app-cfg-msg', 'Demo mode disabled. Restart the manager app (node server.js) to connect to your real server.');
+    } else if (data.demoMode === true) {
+      show('demo-banner');
+      flash('app-cfg-msg', 'Demo mode enabled. Restart the manager app to return to seed data.');
+    } else {
+      flash('app-cfg-msg', 'Config saved! Restart the manager for port/path changes to take effect.');
+    }
   } catch (err) { flash('app-cfg-msg', err.message, true); }
 });
 
