@@ -186,11 +186,6 @@
       <div id="mods-list" class="mods-list">
         <p class="dim">Loading...</p>
       </div>
-      <div class="pagination-bar hidden" id="mods-pagination">
-        <button class="btn btn-sm btn-ghost" id="mods-prev">Previous</button>
-        <span id="mods-page-info"></span>
-        <button class="btn btn-sm btn-ghost" id="mods-next">Next</button>
-      </div>
     </div>
 
     <!-- Browse Modrinth -->
@@ -212,11 +207,13 @@
       <div id="browse-results" class="browse-results">
         <p class="dim">Loading popular mods...</p>
       </div>
-      <div class="pagination-bar hidden" id="browse-pagination">
-        <button class="btn btn-sm btn-ghost" id="browse-prev">Previous</button>
-        <span id="browse-page-info"></span>
-        <button class="btn btn-sm btn-ghost" id="browse-next">Next</button>
-      </div>
+    </div>
+
+    <!-- Shared pagination bar — used by both Installed and Browse subtabs -->
+    <div class="pagination-bar hidden" id="mods-tab-pagination">
+      <button class="btn btn-sm btn-ghost" id="tab-page-prev">Previous</button>
+      <span id="tab-page-info"></span>
+      <button class="btn btn-sm btn-ghost" id="tab-page-next">Next</button>
     </div>
   </section>
 

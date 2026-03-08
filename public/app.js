@@ -43,8 +43,9 @@ function createPagination({ prevId, nextId, infoId, containerId }) {
   };
 }
 
-const modsPager  = createPagination({ prevId: 'mods-prev',   nextId: 'mods-next',   infoId: 'mods-page-info',   containerId: 'mods-pagination'   });
-const browsePager = createPagination({ prevId: 'browse-prev', nextId: 'browse-next', infoId: 'browse-page-info', containerId: 'browse-pagination' });
+// Both subtabs share one pagination bar — only one subtab is ever visible at a time.
+const modsPager  = createPagination({ prevId: 'tab-page-prev', nextId: 'tab-page-next', infoId: 'tab-page-info', containerId: 'mods-tab-pagination' });
+const browsePager = modsPager; // same object; alias makes call-sites self-documenting
 let csrfToken = ''; // fetched after login; sent as X-CSRF-Token on all mutating requests
 
 // --- API helpers ---
@@ -219,13 +220,16 @@ function onTabActivate(tab) {
   if (tab === 'settings') { loadAppConfig(); loadServerProps(); }
 }
 
+let activeModsSubtab = 'installed';
+
 function onSubtabActivate(subtab) {
   if (subtab === 'ops') loadOps();
   if (subtab === 'whitelist') loadWhitelist();
   if (subtab === 'bans') loadBans();
   if (subtab === 'server-props') loadServerProps();
   if (subtab === 'app-cfg') loadAppConfig();
-  if (subtab === 'browse') browseLoad(); // auto-load popular mods on first open
+  if (subtab === 'installed') { activeModsSubtab = 'installed'; renderMods(); }
+  if (subtab === 'browse')    { activeModsSubtab = 'browse';    browseLoad(); }
 }
 
 // --- App init ---
@@ -521,8 +525,6 @@ $('mod-filter').addEventListener('input', () => { modsPage = 0; renderMods(); })
 $('mod-side-filter').addEventListener('change', () => { modsPage = 0; renderMods(); });
 $('mod-sort').addEventListener('change', () => { modsPage = 0; renderMods(); });
 $('mod-show-disabled').addEventListener('change', () => { modsPage = 0; renderMods(); });
-$('mods-prev').addEventListener('click', () => { modsPage--; renderMods(); });
-$('mods-next').addEventListener('click', () => { modsPage++; renderMods(); });
 $('btn-refresh-mods').addEventListener('click', loadMods);
 
 $('btn-lookup-mods').addEventListener('click', async () => {
@@ -546,15 +548,13 @@ let browseLoaded = false;
 $('btn-browse-search').addEventListener('click', () => { browseOffset = 0; browseSearch(); });
 $('browse-query').addEventListener('keydown', e => { if (e.key === 'Enter') { browseOffset = 0; browseSearch(); } });
 
-$('browse-prev').addEventListener('click', () => {
-  browseOffset = Math.max(0, browseOffset - BROWSE_LIMIT);
-  const q = $('browse-query').value.trim();
-  q ? browseSearch() : browseLoad();
+$('tab-page-prev').addEventListener('click', () => {
+  if (activeModsSubtab === 'installed') { modsPage--; renderMods(); }
+  else { browseOffset = Math.max(0, browseOffset - BROWSE_LIMIT); ($('browse-query').value.trim() ? browseSearch : browseLoad)(); }
 });
-$('browse-next').addEventListener('click', () => {
-  browseOffset = Math.min(browseOffset + BROWSE_LIMIT, browseTotal - BROWSE_LIMIT);
-  const q = $('browse-query').value.trim();
-  q ? browseSearch() : browseLoad();
+$('tab-page-next').addEventListener('click', () => {
+  if (activeModsSubtab === 'installed') { modsPage++; renderMods(); }
+  else { browseOffset = Math.min(browseOffset + BROWSE_LIMIT, browseTotal - BROWSE_LIMIT); ($('browse-query').value.trim() ? browseSearch : browseLoad)(); }
 });
 
 async function browseLoad() {
