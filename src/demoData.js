@@ -216,7 +216,7 @@ export const DEMO_BROWSE_RESULTS = {
   ],
   total_hits: 20,
   offset: 0,
-  limit: 10,
+  limit: 20,
 };
 
 // --- Icon enrichment ---
