@@ -484,9 +484,10 @@ function renderMods() {
         </div>
         ${desc ? `<div class="mod-desc">${esc(desc.slice(0, 120))}${desc.length > 120 ? '...' : ''}</div>` : ''}
         <div class="mod-meta">
-          <span class="dim">${esc(mod.filename)}</span>
-          <span class="dim">${formatSize(mod.size)}</span>
+          ${md?.downloads != null ? `<span class="dim" title="Downloads">&#11015; ${Number(md.downloads).toLocaleString()}</span>` : ''}
+          ${md?.follows != null ? `<span class="dim" title="Followers">&#9829; ${Number(md.follows).toLocaleString()}</span>` : ''}
           ${ver ? `<span class="dim">v${esc(ver)}</span>` : ''}
+          <span class="dim">${formatSize(mod.size)}</span>
         </div>
       </div>
       <div class="mod-actions">
@@ -660,7 +661,6 @@ function renderBrowseResults(hits) {
     const side = sideLabel(hit.client_side, hit.server_side);
     const downloads = Number(hit.downloads || 0).toLocaleString();
     const follows = Number(hit.follows || 0).toLocaleString();
-    const latestVer = (hit.versions || []).filter(v => /^\d/.test(v)).slice(-1)[0] || '';
     const cats = (hit.categories || []).filter(c => c !== 'forge').slice(0, 3);
     return `<div class="mod-card browse-card${isInstalled ? ' mod-disabled' : ''}">
       ${hit.icon_url ? `<img class="mod-icon" src="${esc(hit.icon_url)}" alt="" loading="lazy" onerror="this.style.display='none'" />` : '<div class="mod-icon-placeholder"></div>'}
@@ -676,7 +676,6 @@ function renderBrowseResults(hits) {
           <span class="dim" title="Author">by <strong>${esc(hit.author)}</strong></span>
           <span class="dim" title="Downloads">&#11015; ${downloads}</span>
           <span class="dim" title="Followers">&#9829; ${follows}</span>
-          ${latestVer ? `<span class="dim" title="Latest version">${esc(latestVer)}</span>` : ''}
         </div>
       </div>
       <div class="mod-actions">

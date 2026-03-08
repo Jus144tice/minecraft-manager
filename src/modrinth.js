@@ -122,6 +122,8 @@ export async function lookupByHashes(hashes) {
       clientSide: project.client_side || 'unknown',
       serverSide: project.server_side || 'unknown',
       iconUrl: project.icon_url || null,
+      downloads: project.downloads ?? null,
+      follows: project.follows ?? null,
     };
   }
   return result;
