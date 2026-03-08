@@ -84,7 +84,7 @@ export const DEMO_PROPERTIES = {
 const cdn = id => `https://cdn.modrinth.com/data/${id}/icon.png`;
 
 // M builds an installed mod entry. projectId (optional) is the Modrinth project ID.
-const M = (filename, size, enabled, title, desc, clientSide, serverSide, version, slug, projectId = null) => ({
+const M = (filename, size, enabled, title, desc, clientSide, serverSide, version, slug, projectId = null, author = null) => ({
   filename, size, enabled,
   _projectId: projectId,   // retained for icon enrichment; not sent to the browser
   modrinthData: {
@@ -94,35 +94,39 @@ const M = (filename, size, enabled, title, desc, clientSide, serverSide, version
     versionNumber: version,
     projectSlug: slug,
     iconUrl: projectId ? cdn(projectId) : null,
+    author,
+    // Fake but plausible engagement numbers for demo display purposes
+    downloads: Math.round(size * 0.4) + 500_000,
+    follows:   Math.round(size * 0.003) + 3_000,
   },
 });
 
 // --- Installed mods (server-compatible Forge 1.20.1 mods only) ---
 // Project IDs sourced from Modrinth; used for CDN icon URLs.
 export const DEMO_MODS = [
-  M('jei-1.20.1-forge-15.3.0.4.jar',          1_241_800, true,  'Just Enough Items',       'A recipe and item viewing mod.',                          'required',    'optional',    '15.3.0.4',   'jei',                'u6dRKJwZ'),
-  M('appliedenergistics2-15.2.1.jar',          7_483_200, true,  'Applied Energistics 2',   'A mod about Matter, Energy, and using them.',             'required',    'required',    '15.2.1',     'ae2',                'XxWD5pD3'),
-  M('create-1.20.1-0.5.1.f.jar',             11_204_100, true,  'Create',                  'Aesthetic tech and automation using rotational force.',   'required',    'required',    '0.5.1.f',    'create',             'LNytGWDc'),
-  M('thermal_expansion-1.20.1-10.6.0.jar',    4_921_500, true,  'Thermal Expansion',       'Expansion of the Thermal Series.',                        'required',    'required',    '10.6.0',     'thermal-expansion',  'hmD6rrUJ'),
-  M('Mekanism-1.20.1-10.4.7.19.jar',         14_832_700, true,  'Mekanism',                'High-tech machinery and tools.',                          'required',    'required',    '10.4.7.19',  'mekanism',           'Ce6I4WUE'),
-  M('Botania-1.20.1-445.jar',                  6_341_000, true,  'Botania',                 'A tech mod themed around natural magic.',                 'required',    'required',    '445',        'botania',            'pfjLUfGv'),
-  M('immersiveengineering-1.20.1-10.1.0.jar',  9_128_300, true,  'Immersive Engineering',   'A retro-futuristic tech mod with multiblocks.',           'required',    'required',    '10.1.0',     'immersiveengineering','tIm2nV03'),
-  M('TConstruct-1.20.1-3.8.4.272.jar',         5_673_400, true,  "Tinkers' Construct",      'Tool and weapon crafting with materials.',                'required',    'required',    '3.8.4.272',  'tinkers-construct',  'rxIIYO6c'),
-  M('StorageDrawers-1.20.1-12.0.2.jar',        1_892_600, true,  'Storage Drawers',         'Multi-drawer storage blocks.',                           'required',    'required',    '12.0.2',     'storagedrawers',     'guitPqEi'),
-  M('ironchest-1.20.1-14.4.4.jar',               734_900, true,  'Iron Chests',             'Bigger and better chests.',                              'required',    'required',    '14.4.4',     'iron-chests',        'P3iIrPH3'),
-  M('Waystones-1.20.1-forge-14.1.3.jar',       1_243_100, true,  'Waystones',               'Teleportation waystone blocks.',                         'required',    'required',    '14.1.3',     'waystones',          'LOpKHB2A'),
-  M('farmersdelight-1.20.1-1.2.3.jar',         2_134_600, true,  "Farmer's Delight",        'Expands farming and cooking.',                           'required',    'required',    '1.2.3',      'farmers-delight',    'R2OftAxM'),
-  M('alexsmobs-1.22.7.jar',                    8_942_300, true,  "Alex's Mobs",             'Adds many unique mobs to the game.',                     'required',    'required',    '1.22.7',     'alexs-mobs',         '2cMuAZAp'),
-  M('biomesoplenty-1.20.1-18.0.0.596.jar',     5_218_400, true,  "Biomes O' Plenty",        'Adds a ton of new biomes.',                              'required',    'required',    '18.0.0.596', 'biomes-o-plenty',    'HXF82T3G'),
-  M('Quark-4.0-460.jar',                       4_103_700, true,  'Quark',                   'Small tweaks and improvements to vanilla.',              'required',    'required',    '4.0-460',    'quark',              'qvIfYCYJ'),
-  M('supplementaries-1.20.1-2.8.14.jar',       3_847_200, true,  'Supplementaries',         'Decorative blocks and items.',                           'required',    'required',    '2.8.14',     'supplementaries',    'fFEIiSDQ'),
-  M('sophisticated-storage-1.20.1-0.9.14.jar',  2_341_600, true,  'Sophisticated Storage',   'Upgradeable tiered chests and barrels with filter, sort, and auto-deposit upgrades.', 'required', 'required', '0.9.14', 'sophisticated-storage', 'hMlaZH8f'),
-  M('lootr-0.7.35.80.jar',                       389_400, true,  'Lootr',                   'Unique loot for each player in chests.',                 'unsupported', 'required',    '0.7.35.80',  'lootr',              'EltpO5cN'),
-  M('spark-1.10.73-forge.jar',                   923_600, true,  'spark',                   'Performance profiler for the server.',                   'optional',    'required',    '1.10.73',    'spark',              'Wnxd13zP'),
-  M('gravestones-1.20.1-1.0.17.jar',              891_300, true,  'Gravestones',             'Stores your items in a grave when you die. Recoverable via tombstone block.',  'required', 'required', '1.0.17', 'gravestones', 'ssUbhMkL'),
+  M('jei-1.20.1-forge-15.3.0.4.jar',          1_241_800, true,  'Just Enough Items',       'A recipe and item viewing mod.',                          'required',    'optional',    '15.3.0.4',   'jei',                'u6dRKJwZ',  'mezz'),
+  M('appliedenergistics2-15.2.1.jar',          7_483_200, true,  'Applied Energistics 2',   'A mod about Matter, Energy, and using them.',             'required',    'required',    '15.2.1',     'ae2',                'XxWD5pD3',  'yueh'),
+  M('create-1.20.1-0.5.1.f.jar',             11_204_100, true,  'Create',                  'Aesthetic tech and automation using rotational force.',   'required',    'required',    '0.5.1.f',    'create',             'LNytGWDc',  'simibubi'),
+  M('thermal_expansion-1.20.1-10.6.0.jar',    4_921_500, true,  'Thermal Expansion',       'Expansion of the Thermal Series.',                        'required',    'required',    '10.6.0',     'thermal-expansion',  'hmD6rrUJ',  'TeamCoFH'),
+  M('Mekanism-1.20.1-10.4.7.19.jar',         14_832_700, true,  'Mekanism',                'High-tech machinery and tools.',                          'required',    'required',    '10.4.7.19',  'mekanism',           'Ce6I4WUE',  'bradyaidanc'),
+  M('Botania-1.20.1-445.jar',                  6_341_000, true,  'Botania',                 'A tech mod themed around natural magic.',                 'required',    'required',    '445',        'botania',            'pfjLUfGv',  'Vazkii'),
+  M('immersiveengineering-1.20.1-10.1.0.jar',  9_128_300, true,  'Immersive Engineering',   'A retro-futuristic tech mod with multiblocks.',           'required',    'required',    '10.1.0',     'immersiveengineering','tIm2nV03',  'BluSunrize'),
+  M('TConstruct-1.20.1-3.8.4.272.jar',         5_673_400, true,  "Tinkers' Construct",      'Tool and weapon crafting with materials.',                'required',    'required',    '3.8.4.272',  'tinkers-construct',  'rxIIYO6c',  'boni'),
+  M('StorageDrawers-1.20.1-12.0.2.jar',        1_892_600, true,  'Storage Drawers',         'Multi-drawer storage blocks.',                           'required',    'required',    '12.0.2',     'storagedrawers',     'guitPqEi',  'jaquadro'),
+  M('ironchest-1.20.1-14.4.4.jar',               734_900, true,  'Iron Chests',             'Bigger and better chests.',                              'required',    'required',    '14.4.4',     'iron-chests',        'P3iIrPH3',  'progwml6'),
+  M('Waystones-1.20.1-forge-14.1.3.jar',       1_243_100, true,  'Waystones',               'Teleportation waystone blocks.',                         'required',    'required',    '14.1.3',     'waystones',          'LOpKHB2A',  'BlayTheNinth'),
+  M('farmersdelight-1.20.1-1.2.3.jar',         2_134_600, true,  "Farmer's Delight",        'Expands farming and cooking.',                           'required',    'required',    '1.2.3',      'farmers-delight',    'R2OftAxM',  'vectorwing'),
+  M('alexsmobs-1.22.7.jar',                    8_942_300, true,  "Alex's Mobs",             'Adds many unique mobs to the game.',                     'required',    'required',    '1.22.7',     'alexs-mobs',         '2cMuAZAp',  'sbom_4'),
+  M('biomesoplenty-1.20.1-18.0.0.596.jar',     5_218_400, true,  "Biomes O' Plenty",        'Adds a ton of new biomes.',                              'required',    'required',    '18.0.0.596', 'biomes-o-plenty',    'HXF82T3G',  'Forstride'),
+  M('Quark-4.0-460.jar',                       4_103_700, true,  'Quark',                   'Small tweaks and improvements to vanilla.',              'required',    'required',    '4.0-460',    'quark',              'qvIfYCYJ',  'Vazkii'),
+  M('supplementaries-1.20.1-2.8.14.jar',       3_847_200, true,  'Supplementaries',         'Decorative blocks and items.',                           'required',    'required',    '2.8.14',     'supplementaries',    'fFEIiSDQ',  'MehVahdJukaar'),
+  M('sophisticated-storage-1.20.1-0.9.14.jar',  2_341_600, true,  'Sophisticated Storage',   'Upgradeable tiered chests and barrels with filter, sort, and auto-deposit upgrades.', 'required', 'required', '0.9.14', 'sophisticated-storage', 'hMlaZH8f', 'P3pp3rF1y'),
+  M('lootr-0.7.35.80.jar',                       389_400, true,  'Lootr',                   'Unique loot for each player in chests.',                 'unsupported', 'required',    '0.7.35.80',  'lootr',              'EltpO5cN',  'Noobanidus'),
+  M('spark-1.10.73-forge.jar',                   923_600, true,  'spark',                   'Performance profiler for the server.',                   'optional',    'required',    '1.10.73',    'spark',              'Wnxd13zP',  'lucko'),
+  M('gravestones-1.20.1-1.0.17.jar',              891_300, true,  'Gravestones',             'Stores your items in a grave when you die. Recoverable via tombstone block.',  'required', 'required', '1.0.17', 'gravestones', 'ssUbhMkL', 'MaxHyper'),
   // Disabled mods
-  M('configured-2.2.3-1.20.1.jar',              241_100, false, 'Configured',              'In-game mod config editor.',                             'optional',    'optional',    '2.2.3',      'configured',          'HlpEBg3R'),
-  M('flan-1.20.1-1.9.1.jar',                    634_700, false, 'Flan',                    'Chunk claiming and land protection with team support.',   'required',    'required',    '1.9.1',      'flan',                'Si383TIH'),
+  M('configured-2.2.3-1.20.1.jar',              241_100, false, 'Configured',              'In-game mod config editor.',                             'optional',    'optional',    '2.2.3',      'configured',          'HlpEBg3R',  'MrCrayfish'),
+  M('flan-1.20.1-1.9.1.jar',                    634_700, false, 'Flan',                    'Chunk claiming and land protection with team support.',   'required',    'required',    '1.9.1',      'flan',                'Si383TIH',  'Flemmli98'),
 ];
 
 // --- Console log simulation ---

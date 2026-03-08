@@ -137,6 +137,16 @@ export async function getVersion(versionId) {
 }
 
 /**
+ * Batch-fetch multiple version objects by ID.
+ * Returns array of version objects ({ id, version_number, files, ... }).
+ */
+export async function getVersionsBatch(versionIds) {
+  if (!versionIds.length) return [];
+  const params = new URLSearchParams({ ids: JSON.stringify(versionIds) });
+  return modrinthFetch(`/versions?${params}`);
+}
+
+/**
  * Resolve best matching version for a project given constraints.
  * Returns the version object or null.
  */

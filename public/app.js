@@ -24,6 +24,7 @@ const BROWSE_FETCH_LIMIT = 20; // items fetched per API call
 const BROWSE_PAGE_SIZE = 10;   // items shown per display page
 let browsePage = 0;            // current client display page (0-indexed) within lastBrowseHits
 let lastBrowseHits = []; // cached so the "show installed" toggle re-renders without a new fetch
+const browseVersionCache = new Map(); // versionId -> { versionNumber, fileSize }
 let modsPage = 0;
 const MODS_PAGE_SIZE = 10;
 
@@ -484,6 +485,7 @@ function renderMods() {
         </div>
         ${desc ? `<div class="mod-desc">${esc(desc.slice(0, 120))}${desc.length > 120 ? '...' : ''}</div>` : ''}
         <div class="mod-meta">
+          ${md?.author ? `<span class="dim" title="Author">by <strong>${esc(md.author)}</strong></span>` : ''}
           ${md?.downloads != null ? `<span class="dim" title="Downloads">&#11015; ${Number(md.downloads).toLocaleString()}</span>` : ''}
           ${md?.follows != null ? `<span class="dim" title="Followers">&#9829; ${Number(md.follows).toLocaleString()}</span>` : ''}
           ${ver ? `<span class="dim">v${esc(ver)}</span>` : ''}
@@ -662,7 +664,9 @@ function renderBrowseResults(hits) {
     const downloads = Number(hit.downloads || 0).toLocaleString();
     const follows = Number(hit.follows || 0).toLocaleString();
     const cats = (hit.categories || []).filter(c => c !== 'forge').slice(0, 3);
-    return `<div class="mod-card browse-card${isInstalled ? ' mod-disabled' : ''}">
+    // Populate from cache immediately if already fetched
+    const cached = hit.latest_version ? browseVersionCache.get(hit.latest_version) : null;
+    return `<div class="mod-card browse-card${isInstalled ? ' mod-disabled' : ''}" id="browse-card-${esc(hit.project_id)}">
       ${hit.icon_url ? `<img class="mod-icon" src="${esc(hit.icon_url)}" alt="" loading="lazy" onerror="this.style.display='none'" />` : '<div class="mod-icon-placeholder"></div>'}
       <div class="mod-info">
         <div class="mod-title">
@@ -676,6 +680,8 @@ function renderBrowseResults(hits) {
           <span class="dim" title="Author">by <strong>${esc(hit.author)}</strong></span>
           <span class="dim" title="Downloads">&#11015; ${downloads}</span>
           <span class="dim" title="Followers">&#9829; ${follows}</span>
+          <span class="dim browse-ver"${cached?.versionNumber ? '' : ' hidden'}>${cached?.versionNumber ? `v${esc(cached.versionNumber)}` : ''}</span>
+          <span class="dim browse-size"${cached?.fileSize != null ? '' : ' hidden'}>${cached?.fileSize != null ? formatSize(cached.fileSize) : ''}</span>
         </div>
       </div>
       <div class="mod-actions">
@@ -685,6 +691,43 @@ function renderBrowseResults(hits) {
       </div>
     </div>`;
   }).join('');
+
+  // Async-enrich version number and file size for hits not yet cached
+  enrichBrowseVersions(pageHits);
+}
+
+async function enrichBrowseVersions(hits) {
+  const toFetch = hits
+    .filter(h => h.latest_version && !browseVersionCache.has(h.latest_version))
+    .map(h => h.latest_version);
+
+  if (toFetch.length > 0) {
+    try {
+      const params = new URLSearchParams({ ids: JSON.stringify(toFetch) });
+      const versions = await GET(`/modrinth/versions/batch?${params}`);
+      for (const v of versions) {
+        const primary = v.files?.find(f => f.primary) ?? v.files?.[0];
+        browseVersionCache.set(v.id, { versionNumber: v.version_number, fileSize: primary?.size ?? null });
+      }
+    } catch { /* best-effort — silently skip if batch fetch fails */ }
+  }
+
+  // Update DOM for each hit that now has cached data
+  for (const hit of hits) {
+    if (!hit.latest_version) continue;
+    const cached = browseVersionCache.get(hit.latest_version);
+    if (!cached) continue;
+    const card = document.getElementById(`browse-card-${hit.project_id}`);
+    if (!card) continue;
+    if (cached.versionNumber) {
+      const el = card.querySelector('.browse-ver');
+      if (el) { el.textContent = `v${cached.versionNumber}`; el.removeAttribute('hidden'); }
+    }
+    if (cached.fileSize != null) {
+      const el = card.querySelector('.browse-size');
+      if (el) { el.textContent = formatSize(cached.fileSize); el.removeAttribute('hidden'); }
+    }
+  }
 }
 
 window.openVersionModal = async function(btn) {

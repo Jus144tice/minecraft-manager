@@ -707,6 +707,16 @@ app.get('/api/modrinth/search', async (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
+app.get('/api/modrinth/versions/batch', async (req, res) => {
+  if (config.demoMode) return res.json([]); // demo hits have no real version IDs
+  try {
+    const ids = JSON.parse(req.query.ids || '[]');
+    if (!Array.isArray(ids) || ids.length === 0) return res.json([]);
+    const clean = ids.filter(id => /^[a-zA-Z0-9_-]{1,64}$/.test(id)).slice(0, 50);
+    res.json(await Modrinth.getVersionsBatch(clean));
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
 app.get('/api/modrinth/versions/:projectId', async (req, res) => {
   // projectId from Modrinth is alphanumeric — basic sanity check
   const { projectId } = req.params;
