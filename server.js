@@ -815,6 +815,15 @@ app.post('/api/rcon/connect', async (req, res) => {
 // ============================================================
 
 const PORT = config.webPort || 3000;
+
+// In demo mode, fetch real icon URLs from Modrinth before starting so icons
+// are correct on first page load (avoids png/webp extension mismatches).
+if (config.demoMode) {
+  await Demo.enrichDemoIcons().catch(err =>
+    console.warn('[Demo] Icon enrichment failed (icons may be missing):', err.message),
+  );
+}
+
 httpServer.listen(PORT, '127.0.0.1', () => {
   info('Minecraft Manager started', { port: PORT, demoMode: !!config.demoMode });
   if (config.demoMode) {

@@ -79,13 +79,14 @@ export const DEMO_PROPERTIES = {
 };
 
 // --- Helpers ---
-// cdn(projectId) returns the Modrinth CDN icon URL for a known project.
+// Fallback CDN icon URL — used until enrichDemoIcons() fetches the real URLs.
+// The actual format (png/webp) varies per project; enrichment corrects this at startup.
 const cdn = id => `https://cdn.modrinth.com/data/${id}/icon.png`;
 
-// M builds an installed mod entry. projectId (optional) is the Modrinth project ID,
-// used to fetch the real icon from the CDN.
+// M builds an installed mod entry. projectId (optional) is the Modrinth project ID.
 const M = (filename, size, enabled, title, desc, clientSide, serverSide, version, slug, projectId = null) => ({
   filename, size, enabled,
+  _projectId: projectId,   // retained for icon enrichment; not sent to the browser
   modrinthData: {
     projectTitle: title,
     projectDescription: desc,
@@ -214,3 +215,37 @@ export const DEMO_BROWSE_RESULTS = {
   offset: 0,
   limit: 20,
 };
+
+// --- Icon enrichment ---
+// Called once at startup in demo mode. Fetches real icon_url values from the
+// Modrinth API and updates DEMO_MODS and DEMO_BROWSE_RESULTS in-place, correcting
+// any extension mismatches (png vs webp) in the hardcoded CDN URLs above.
+export async function enrichDemoIcons() {
+  const ids = [
+    ...DEMO_MODS.filter(m => m._projectId).map(m => m._projectId),
+    ...DEMO_BROWSE_RESULTS.hits.map(h => h.project_id),
+  ];
+  const uniqueIds = [...new Set(ids)];
+  if (uniqueIds.length === 0) return;
+
+  const params = new URLSearchParams({ ids: JSON.stringify(uniqueIds) });
+  const res = await fetch(`https://api.modrinth.com/v2/projects?${params}`, {
+    headers: { 'User-Agent': 'minecraft-manager/1.0 (home-server-panel)', Accept: 'application/json' },
+  });
+  if (!res.ok) return;
+
+  const projects = await res.json();
+  const iconMap = {};
+  for (const p of projects) iconMap[p.id] = p.icon_url || null;
+
+  for (const mod of DEMO_MODS) {
+    if (mod._projectId && mod._projectId in iconMap) {
+      mod.modrinthData.iconUrl = iconMap[mod._projectId];
+    }
+  }
+  for (const hit of DEMO_BROWSE_RESULTS.hits) {
+    if (hit.project_id in iconMap) {
+      hit.icon_url = iconMap[hit.project_id];
+    }
+  }
+}
