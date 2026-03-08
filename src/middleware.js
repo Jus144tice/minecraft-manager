@@ -10,10 +10,6 @@ export function buildHelmet() {
     contentSecurityPolicy: {
       directives: {
         defaultSrc:      ["'self'"],
-        // 'unsafe-inline' is required for the onclick= event handlers in dynamically
-        // generated innerHTML (mod cards, player tables). Future improvement: use
-        // event delegation and remove 'unsafe-inline'. Session cookies are httpOnly
-        // so XSS cannot steal them even without a stricter script-src.
         scriptSrc:       ["'self'", "'unsafe-inline'"],
         styleSrc:        ["'self'", "'unsafe-inline'"],
         imgSrc:          ["'self'", 'https:', 'data:', 'blob:'],

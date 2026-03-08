@@ -14,6 +14,27 @@ document.addEventListener('error', (e) => {
   }
 }, true); // capture=true so it fires even if the element has no bubbling listener
 
+// --- Delegated action handler ---
+// Replaces all inline onclick= handlers in dynamic HTML (blocked by CSP script-src-attr 'none').
+// Add data-action="..." to any element; its data-* attributes serve as arguments.
+document.addEventListener('click', async e => {
+  const el = e.target.closest('[data-action]');
+  if (!el) return;
+  switch (el.dataset.action) {
+    case 'mod-detail':
+      openModDetail(el.dataset.id, el.dataset.source,
+        { filename: el.dataset.filename || undefined, author: el.dataset.author || '' });
+      break;
+    case 'toggle-mod':   await toggleMod(el); break;
+    case 'delete-mod':   await deleteMod(el); if (el.dataset.closeDetail) closeModDetail(); break;
+    case 'install-mod':  openVersionModal(el); break;
+    case 'download-mod': downloadMod(el); break;
+    case 'remove-op':    removeOp(el); break;
+    case 'remove-wl':    removeWl(el); break;
+    case 'unban-player': unbanPlayer(el); break;
+  }
+});
+
 // --- State ---
 let ws = null;
 let wsReconnectTimer = null;
@@ -481,7 +502,7 @@ function renderMods() {
       <div class="mod-info">
         <div class="mod-title">
           ${md?.projectSlug || md?.projectId
-            ? `<span class="mod-title-link" onclick="openModDetail('${esc(md.projectSlug || md.projectId)}','installed',{filename:'${esc(mod.filename)}',author:'${esc(md.author||'')}'})">${esc(title)}</span>`
+            ? `<span class="mod-title-link" data-action="mod-detail" data-id="${esc(md.projectSlug || md.projectId)}" data-source="installed" data-filename="${esc(mod.filename)}" data-author="${esc(md.author||'')}">${esc(title)}</span>`
             : `<span>${esc(title)}</span>`}
           <span class="side-badge ${side.cls}">${side.text}</span>
           ${!mod.enabled ? '<span class="side-badge mod-off-badge">Disabled</span>' : ''}
@@ -497,13 +518,11 @@ function renderMods() {
       </div>
       <div class="mod-actions">
         <button class="btn btn-sm ${mod.enabled ? 'btn-warning' : 'btn-success'}"
-          data-filename="${esc(mod.filename)}" data-enable="${!mod.enabled}"
-          onclick="toggleMod(this)">
+          data-action="toggle-mod" data-filename="${esc(mod.filename)}" data-enable="${!mod.enabled}">
           ${mod.enabled ? 'Disable' : 'Enable'}
         </button>
         <button class="btn btn-sm btn-danger"
-          data-filename="${esc(mod.filename)}"
-          onclick="deleteMod(this)">
+          data-action="delete-mod" data-filename="${esc(mod.filename)}">
           Delete
         </button>
       </div>
@@ -673,7 +692,7 @@ function renderBrowseResults(hits) {
       ${hit.icon_url ? `<img class="mod-icon" src="${esc(hit.icon_url)}" alt="" loading="lazy" onerror="this.style.display='none'" />` : '<div class="mod-icon-placeholder"></div>'}
       <div class="mod-info">
         <div class="mod-title">
-          <span class="mod-title-link" onclick="openModDetail('${esc(hit.project_id)}','browse',{author:'${esc(hit.author||'')}'})">${esc(hit.title)}</span>
+          <span class="mod-title-link" data-action="mod-detail" data-id="${esc(hit.project_id)}" data-source="browse" data-author="${esc(hit.author||'')}">${esc(hit.title)}</span>
           <span class="side-badge ${side.cls}">${side.text}</span>
           ${isInstalled ? '<span class="installed-badge">Installed</span>' : ''}
           ${cats.map(c => `<span class="cat-badge">${esc(c)}</span>`).join('')}
@@ -690,7 +709,7 @@ function renderBrowseResults(hits) {
       <div class="mod-actions">
         ${isInstalled
           ? '<button class="btn btn-sm" disabled>Installed</button>'
-          : `<button class="btn btn-sm btn-primary" data-projectid="${esc(hit.project_id)}" data-title="${esc(hit.title)}" onclick="openVersionModal(this)">Install</button>`}
+          : `<button class="btn btn-sm btn-primary" data-action="install-mod" data-projectid="${esc(hit.project_id)}" data-title="${esc(hit.title)}">Install</button>`}
       </div>
     </div>`;
   }).join('');
@@ -804,15 +823,13 @@ function renderModDetail(project, context = {}) {
   // Action buttons
   const actionBtns = isInstalled
     ? `<button class="btn ${installedMod.enabled ? 'btn-warning' : 'btn-success'}"
-         data-filename="${esc(installedFile)}" data-enable="${!installedMod.enabled}"
-         onclick="toggleMod(this); this.closest('#mod-detail-content').querySelector('.mod-detail-installed-badge')?.classList.remove('hidden')">
+         data-action="toggle-mod" data-filename="${esc(installedFile)}" data-enable="${!installedMod.enabled}">
          ${installedMod.enabled ? 'Disable' : 'Enable'}
        </button>
-       <button class="btn btn-danger" data-filename="${esc(installedFile)}"
-         onclick="deleteMod(this); closeModDetail()">Delete</button>`
+       <button class="btn btn-danger"
+         data-action="delete-mod" data-filename="${esc(installedFile)}" data-close-detail="true">Delete</button>`
     : `<button class="btn btn-primary btn-lg"
-         data-projectid="${esc(project.id)}" data-title="${esc(project.title)}"
-         onclick="openVersionModal(this)">Install</button>`;
+         data-action="install-mod" data-projectid="${esc(project.id)}" data-title="${esc(project.title)}">Install</button>`;
 
   $('mod-detail-content').innerHTML = `
     <div class="mod-detail-header">
@@ -875,8 +892,7 @@ window.openVersionModal = async function(btn) {
         </div>
         <div class="dim">${file ? formatSize(file.size) : ''}</div>
         <button class="btn btn-sm btn-success"
-          data-versionid="${esc(v.id)}"
-          onclick="downloadMod(this)">
+          data-action="download-mod" data-versionid="${esc(v.id)}">
           Download
         </button>
       </div>`;
@@ -921,7 +937,7 @@ async function loadOps() {
           <td><span class="level-badge level-${op.level}">Level ${op.level}</span></td>
           <td class="dim small">${esc(op.uuid || '-')}</td>
           <td>
-            <button class="btn btn-sm btn-danger" data-name="${esc(op.name)}" onclick="removeOp(this)">Remove</button>
+            <button class="btn btn-sm btn-danger" data-action="remove-op" data-name="${esc(op.name)}">Remove</button>
           </td>
         </tr>`).join('')}
       </tbody>
@@ -956,7 +972,7 @@ async function loadWhitelist() {
           <td><strong>${esc(e.name)}</strong></td>
           <td class="dim small">${esc(e.uuid || '-')}</td>
           <td>
-            <button class="btn btn-sm btn-danger" data-name="${esc(e.name)}" onclick="removeWl(this)">Remove</button>
+            <button class="btn btn-sm btn-danger" data-action="remove-wl" data-name="${esc(e.name)}">Remove</button>
           </td>
         </tr>`).join('')}
       </tbody>
@@ -991,7 +1007,7 @@ async function loadBans() {
           <td><strong>${esc(e.name)}</strong></td>
           <td class="dim">${esc(e.reason || '-')}</td>
           <td>
-            <button class="btn btn-sm btn-success" data-name="${esc(e.name)}" onclick="unbanPlayer(this)">Unban</button>
+            <button class="btn btn-sm btn-success" data-action="unban-player" data-name="${esc(e.name)}">Unban</button>
           </td>
         </tr>`).join('')}
       </tbody>

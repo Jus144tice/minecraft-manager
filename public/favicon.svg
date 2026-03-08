@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" width="16" height="16" shape-rendering="crispEdges">
+  <!-- Creeper face - pixel art 16x16 -->
+  <!-- Background: creeper green -->
+  <rect width="16" height="16" fill="#3d7a3d"/>
+  <!-- Face pixels: dark areas for eyes and mouth -->
+  <!-- Left eye -->
+  <rect x="3" y="4" width="3" height="3" fill="#0a1a0a"/>
+  <!-- Right eye -->
+  <rect x="10" y="4" width="3" height="3" fill="#0a1a0a"/>
+  <!-- Nose/mouth top center -->
+  <rect x="6" y="7" width="4" height="2" fill="#0a1a0a"/>
+  <!-- Mouth left -->
+  <rect x="4" y="9" width="2" height="3" fill="#0a1a0a"/>
+  <!-- Mouth right -->
+  <rect x="10" y="9" width="2" height="3" fill="#0a1a0a"/>
+  <!-- Mouth bottom center -->
+  <rect x="6" y="11" width="4" height="2" fill="#0a1a0a"/>
+</svg>
