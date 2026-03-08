@@ -16,12 +16,24 @@
       <h1>Minecraft Manager</h1>
       <p>Server Control Panel</p>
     </div>
-    <div class="form-group">
-      <label>Password</label>
-      <input type="password" id="login-password" placeholder="Enter web password" autocomplete="current-password" />
+
+    <!-- OIDC buttons — shown when Google/Microsoft providers are configured -->
+    <div id="login-oidc-section" class="hidden">
+      <a class="btn btn-full btn-oidc hidden" id="btn-login-google" href="/auth/google">Sign in with Google</a>
+      <a class="btn btn-full btn-oidc hidden" id="btn-login-microsoft" href="/auth/microsoft">Sign in with Microsoft</a>
+      <hr id="login-divider" class="login-divider hidden" />
     </div>
-    <p id="demo-hint" class="demo-hint hidden">Demo mode is active &mdash; use password <strong>changeme</strong> (or any password)</p>
-    <button class="btn btn-primary btn-full" id="login-btn">Log In</button>
+
+    <!-- Local password form — shown for local password or demo mode -->
+    <div id="login-local-section" class="hidden">
+      <div class="form-group">
+        <label>Password</label>
+        <input type="password" id="login-password" placeholder="Enter password" autocomplete="current-password" />
+      </div>
+      <p id="demo-hint" class="demo-hint hidden">Demo mode &mdash; use password <strong>changeme</strong> (or any password)</p>
+      <button class="btn btn-primary btn-full" id="login-btn">Log In</button>
+    </div>
+
     <p id="login-error" class="error-msg hidden"></p>
   </div>
 </div>

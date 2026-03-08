@@ -1,9 +1,13 @@
 // Read/write Minecraft server data files: ops.json, whitelist.json,
-// banned-players.json, banned-ips.json, server.properties, and mods folder
+// banned-players.json, banned-ips.json, server.properties, and mods folder.
+// All file operations that accept user-influenced filenames use safeJoin to
+// prevent path traversal attacks.
+
 import fs from 'fs/promises';
 import path from 'path';
 import crypto from 'crypto';
 import { createReadStream } from 'fs';
+import { safeJoin } from './pathUtils.js';
 
 // --- JSON data files ---
 
@@ -70,7 +74,6 @@ export async function getServerProperties(serverPath) {
 
 export async function setServerProperties(serverPath, props) {
   const filePath = path.join(serverPath, 'server.properties');
-  // Read existing to preserve comments and ordering
   let existing = '';
   try { existing = await fs.readFile(filePath, 'utf8'); } catch { /* ok */ }
 
@@ -89,7 +92,6 @@ export async function setServerProperties(serverPath, props) {
     return line;
   });
 
-  // Append any new keys not already in the file
   for (const [k, v] of Object.entries(props)) {
     if (!handled.has(k)) updated.push(`${k}=${v}`);
   }
@@ -102,7 +104,6 @@ export async function setServerProperties(serverPath, props) {
 export async function listMods(serverPath, modsFolder = 'mods', disabledFolder = 'mods_disabled') {
   const modsPath = path.join(serverPath, modsFolder);
   const disabledPath = path.join(serverPath, disabledFolder);
-
   const mods = [];
 
   async function scanDir(dir, enabled) {
@@ -112,12 +113,7 @@ export async function listMods(serverPath, modsFolder = 'mods', disabledFolder =
         if (!name.endsWith('.jar')) continue;
         const fullPath = path.join(dir, name);
         const stat = await fs.stat(fullPath);
-        mods.push({
-          filename: name,
-          size: stat.size,
-          enabled,
-          modrinthData: null, // populated separately via hash lookup
-        });
+        mods.push({ filename: name, size: stat.size, enabled, modrinthData: null });
       }
     } catch {
       // folder doesn't exist yet, that's fine
@@ -136,18 +132,23 @@ export async function toggleMod(serverPath, filename, enable, modsFolder = 'mods
 
   if (enable) {
     await fs.mkdir(modsPath, { recursive: true });
-    await fs.rename(path.join(disabledPath, filename), path.join(modsPath, filename));
+    // safeJoin verifies filename cannot escape the expected directory
+    const src = safeJoin(disabledPath, filename);
+    const dst = safeJoin(modsPath, filename);
+    await fs.rename(src, dst);
   } else {
     await fs.mkdir(disabledPath, { recursive: true });
-    await fs.rename(path.join(modsPath, filename), path.join(disabledPath, filename));
+    const src = safeJoin(modsPath, filename);
+    const dst = safeJoin(disabledPath, filename);
+    await fs.rename(src, dst);
   }
 }
 
 export async function deleteMod(serverPath, filename, modsFolder = 'mods', disabledFolder = 'mods_disabled') {
-  // Try both folders
+  // safeJoin on both candidate paths — throws if filename escapes the directory
   const candidates = [
-    path.join(serverPath, modsFolder, filename),
-    path.join(serverPath, disabledFolder, filename),
+    safeJoin(path.join(serverPath, modsFolder), filename),
+    safeJoin(path.join(serverPath, disabledFolder), filename),
   ];
   for (const p of candidates) {
     try { await fs.unlink(p); return; } catch { /* try next */ }
@@ -158,7 +159,8 @@ export async function deleteMod(serverPath, filename, modsFolder = 'mods', disab
 export async function saveMod(serverPath, filename, buffer, modsFolder = 'mods') {
   const modsPath = path.join(serverPath, modsFolder);
   await fs.mkdir(modsPath, { recursive: true });
-  await fs.writeFile(path.join(modsPath, filename), buffer);
+  const filePath = safeJoin(modsPath, filename);
+  await fs.writeFile(filePath, buffer);
 }
 
 // --- SHA1 hash for Modrinth lookup ---
@@ -174,7 +176,7 @@ export function hashFile(filePath) {
 }
 
 export async function hashMods(serverPath, modsFolder = 'mods', disabledFolder = 'mods_disabled') {
-  const result = {}; // filename -> sha1
+  const result = {};
   for (const [folder, enabled] of [[modsFolder, true], [disabledFolder, false]]) {
     const dir = path.join(serverPath, folder);
     try {

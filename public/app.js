@@ -2,7 +2,6 @@
 'use strict';
 
 // --- State ---
-let token = sessionStorage.getItem('mc_token') || '';
 let ws = null;
 let wsReconnectTimer = null;
 let currentModData = {}; // filename -> modrinth data from lookup
@@ -11,13 +10,17 @@ let browseTotal = 0;
 const BROWSE_LIMIT = 20;
 
 // --- API helpers ---
+// Session cookie is sent automatically by the browser (same-origin, httpOnly).
+// No Authorization header needed.
 async function api(method, path, body) {
-  const opts = {
-    method,
-    headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
-  };
+  const opts = { method, headers: { 'Content-Type': 'application/json' } };
   if (body !== undefined) opts.body = JSON.stringify(body);
   const res = await fetch('/api' + path, opts);
+  if (res.status === 401) {
+    // Session expired or logged out from another tab — return to login
+    showLoginScreen();
+    throw new Error('Session expired. Please log in again.');
+  }
   const data = await res.json().catch(() => ({}));
   if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
   return data;
@@ -58,51 +61,89 @@ function esc(str) {
   return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 }
 
-// --- Login ---
+// --- Login screen setup ---
+
+function setupLoginUI(providers) {
+  // Show OIDC buttons for any configured providers
+  if (providers.google || providers.microsoft) {
+    show('login-oidc-section');
+    if (providers.google) show('btn-login-google');
+    if (providers.microsoft) show('btn-login-microsoft');
+    // Show divider only if both OIDC and local are available
+    if (providers.local) show('login-divider');
+  }
+
+  // Show local password form for local password or demo mode
+  if (providers.local) {
+    show('login-local-section');
+    if (providers.demo) show('demo-hint');
+  }
+
+  // If only OIDC (no local), make sure local section is hidden
+  if (!providers.local) hide('login-local-section');
+}
+
+function showLoginScreen() {
+  if (ws) { ws.close(); ws = null; }
+  hide('app');
+  // Load providers fresh so login buttons are correct
+  fetch('/api/auth/providers')
+    .then(r => r.json())
+    .then(setupLoginUI)
+    .catch(() => {});
+  show('login-screen');
+}
+
+// --- Local password login ---
 $('login-btn').addEventListener('click', login);
 $('login-password').addEventListener('keydown', e => { if (e.key === 'Enter') login(); });
 
 async function login() {
   const pw = $('login-password').value;
+  const errEl = $('login-error');
+  errEl.classList.add('hidden');
   try {
-    const data = await POST('/auth', { password: pw });
-    token = data.token;
-    sessionStorage.setItem('mc_token', token);
+    await fetch('/auth/local', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ password: pw }),
+    }).then(async res => {
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || 'Login failed');
+    });
     hide('login-screen');
     show('app');
     initApp();
   } catch (err) {
-    const el = $('login-error');
-    el.textContent = 'Wrong password.';
-    el.classList.remove('hidden');
+    errEl.textContent = err.message || 'Login failed.';
+    errEl.classList.remove('hidden');
   }
 }
 
-$('logout-btn').addEventListener('click', () => {
-  sessionStorage.removeItem('mc_token');
-  token = '';
+// --- Logout ---
+$('logout-btn').addEventListener('click', async () => {
   if (ws) { ws.close(); ws = null; }
-  hide('app');
-  show('login-screen');
-  $('login-password').value = '';
+  await fetch('/auth/logout', { method: 'POST' }).catch(() => {});
+  window.location.reload(); // cleanest way to reset all state and re-check session
 });
 
-// Show demo hint on login page if demo mode is active (public endpoint, no auth)
-fetch('/api/demo').then(r => r.json()).then(d => {
-  if (d.demoMode) show('demo-hint');
-}).catch(() => {});
+// --- Startup: check existing session ---
+(async () => {
+  try {
+    const session = await fetch('/api/session').then(r => r.json());
+    if (session.loggedIn) {
+      hide('login-screen');
+      show('app');
+      initApp();
+      return;
+    }
+  } catch { /* network error — fall through to login */ }
 
-// Auto-login if token exists
-if (token) {
-  GET('/status').then(() => {
-    hide('login-screen');
-    show('app');
-    initApp();
-  }).catch(() => {
-    sessionStorage.removeItem('mc_token');
-    token = '';
-  });
-}
+  // Not logged in — configure login UI based on available providers
+  const providers = await fetch('/api/auth/providers').then(r => r.json()).catch(() => ({}));
+  setupLoginUI(providers);
+  show('login-screen');
+})();
 
 // Demo banner dismiss
 $('demo-banner-close').addEventListener('click', () => hide('demo-banner'));
@@ -167,10 +208,11 @@ async function initApp() {
 }
 
 // --- WebSocket (live console) ---
+// Session cookie is sent automatically by the browser on same-origin WS upgrades.
 function connectWs() {
   if (ws) return;
   const protocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
-  ws = new WebSocket(`${protocol}//${location.host}/ws?token=${token}`);
+  ws = new WebSocket(`${protocol}//${location.host}/ws`);
 
   ws.onopen = () => { clearTimeout(wsReconnectTimer); appendConsole('[Manager] Connected to server', 'info'); };
 
@@ -182,8 +224,10 @@ function connectWs() {
     } catch { /* ignore */ }
   };
 
-  ws.onclose = () => {
+  ws.onclose = (ev) => {
     ws = null;
+    // Code 4001 = unauthorized (session expired) — don't reconnect
+    if (ev.code === 4001) { showLoginScreen(); return; }
     wsReconnectTimer = setTimeout(connectWs, 5000);
   };
 
@@ -197,13 +241,11 @@ const autoScrollCb = $('console-autoscroll');
 function appendConsole(line, type = '') {
   const div = document.createElement('div');
   div.className = 'console-line' + (type ? ' console-' + type : '');
-  // Color WARN/ERROR differently
   if (line.includes('WARN') || line.includes('STDERR')) div.classList.add('console-warn');
   if (line.includes('ERROR') || line.includes('Exception')) div.classList.add('console-error');
   div.textContent = line;
   consoleOutput.appendChild(div);
   if (autoScrollCb.checked) consoleOutput.scrollTop = consoleOutput.scrollHeight;
-  // Trim old lines if too many
   while (consoleOutput.children.length > 3000) consoleOutput.removeChild(consoleOutput.firstChild);
 }
 
@@ -309,8 +351,6 @@ async function loadMods() {
   try {
     const data = await GET('/mods');
     allMods = data.mods;
-    // Auto-populate modrinthData from the response (pre-identified in demo mode,
-    // or if the server already has cached data from a previous lookup)
     for (const mod of allMods) {
       if (mod.modrinthData) {
         currentModData[mod.filename] = { modrinth: mod.modrinthData, enabled: mod.enabled };
@@ -333,7 +373,6 @@ function renderMods() {
     // Always exclude client-only mods — they don't belong on a server
     const md = currentModData[m.filename]?.modrinth;
     if (md && md.serverSide === 'unsupported') return false;
-    // Side filter
     if (sideFilter !== 'all') {
       if (!md) return sideFilter === 'unknown';
       const { cls } = sideLabel(md.clientSide, md.serverSide);
@@ -425,7 +464,7 @@ $('btn-lookup-mods').addEventListener('click', async () => {
 });
 
 // --- Browse Modrinth ---
-let browseLoaded = false; // only auto-load once per session
+let browseLoaded = false;
 
 $('btn-browse-search').addEventListener('click', () => { browseOffset = 0; browseSearch(); });
 $('browse-query').addEventListener('keydown', e => { if (e.key === 'Enter') { browseOffset = 0; browseSearch(); } });
@@ -441,7 +480,6 @@ $('browse-next').addEventListener('click', () => {
   q ? browseSearch() : browseLoad();
 });
 
-// Auto-load popular mods (no query) when the tab first opens
 async function browseLoad() {
   if (browseLoaded && browseOffset === 0 && !$('browse-query').value.trim()) {
     return; // Already loaded, don't reload unless paginating
@@ -548,7 +586,7 @@ window.openVersionModal = async function(btn) {
         </div>
         <div class="dim">${file ? formatSize(file.size) : ''}</div>
         <button class="btn btn-sm btn-success"
-          data-versionid="${esc(v.id)}" data-filename="${esc(file?.filename || v.id + '.jar')}"
+          data-versionid="${esc(v.id)}"
           onclick="downloadMod(this)">
           Download
         </button>
@@ -563,11 +601,11 @@ $('modal-close').addEventListener('click', () => hide('version-modal'));
 $('version-modal').addEventListener('click', e => { if (e.target === $('version-modal')) hide('version-modal'); });
 
 window.downloadMod = async function(btn) {
-  const { versionid, filename } = btn.dataset;
+  const { versionid } = btn.dataset;
   btn.disabled = true;
   btn.textContent = 'Downloading...';
   try {
-    const result = await POST('/modrinth/download', { versionId: versionid, filename });
+    const result = await POST('/modrinth/download', { versionId: versionid });
     btn.textContent = 'Done!';
     btn.className = 'btn btn-sm btn-ghost';
     hide('version-modal');
@@ -734,7 +772,6 @@ $('btn-reconnect-rcon').addEventListener('click', async () => {
 });
 
 // --- Settings: server.properties ---
-// Important properties to highlight at the top
 const IMPORTANT_PROPS = [
   'enable-rcon', 'rcon.port', 'rcon.password',
   'white-list', 'online-mode', 'max-players', 'server-port',
@@ -749,7 +786,6 @@ async function loadServerProps() {
     const entries = Object.entries(props);
     if (!entries.length) { el.innerHTML = '<p class="dim">Could not read server.properties.</p>'; return; }
 
-    // Sort: important ones first, rest alphabetically
     entries.sort(([a], [b]) => {
       const ai = IMPORTANT_PROPS.indexOf(a), bi = IMPORTANT_PROPS.indexOf(b);
       if (ai !== -1 && bi !== -1) return ai - bi;
@@ -784,7 +820,7 @@ $('props-form').addEventListener('submit', async (e) => {
   const props = {};
   for (const el of form.elements) {
     if (!el.name?.startsWith('prop__')) continue;
-    const key = el.name.slice(6); // strip 'prop__'
+    const key = el.name.slice(6);
     props[key] = el.type === 'checkbox' ? String(el.checked) : el.value;
   }
   try {

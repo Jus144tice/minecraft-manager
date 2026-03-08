@@ -1,5 +1,7 @@
 // Modrinth API v2 wrapper
 // Docs: https://docs.modrinth.com/api/
+import crypto from 'crypto';
+
 const BASE = 'https://api.modrinth.com/v2';
 const HEADERS = {
   'User-Agent': 'minecraft-manager/1.0 (home-server-panel)',
@@ -126,7 +128,7 @@ export async function lookupByHashes(hashes) {
 }
 
 /**
- * Get a specific version object (has file download URLs)
+ * Get a specific version object (has file download URLs and hashes)
  */
 export async function getVersion(versionId) {
   return modrinthFetch(`/version/${versionId}`);
@@ -153,12 +155,24 @@ export async function resolveBestVersion(projectId, { mcVersion, loader = 'forge
 }
 
 /**
- * Download a mod file buffer given a version's file object.
+ * Download a mod file buffer and verify its SHA1 hash against Modrinth's known-good value.
+ * Throws if the hash doesn't match — the file may be corrupted or tampered with.
  * Returns { buffer, filename }
  */
-export async function downloadModFile(downloadUrl, filename) {
+export async function downloadModFile(downloadUrl, filename, expectedSha1) {
   const res = await fetch(downloadUrl, { headers: HEADERS });
   if (!res.ok) throw new Error(`Download failed: ${res.status}`);
   const buf = Buffer.from(await res.arrayBuffer());
+
+  if (expectedSha1) {
+    const actual = crypto.createHash('sha1').update(buf).digest('hex');
+    if (actual !== expectedSha1) {
+      throw new Error(
+        `Hash mismatch for ${filename}: expected ${expectedSha1}, got ${actual}. ` +
+        'File may be corrupted or tampered with. Download aborted.',
+      );
+    }
+  }
+
   return { buffer: buf, filename };
 }
