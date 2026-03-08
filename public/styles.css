@@ -362,7 +362,7 @@ input:focus, select:focus, textarea:focus {
 
 /* --- Mods --- */
 .filter-bar { display: flex; gap: 0.5rem; flex-wrap: wrap; align-items: center; margin-bottom: 1rem; }
-.filter-bar input { flex: 1; min-width: 160px; }
+.filter-bar input:not([type="checkbox"]) { flex: 1; min-width: 160px; }
 .filter-bar select { min-width: 130px; width: auto; }
 
 .mods-list { display: flex; flex-direction: column; gap: 0.5rem; }
