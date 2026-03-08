@@ -52,6 +52,24 @@ export function buildApiLimiter() {
   });
 }
 
+// ---- CSRF token check for mutating API requests ----
+// Validates the X-CSRF-Token header against the session-stored token.
+// Apply after requireSession so req.session is always populated.
+// GET/HEAD/OPTIONS are safe methods and are always skipped.
+
+export function buildCsrfCheck() {
+  return (req, res, next) => {
+    if (req.method === 'GET' || req.method === 'HEAD' || req.method === 'OPTIONS') {
+      return next();
+    }
+    const token = req.headers['x-csrf-token'];
+    if (!token || !req.session?.csrfToken || token !== req.session.csrfToken) {
+      return res.status(403).json({ error: 'CSRF token missing or invalid' });
+    }
+    next();
+  };
+}
+
 // ---- Same-origin check for mutating requests ----
 // Defence-in-depth alongside SameSite=Lax cookies. Rejects cross-origin POST/PUT/DELETE
 // requests that include an Origin header pointing to a different host.

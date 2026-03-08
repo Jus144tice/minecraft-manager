@@ -124,8 +124,18 @@ export async function buildAuthRouter(config) {
   }
 
   const hasOidc = Object.keys(oidcClients).length > 0;
-  const hasLocalPassword = !!(process.env.LOCAL_PASSWORD || config.webPassword);
+  const hasLocalPassword = !!process.env.LOCAL_PASSWORD;
   const isDemo = !!config.demoMode;
+
+  // Migration warning: webPassword in config.json is no longer used.
+  // Move it to LOCAL_PASSWORD env var or switch to OIDC.
+  if (config.webPassword) {
+    console.warn(
+      '[Auth] WARNING: config.json contains "webPassword" which is no longer used. ' +
+      'If you need local password auth, set LOCAL_PASSWORD=<password> as an environment variable. ' +
+      'Remove "webPassword" from config.json.',
+    );
+  }
 
   if (!isDemo && !hasOidc && !hasLocalPassword) {
     console.error(
@@ -143,6 +153,8 @@ export async function buildAuthRouter(config) {
     req.session.regenerate((err) => {
       if (err) return onDone(err);
       req.session.user = { ...userInfo, loginAt: Date.now() };
+      // Generate a fresh CSRF token bound to this session.
+      req.session.csrfToken = crypto.randomBytes(32).toString('hex');
       req.session.save((saveErr) => {
         if (saveErr) return onDone(saveErr);
         audit('LOGIN', { email: userInfo.email, provider: userInfo.provider, ip: req.ip });
@@ -241,7 +253,7 @@ export async function buildAuthRouter(config) {
       return;
     }
 
-    const expected = process.env.LOCAL_PASSWORD || config.webPassword;
+    const expected = process.env.LOCAL_PASSWORD;
     if (!expected) return res.status(404).json({ error: 'Local password auth not configured.' });
     if (!password) return res.status(401).json({ error: 'Password required.' });
 

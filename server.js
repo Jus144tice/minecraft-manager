@@ -6,13 +6,14 @@ import { readFile, writeFile } from 'fs/promises';
 import path from 'path';
 import { fileURLToPath } from 'url';
 
+import crypto from 'crypto';
 import { RconClient } from './src/rcon.js';
 import { MinecraftProcess } from './src/minecraftProcess.js';
 import * as SF from './src/serverFiles.js';
 import * as Modrinth from './src/modrinth.js';
 import * as Demo from './src/demoData.js';
 import { buildSessionMiddleware, buildAuthRouter, requireSession } from './src/auth.js';
-import { buildHelmet, buildAuthLimiter, buildApiLimiter, buildSameOriginCheck } from './src/middleware.js';
+import { buildHelmet, buildAuthLimiter, buildApiLimiter, buildSameOriginCheck, buildCsrfCheck } from './src/middleware.js';
 import { audit, info } from './src/audit.js';
 import { isValidMinecraftName, isSafeModFilename, isSafeCommand, sanitizeReason } from './src/validate.js';
 
@@ -259,6 +260,19 @@ app.get('/api/demo', (req, res) => {
 // ============================================================
 
 app.use('/api', requireSession);
+
+// CSRF token endpoint — returns the session-bound token for use in X-CSRF-Token headers.
+// Lazily generates a token if the session predates CSRF support (e.g. after an upgrade).
+app.get('/api/csrf-token', (req, res) => {
+  if (!req.session.csrfToken) {
+    req.session.csrfToken = crypto.randomBytes(32).toString('hex');
+    req.session.save(() => {});
+  }
+  res.json({ token: req.session.csrfToken });
+});
+
+// CSRF check for all mutating API requests (POST/PUT/DELETE)
+app.use('/api', buildCsrfCheck());
 
 // ============================================================
 // Status

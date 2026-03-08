@@ -8,12 +8,16 @@ let currentModData = {}; // filename -> modrinth data from lookup
 let browseOffset = 0;
 let browseTotal = 0;
 const BROWSE_LIMIT = 20;
+let csrfToken = ''; // fetched after login; sent as X-CSRF-Token on all mutating requests
 
 // --- API helpers ---
 // Session cookie is sent automatically by the browser (same-origin, httpOnly).
-// No Authorization header needed.
+// Mutating requests also include the X-CSRF-Token header (defence-in-depth).
 async function api(method, path, body) {
   const opts = { method, headers: { 'Content-Type': 'application/json' } };
+  if (method !== 'GET' && method !== 'HEAD' && csrfToken) {
+    opts.headers['X-CSRF-Token'] = csrfToken;
+  }
   if (body !== undefined) opts.body = JSON.stringify(body);
   const res = await fetch('/api' + path, opts);
   if (res.status === 401) {
@@ -189,6 +193,12 @@ function onSubtabActivate(subtab) {
 
 // --- App init ---
 async function initApp() {
+  // Fetch CSRF token first so all subsequent mutating requests include it.
+  try {
+    const { token } = await GET('/csrf-token');
+    csrfToken = token;
+  } catch { /* non-fatal — CSRF check will reject mutating requests until resolved */ }
+
   connectWs();
   loadStatus();
   loadOnlinePlayers(); // populate immediately without needing a manual refresh
