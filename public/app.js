@@ -25,6 +25,7 @@ const BROWSE_PAGE_SIZE = 10;   // items shown per display page
 let browsePage = 0;            // current client display page (0-indexed) within lastBrowseHits
 let lastBrowseHits = []; // cached so the "show installed" toggle re-renders without a new fetch
 const browseVersionCache = new Map(); // versionId -> { versionNumber, fileSize }
+let modDetailState = null; // { source: 'installed'|'browse', filename?, author? }
 let modsPage = 0;
 const MODS_PAGE_SIZE = 10;
 
@@ -479,7 +480,9 @@ function renderMods() {
       ${md?.iconUrl ? `<img class="mod-icon" src="${esc(md.iconUrl)}" alt="" loading="lazy" onerror="this.style.display='none'" />` : '<div class="mod-icon-placeholder"></div>'}
       <div class="mod-info">
         <div class="mod-title">
-          <span>${esc(title)}</span>
+          ${md?.projectSlug || md?.projectId
+            ? `<span class="mod-title-link" onclick="openModDetail('${esc(md.projectSlug || md.projectId)}','installed',{filename:'${esc(mod.filename)}',author:'${esc(md.author||'')}'})">${esc(title)}</span>`
+            : `<span>${esc(title)}</span>`}
           <span class="side-badge ${side.cls}">${side.text}</span>
           ${!mod.enabled ? '<span class="side-badge mod-off-badge">Disabled</span>' : ''}
         </div>
@@ -670,7 +673,7 @@ function renderBrowseResults(hits) {
       ${hit.icon_url ? `<img class="mod-icon" src="${esc(hit.icon_url)}" alt="" loading="lazy" onerror="this.style.display='none'" />` : '<div class="mod-icon-placeholder"></div>'}
       <div class="mod-info">
         <div class="mod-title">
-          <span>${esc(hit.title)}</span>
+          <span class="mod-title-link" onclick="openModDetail('${esc(hit.project_id)}','browse',{author:'${esc(hit.author||'')}'})">${esc(hit.title)}</span>
           <span class="side-badge ${side.cls}">${side.text}</span>
           ${isInstalled ? '<span class="installed-badge">Installed</span>' : ''}
           ${cats.map(c => `<span class="cat-badge">${esc(c)}</span>`).join('')}
@@ -728,6 +731,128 @@ async function enrichBrowseVersions(hits) {
       if (el) { el.textContent = formatSize(cached.fileSize); el.removeAttribute('hidden'); }
     }
   }
+}
+
+$('btn-mod-detail-back').addEventListener('click', closeModDetail);
+
+function closeModDetail() {
+  hide('mod-detail-panel');
+  if (modDetailState?.source === 'browse') {
+    show('subtab-browse');
+    activeModsSubtab = 'browse';
+    renderBrowseResults(lastBrowseHits);
+  } else {
+    show('subtab-installed');
+    activeModsSubtab = 'installed';
+    renderMods();
+  }
+  modDetailState = null;
+}
+window.closeModDetail = closeModDetail;
+
+window.openModDetail = async function(idOrSlug, source, context = {}) {
+  modDetailState = { source, ...context };
+
+  // Hide subtab content and pagination; show detail panel
+  hide('subtab-installed');
+  hide('subtab-browse');
+  modsPager.hide();
+  show('mod-detail-panel');
+  $('mod-detail-content').innerHTML = '<p class="dim">Loading mod details...</p>';
+
+  try {
+    const project = await GET(`/modrinth/project/${encodeURIComponent(idOrSlug)}`);
+    renderModDetail(project, context);
+  } catch (err) {
+    $('mod-detail-content').innerHTML = `<p class="error-msg">Failed to load details: ${esc(err.message)}</p>`;
+  }
+};
+
+function renderModDetail(project, context = {}) {
+  // Check if this mod is currently installed
+  let installedFile = null;
+  let installedMod = null;
+  for (const mod of allMods) {
+    const md = currentModData[mod.filename]?.modrinth;
+    if (md?.projectId === project.id || md?.projectSlug === project.slug) {
+      installedFile = mod.filename;
+      installedMod = mod;
+      break;
+    }
+  }
+  const isInstalled = !!installedFile;
+
+  const side = sideLabel(project.client_side, project.server_side);
+  const downloads = Number(project.downloads || 0).toLocaleString();
+  const follows = Number(project.follows || 0).toLocaleString();
+  const cats = (project.categories || []).filter(c => c !== 'forge').slice(0, 6);
+  const author = context.author || '';
+
+  // External links
+  const links = [
+    `<a href="https://modrinth.com/mod/${encodeURIComponent(project.slug)}" target="_blank" rel="noopener" class="btn btn-sm btn-ghost">Modrinth ↗</a>`,
+    project.issues_url  ? `<a href="${esc(project.issues_url)}"  target="_blank" rel="noopener" class="btn btn-sm btn-ghost">Issues ↗</a>`  : '',
+    project.source_url  ? `<a href="${esc(project.source_url)}"  target="_blank" rel="noopener" class="btn btn-sm btn-ghost">Source ↗</a>`  : '',
+    project.wiki_url    ? `<a href="${esc(project.wiki_url)}"    target="_blank" rel="noopener" class="btn btn-sm btn-ghost">Wiki ↗</a>`    : '',
+    project.discord_url ? `<a href="${esc(project.discord_url)}" target="_blank" rel="noopener" class="btn btn-sm btn-ghost">Discord ↗</a>` : '',
+  ].filter(Boolean).join('');
+
+  // Gallery: sort by ordering, prefer featured first
+  const gallery = (project.gallery || [])
+    .sort((a, b) => (b.featured ? 1 : 0) - (a.featured ? 1 : 0) || (a.ordering || 0) - (b.ordering || 0));
+
+  // Action buttons
+  const actionBtns = isInstalled
+    ? `<button class="btn ${installedMod.enabled ? 'btn-warning' : 'btn-success'}"
+         data-filename="${esc(installedFile)}" data-enable="${!installedMod.enabled}"
+         onclick="toggleMod(this); this.closest('#mod-detail-content').querySelector('.mod-detail-installed-badge')?.classList.remove('hidden')">
+         ${installedMod.enabled ? 'Disable' : 'Enable'}
+       </button>
+       <button class="btn btn-danger" data-filename="${esc(installedFile)}"
+         onclick="deleteMod(this); closeModDetail()">Delete</button>`
+    : `<button class="btn btn-primary btn-lg"
+         data-projectid="${esc(project.id)}" data-title="${esc(project.title)}"
+         onclick="openVersionModal(this)">Install</button>`;
+
+  $('mod-detail-content').innerHTML = `
+    <div class="mod-detail-header">
+      <div class="mod-detail-hero">
+        ${project.icon_url
+          ? `<img class="mod-detail-icon" src="${esc(project.icon_url)}" alt="" />`
+          : '<div class="mod-detail-icon mod-icon-placeholder"></div>'}
+        <div class="mod-detail-info">
+          <h2 class="mod-detail-title">${esc(project.title)}</h2>
+          <div class="mod-meta">
+            ${author ? `<span class="dim">by <strong>${esc(author)}</strong></span>` : ''}
+            <span class="dim" title="Downloads">&#11015; ${downloads}</span>
+            <span class="dim" title="Followers">&#9829; ${follows}</span>
+          </div>
+          <div class="mod-badges">
+            <span class="side-badge ${side.cls}">${side.text}</span>
+            ${isInstalled ? '<span class="installed-badge mod-detail-installed-badge">Installed</span>' : ''}
+            ${cats.map(c => `<span class="cat-badge">${esc(c)}</span>`).join('')}
+          </div>
+          <div class="mod-detail-links">${links}</div>
+        </div>
+        <div class="mod-detail-actions">${actionBtns}</div>
+      </div>
+      ${project.description ? `<p class="mod-detail-summary dim">${esc(project.description)}</p>` : ''}
+    </div>
+    ${gallery.length > 0 ? `
+      <section class="mod-detail-section">
+        <h3>Gallery</h3>
+        <div class="mod-gallery">
+          ${gallery.map(img => `
+            <img class="gallery-img" src="${esc(img.url)}" alt="${esc(img.title || '')}"
+                 title="${esc(img.description || img.title || '')}" loading="lazy" />`).join('')}
+        </div>
+      </section>` : ''}
+    ${project.bodyHtml ? `
+      <section class="mod-detail-section">
+        <h3>About</h3>
+        <div class="mod-detail-body">${project.bodyHtml}</div>
+      </section>` : ''}
+  `;
 }
 
 window.openVersionModal = async function(btn) {

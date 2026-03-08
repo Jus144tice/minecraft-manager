@@ -16,6 +16,7 @@ import { buildSessionMiddleware, buildAuthRouter, requireSession } from './src/a
 import { buildHelmet, buildAuthLimiter, buildApiLimiter, buildSameOriginCheck, buildCsrfCheck } from './src/middleware.js';
 import { audit, info } from './src/audit.js';
 import { isValidMinecraftName, isSafeModFilename, isSafeCommand, sanitizeReason } from './src/validate.js';
+import { marked } from 'marked';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const CONFIG_PATH = path.join(__dirname, 'config.json');
@@ -704,6 +705,18 @@ app.get('/api/modrinth/search', async (req, res) => {
       offset,
     });
     res.json(results);
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+app.get('/api/modrinth/project/:id', async (req, res) => {
+  const { id } = req.params;
+  if (!/^[a-zA-Z0-9_-]{1,64}$/.test(id)) return res.status(400).json({ error: 'Invalid project ID' });
+  try {
+    const project = await Modrinth.getProject(id);
+    const bodyHtml = marked.parse(project.body || '', { breaks: true })
+      .replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, '')
+      .replace(/javascript:/gi, 'blocked:');
+    res.json({ ...project, bodyHtml });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
