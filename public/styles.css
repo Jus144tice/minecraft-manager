@@ -252,6 +252,7 @@ body {
 .side-client { background: #1c3a2a; color: #56d364; }
 .side-unknown { background: var(--surface2); color: var(--text-dim); }
 .mod-off-badge { background: #3d3000; color: var(--warning); }
+.installed-badge { background: #1a2e1a; color: #3fb950; font-size: 0.72rem; padding: 0.1rem 0.45rem; border-radius: 20px; font-weight: 600; border: 1px solid #2a6a2a; }
 .badge-important { font-size: 0.7rem; padding: 0.1rem 0.4rem; border-radius: 20px; background: #3d2800; color: var(--warning); font-weight: 600; }
 
 .level-badge { font-size: 0.75rem; padding: 0.15rem 0.5rem; border-radius: 20px; font-weight: 600; }

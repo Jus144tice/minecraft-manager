@@ -167,6 +167,13 @@
           <option value="server">Server-only</option>
           <option value="unknown">Unknown</option>
         </select>
+        <select id="mod-sort">
+          <option value="name-asc">Name A→Z</option>
+          <option value="name-desc">Name Z→A</option>
+          <option value="size-desc">Largest first</option>
+          <option value="size-asc">Smallest first</option>
+          <option value="enabled">Enabled first</option>
+        </select>
         <label class="toggle-label">
           <input type="checkbox" id="mod-show-disabled" checked />
           Show disabled
@@ -178,6 +185,11 @@
       </div>
       <div id="mods-list" class="mods-list">
         <p class="dim">Loading...</p>
+      </div>
+      <div class="pagination-bar hidden" id="mods-pagination">
+        <button class="btn btn-sm btn-ghost" id="mods-prev">Previous</button>
+        <span id="mods-page-info"></span>
+        <button class="btn btn-sm btn-ghost" id="mods-next">Next</button>
       </div>
     </div>
 
@@ -191,6 +203,10 @@
           <option value="server">Server-only</option>
         </select>
         <button class="btn btn-primary" id="btn-browse-search">Search</button>
+        <label class="toggle-label">
+          <input type="checkbox" id="browse-show-installed" />
+          Show installed
+        </label>
       </div>
       <p id="browse-heading" class="browse-heading dim">Popular server-compatible Forge mods</p>
       <div id="browse-results" class="browse-results">

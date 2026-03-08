@@ -16,7 +16,7 @@ export function buildHelmet() {
         // so XSS cannot steal them even without a stricter script-src.
         scriptSrc:       ["'self'", "'unsafe-inline'"],
         styleSrc:        ["'self'", "'unsafe-inline'"],
-        imgSrc:          ["'self'", 'https://cdn.modrinth.com', 'data:', 'blob:'],
+        imgSrc:          ["'self'", 'https:', 'data:', 'blob:'],
         connectSrc:      ["'self'", 'ws:', 'wss:'],
         frameAncestors:  ["'none'"],
         upgradeInsecureRequests: process.env.TRUST_PROXY === '1' ? [] : null,

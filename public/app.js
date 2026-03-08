@@ -1,6 +1,19 @@
 // Minecraft Manager - Frontend Application
 'use strict';
 
+// --- Delegated error handler for mod icons ---
+// Replaces broken <img class="mod-icon"> with a placeholder div.
+// Using a delegated listener (capture phase) instead of inline onerror= because
+// CSP 'unsafe-inline' may not cover event handlers injected via innerHTML in all browsers.
+document.addEventListener('error', (e) => {
+  const el = e.target;
+  if (el.tagName === 'IMG' && el.classList.contains('mod-icon')) {
+    const placeholder = document.createElement('div');
+    placeholder.className = 'mod-icon-placeholder';
+    el.replaceWith(placeholder);
+  }
+}, true); // capture=true so it fires even if the element has no bubbling listener
+
 // --- State ---
 let ws = null;
 let wsReconnectTimer = null;
@@ -8,6 +21,30 @@ let currentModData = {}; // filename -> modrinth data from lookup
 let browseOffset = 0;
 let browseTotal = 0;
 const BROWSE_LIMIT = 20;
+let lastBrowseHits = []; // cached so the "show installed" toggle re-renders without a new fetch
+let modsPage = 0;
+const MODS_PAGE_SIZE = 10;
+
+// --- Generic pagination bar ---
+// Creates a controller for a prev/next pagination bar.
+// Call .update(page, totalPages, totalCount, label) to refresh the UI.
+// To switch to infinite scroll later: replace createPagination with a different factory
+// and both tabs update automatically.
+function createPagination({ prevId, nextId, infoId, containerId }) {
+  return {
+    update(page, totalPages, totalCount, label = 'items') {
+      if (totalPages < 1) { hide(containerId); return; }
+      show(containerId);
+      $(infoId).textContent = `Page ${page} of ${totalPages} (${totalCount.toLocaleString()} ${label})`;
+      $(prevId).disabled = page <= 1;
+      $(nextId).disabled = page >= totalPages;
+    },
+    hide() { hide(containerId); },
+  };
+}
+
+const modsPager  = createPagination({ prevId: 'mods-prev',   nextId: 'mods-next',   infoId: 'mods-page-info',   containerId: 'mods-pagination'   });
+const browsePager = createPagination({ prevId: 'browse-prev', nextId: 'browse-next', infoId: 'browse-page-info', containerId: 'browse-pagination' });
 let csrfToken = ''; // fetched after login; sent as X-CSRF-Token on all mutating requests
 
 // --- API helpers ---
@@ -376,10 +413,15 @@ function renderMods() {
   const filterText = $('mod-filter').value.toLowerCase();
   const sideFilter = $('mod-side-filter').value;
   const showDisabled = $('mod-show-disabled').checked;
+  const sortOrder = $('mod-sort').value;
 
   let mods = allMods.filter(m => {
     if (!showDisabled && !m.enabled) return false;
-    if (filterText && !m.filename.toLowerCase().includes(filterText)) return false;
+    if (filterText) {
+      const md = currentModData[m.filename]?.modrinth;
+      const title = (md?.projectTitle || m.filename).toLowerCase();
+      if (!title.includes(filterText) && !m.filename.toLowerCase().includes(filterText)) return false;
+    }
     // Always exclude client-only mods — they don't belong on a server
     const md = currentModData[m.filename]?.modrinth;
     if (md && md.serverSide === 'unsupported') return false;
@@ -392,12 +434,34 @@ function renderMods() {
     return true;
   });
 
+  mods.sort((a, b) => {
+    const mdA = currentModData[a.filename]?.modrinth;
+    const mdB = currentModData[b.filename]?.modrinth;
+    const nameA = (mdA?.projectTitle || a.filename).toLowerCase();
+    const nameB = (mdB?.projectTitle || b.filename).toLowerCase();
+    switch (sortOrder) {
+      case 'name-asc':  return nameA.localeCompare(nameB);
+      case 'name-desc': return nameB.localeCompare(nameA);
+      case 'size-desc': return b.size - a.size;
+      case 'size-asc':  return a.size - b.size;
+      case 'enabled':   return (b.enabled ? 1 : 0) - (a.enabled ? 1 : 0);
+      default:          return 0;
+    }
+  });
+
   if (mods.length === 0) {
     $('mods-list').innerHTML = '<p class="dim">No mods match your filters.</p>';
+    modsPager.hide();
     return;
   }
 
-  $('mods-list').innerHTML = mods.map(mod => {
+  // Clamp page to valid range after filter changes
+  const totalPages = Math.ceil(mods.length / MODS_PAGE_SIZE);
+  modsPage = Math.min(modsPage, totalPages - 1);
+  const pageMods = mods.slice(modsPage * MODS_PAGE_SIZE, (modsPage + 1) * MODS_PAGE_SIZE);
+  modsPager.update(modsPage + 1, totalPages, mods.length, 'mods');
+
+  $('mods-list').innerHTML = pageMods.map(mod => {
     const md = currentModData[mod.filename]?.modrinth;
     const side = md ? sideLabel(md.clientSide, md.serverSide) : { text: 'Unknown', cls: 'side-unknown' };
     const title = md?.projectTitle || mod.filename.replace(/\.jar$/i, '');
@@ -405,7 +469,7 @@ function renderMods() {
     const ver = md?.versionNumber || '';
 
     return `<div class="mod-card ${mod.enabled ? '' : 'mod-disabled'}">
-      ${md?.iconUrl ? `<img class="mod-icon" src="${esc(md.iconUrl)}" alt="" loading="lazy" onerror="this.replaceWith(Object.assign(document.createElement('div'),{className:'mod-icon-placeholder'}))" />` : '<div class="mod-icon-placeholder"></div>'}
+      ${md?.iconUrl ? `<img class="mod-icon" src="${esc(md.iconUrl)}" alt="" loading="lazy" onerror="this.style.display='none'" />` : '<div class="mod-icon-placeholder"></div>'}
       <div class="mod-info">
         <div class="mod-title">
           <span>${esc(title)}</span>
@@ -453,9 +517,12 @@ window.deleteMod = async function(btn) {
   } catch (err) { alert(err.message); }
 };
 
-$('mod-filter').addEventListener('input', renderMods);
-$('mod-side-filter').addEventListener('change', renderMods);
-$('mod-show-disabled').addEventListener('change', renderMods);
+$('mod-filter').addEventListener('input', () => { modsPage = 0; renderMods(); });
+$('mod-side-filter').addEventListener('change', () => { modsPage = 0; renderMods(); });
+$('mod-sort').addEventListener('change', () => { modsPage = 0; renderMods(); });
+$('mod-show-disabled').addEventListener('change', () => { modsPage = 0; renderMods(); });
+$('mods-prev').addEventListener('click', () => { modsPage--; renderMods(); });
+$('mods-next').addEventListener('click', () => { modsPage++; renderMods(); });
 $('btn-refresh-mods').addEventListener('click', loadMods);
 
 $('btn-lookup-mods').addEventListener('click', async () => {
@@ -496,12 +563,13 @@ async function browseLoad() {
   }
   $('browse-heading').textContent = 'Popular server-compatible Forge mods';
   $('browse-results').innerHTML = '<p class="dim">Loading popular mods...</p>';
-  hide('browse-pagination');
+  browsePager.hide();
   try {
     const params = new URLSearchParams({ limit: BROWSE_LIMIT, offset: browseOffset });
     const data = await GET(`/modrinth/browse?${params}`);
     browseTotal = data.total_hits || 0;
-    renderBrowseResults(data.hits || []);
+    lastBrowseHits = data.hits || [];
+    renderBrowseResults(lastBrowseHits);
     updateBrowsePagination();
     browseLoaded = true;
   } catch (err) {
@@ -515,48 +583,67 @@ async function browseSearch() {
   const side = $('browse-side').value;
   $('browse-heading').textContent = `Search results for "${q}"`;
   $('browse-results').innerHTML = '<p class="dim">Searching Modrinth...</p>';
-  hide('browse-pagination');
+  browsePager.hide();
   try {
     const params = new URLSearchParams({ q, side, limit: BROWSE_LIMIT, offset: browseOffset });
     const data = await GET(`/modrinth/search?${params}`);
     browseTotal = data.total_hits || 0;
-    renderBrowseResults(data.hits || []);
+    lastBrowseHits = data.hits || [];
+    renderBrowseResults(lastBrowseHits);
     updateBrowsePagination();
   } catch (err) {
     $('browse-results').innerHTML = `<p class="error-msg">${esc(err.message)}</p>`;
   }
 }
 
+$('browse-show-installed').addEventListener('change', () => {
+  if (lastBrowseHits.length > 0) renderBrowseResults(lastBrowseHits);
+});
+
 function updateBrowsePagination() {
-  if (browseTotal > BROWSE_LIMIT) {
-    show('browse-pagination');
-    const page = Math.floor(browseOffset / BROWSE_LIMIT) + 1;
-    const totalPages = Math.ceil(browseTotal / BROWSE_LIMIT);
-    $('browse-page-info').textContent = `Page ${page} of ${totalPages} (${browseTotal.toLocaleString()} mods)`;
-    $('browse-prev').disabled = browseOffset === 0;
-    $('browse-next').disabled = browseOffset + BROWSE_LIMIT >= browseTotal;
-  } else {
-    hide('browse-pagination');
+  const page = Math.floor(browseOffset / BROWSE_LIMIT) + 1;
+  const totalPages = Math.ceil(browseTotal / BROWSE_LIMIT) || 1;
+  browsePager.update(page, totalPages, browseTotal, 'mods');
+}
+
+// Returns a Set of Modrinth project slugs for all currently-installed mods.
+// Works in both demo mode (modrinthData pre-populated) and real mode (after lookup).
+function getInstalledSlugs() {
+  const slugs = new Set();
+  for (const data of Object.values(currentModData)) {
+    const slug = data.modrinth?.projectSlug;
+    if (slug) slugs.add(slug);
   }
+  return slugs;
 }
 
 function renderBrowseResults(hits) {
-  if (hits.length === 0) {
-    $('browse-results').innerHTML = '<p class="dim">No results found.</p>';
+  const installed = getInstalledSlugs();
+  const showInstalled = $('browse-show-installed').checked;
+  const displayHits = showInstalled ? hits : hits.filter(h => !installed.has(h.slug));
+
+  if (displayHits.length === 0) {
+    if (hits.length > 0 && !showInstalled) {
+      $('browse-results').innerHTML = '<p class="dim">All mods on this page are already installed. Check "Show installed" to see them.</p>';
+    } else {
+      $('browse-results').innerHTML = '<p class="dim">No results found.</p>';
+    }
     return;
   }
-  $('browse-results').innerHTML = hits.map(hit => {
+  $('browse-results').innerHTML = displayHits.map(hit => {
     const side = sideLabel(hit.client_side, hit.server_side);
     const downloads = Number(hit.downloads || 0).toLocaleString();
     const follows = Number(hit.follows || 0).toLocaleString();
     const latestVer = (hit.versions || []).filter(v => /^\d/.test(v)).slice(-1)[0] || '';
     const cats = (hit.categories || []).filter(c => c !== 'forge').slice(0, 3);
-    return `<div class="mod-card browse-card">
-      ${hit.icon_url ? `<img class="mod-icon" src="${esc(hit.icon_url)}" alt="" loading="lazy" onerror="this.replaceWith(Object.assign(document.createElement('div'),{className:'mod-icon-placeholder'}))" />` : '<div class="mod-icon-placeholder"></div>'}
+    const isInstalled = installed.has(hit.slug);
+    return `<div class="mod-card browse-card${isInstalled ? ' mod-disabled' : ''}">
+      ${hit.icon_url ? `<img class="mod-icon" src="${esc(hit.icon_url)}" alt="" loading="lazy" onerror="this.style.display='none'" />` : '<div class="mod-icon-placeholder"></div>'}
       <div class="mod-info">
         <div class="mod-title">
           <span>${esc(hit.title)}</span>
           <span class="side-badge ${side.cls}">${side.text}</span>
+          ${isInstalled ? '<span class="installed-badge">Installed</span>' : ''}
           ${cats.map(c => `<span class="cat-badge">${esc(c)}</span>`).join('')}
         </div>
         <div class="mod-desc">${esc((hit.description || '').slice(0, 160))}</div>
@@ -568,9 +655,9 @@ function renderBrowseResults(hits) {
         </div>
       </div>
       <div class="mod-actions">
-        <button class="btn btn-sm btn-primary" data-projectid="${esc(hit.project_id)}" data-title="${esc(hit.title)}" onclick="openVersionModal(this)">
-          Install
-        </button>
+        ${isInstalled
+          ? '<button class="btn btn-sm" disabled>Installed</button>'
+          : `<button class="btn btn-sm btn-primary" data-projectid="${esc(hit.project_id)}" data-title="${esc(hit.title)}" onclick="openVersionModal(this)">Install</button>`}
       </div>
     </div>`;
   }).join('');
