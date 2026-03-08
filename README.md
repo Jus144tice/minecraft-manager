@@ -12,7 +12,7 @@ A self-hosted web control panel for a Minecraft Forge server running on Linux. B
 - Mod manager — enable/disable mods, identify client vs server vs both-sided mods via Modrinth, browse and download new mods directly from Modrinth. Client-only mods are always excluded — they can't run server-side.
 - Player management — operators (with permission levels 1–4), whitelist, bans
 - Edit `server.properties` in the browser
-- Password-protected web UI
+- OIDC authentication (Google and/or Microsoft) with email allowlist; optional local password fallback
 - WebSocket-based live log streaming
 
 ---
@@ -98,7 +98,7 @@ Fill in `config.json` (copy from `config.example.json`):
   "webPort": 3000,
 
   // The command used to launch the server (see "Finding your start command" below)
-  "startCommand": "java -Xms6G -Xmx10G @user_jvm_args.txt @libraries/net/minecraftforge/forge/1.20.1-47.3.0/unix_args.txt nogui",
+  "startCommand": "java -Xms2G -Xmx8G @user_jvm_args.txt @libraries/net/minecraftforge/forge/1.20.1-47.3.0/unix_args.txt nogui",
 
   // Minecraft version — used to filter Modrinth search results
   "minecraftVersion": "1.20.1",
@@ -165,16 +165,16 @@ java @user_jvm_args.txt @libraries/net/minecraftforge/forge/1.20.1-47.3.0/unix_a
 
 Copy that line into `startCommand` in `config.json`, replace `"$@"` with `nogui`, and add your memory flags:
 ```
-java -Xms6G -Xmx10G @user_jvm_args.txt @libraries/net/minecraftforge/forge/1.20.1-47.3.0/unix_args.txt nogui
+java -Xms2G -Xmx8G @user_jvm_args.txt @libraries/net/minecraftforge/forge/1.20.1-47.3.0/unix_args.txt nogui
 ```
 
 **Old Forge (pre-1.17):**
 ```
-java -Xms6G -Xmx10G -jar forge-1.16.5-36.2.39.jar nogui
+java -Xms2G -Xmx8G -jar forge-1.16.5-36.2.39.jar nogui
 ```
 
 **Memory recommendation for a 12 GB machine:**
-Use `-Xms6G -Xmx10G` — leaves ~2 GB for the OS and the web panel.
+Use `-Xms2G -Xmx8G` — leaves ~4 GB for the OS, the web panel, and JVM overhead (permgen, metaspace, off-heap). `-Xmx10G` is too aggressive: it crowds out the OS and the Node process, especially under GC pressure with 200+ mods.
 
 ---
 
@@ -436,7 +436,7 @@ When players connect via Modrinth, they install the modpack profile which should
 - RCON only becomes available after Forge fully loads — this can take 1–3 minutes with 200 mods. Use the **Reconnect RCON** button in **Settings → App Config** after the server finishes starting.
 
 **Server won't start from the panel:**
-- Test the start command manually in a terminal first: `cd /your/server && java -Xmx10G ...`
+- Test the start command manually in a terminal first: `cd /your/server && java -Xms2G -Xmx8G ...`
 - Make sure `serverPath` in `config.json` points to the correct folder
 - Check the Console tab for the full error output
 
