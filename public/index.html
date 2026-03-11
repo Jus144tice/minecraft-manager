@@ -56,7 +56,7 @@
     </div>
     <nav class="tab-nav">
       <button class="tab-btn active" data-tab="dashboard">Dashboard</button>
-      <button class="tab-btn" data-tab="console">Console</button>
+      <button class="tab-btn" data-tab="console">Manage Server</button>
       <button class="tab-btn" data-tab="mods">Mods</button>
       <button class="tab-btn" data-tab="players">Players</button>
       <button class="tab-btn" data-tab="backups">Backups</button>
@@ -120,10 +120,87 @@
     </div>
   </section>
 
-  <!-- Tab: Console -->
+  <!-- Tab: Manage Server (formerly Console) -->
   <section id="tab-console" class="tab-content hidden">
     <div class="page-header">
-      <h2>Server Console</h2>
+      <h2>Manage Server</h2>
+    </div>
+
+    <!-- Quick Actions -->
+    <details class="control-section quick-actions-details" open>
+      <summary><h3>Quick Actions</h3></summary>
+      <div class="action-categories">
+        <div class="action-category">
+          <h4>World</h4>
+          <div class="action-btn-grid">
+            <button class="btn btn-sm btn-ghost" data-action="server-cmd" data-cmd="save-all" data-label="Save World">Save World</button>
+            <button class="btn btn-sm btn-ghost" data-action="server-cmd" data-cmd="save-off" data-label="Disable Auto-save" data-confirm="Disable automatic world saving? Remember to re-enable it later.">Disable Auto-save</button>
+            <button class="btn btn-sm btn-ghost" data-action="server-cmd" data-cmd="save-on" data-label="Enable Auto-save">Enable Auto-save</button>
+          </div>
+        </div>
+        <div class="action-category">
+          <h4>Time &amp; Weather</h4>
+          <div class="action-btn-grid">
+            <button class="btn btn-sm btn-ghost" data-action="server-cmd" data-cmd="time set day" data-label="Set Day">Set Day</button>
+            <button class="btn btn-sm btn-ghost" data-action="server-cmd" data-cmd="time set night" data-label="Set Night">Set Night</button>
+            <button class="btn btn-sm btn-ghost" data-action="server-cmd" data-cmd="time set noon" data-label="Set Noon">Set Noon</button>
+            <button class="btn btn-sm btn-ghost" data-action="server-cmd" data-cmd="time set midnight" data-label="Set Midnight">Set Midnight</button>
+            <button class="btn btn-sm btn-ghost" data-action="server-cmd" data-cmd="weather clear" data-label="Clear Weather">Clear Weather</button>
+            <button class="btn btn-sm btn-ghost" data-action="server-cmd" data-cmd="weather rain" data-label="Rain">Rain</button>
+            <button class="btn btn-sm btn-ghost" data-action="server-cmd" data-cmd="weather thunder" data-label="Thunderstorm">Thunderstorm</button>
+          </div>
+        </div>
+        <div class="action-category">
+          <h4>Players</h4>
+          <div class="action-btn-grid">
+            <button class="btn btn-sm btn-ghost" data-action="server-cmd-prompt" data-template="kick {player} {reason}" data-prompts="player:Player name,reason:Reason (optional)" data-label="Kick Player">Kick Player</button>
+            <button class="btn btn-sm btn-ghost" data-action="server-cmd-prompt" data-template="gamemode {mode} {player}" data-prompts="mode:Gamemode|survival|creative|adventure|spectator,player:Player name" data-label="Change Gamemode">Change Gamemode</button>
+            <button class="btn btn-sm btn-ghost" data-action="server-cmd-prompt" data-template="tp {player} {x} {y} {z}" data-prompts="player:Player name,x:X coordinate,y:Y coordinate,z:Z coordinate" data-label="Teleport Player">Teleport Player</button>
+            <button class="btn btn-sm btn-ghost" data-action="server-cmd-prompt" data-template="give {player} {item} {amount}" data-prompts="player:Player name,item:Item ID (e.g. diamond),amount:Amount (optional)" data-label="Give Item">Give Item</button>
+            <button class="btn btn-sm btn-ghost" data-action="server-cmd-prompt" data-template="effect give {player} {effect} {seconds}" data-prompts="player:Player name,effect:Effect ID (e.g. speed),seconds:Duration in seconds (optional)" data-label="Give Effect">Give Effect</button>
+            <button class="btn btn-sm btn-ghost" data-action="server-cmd-prompt" data-template="effect clear {player}" data-prompts="player:Player name" data-label="Clear Effects">Clear Effects</button>
+          </div>
+        </div>
+        <div class="action-category">
+          <h4>Difficulty &amp; Rules</h4>
+          <div class="action-btn-grid">
+            <button class="btn btn-sm btn-ghost" data-action="server-cmd-prompt" data-template="difficulty {level}" data-prompts="level:Difficulty|peaceful|easy|normal|hard" data-label="Set Difficulty">Set Difficulty</button>
+            <button class="btn btn-sm btn-ghost" data-action="server-cmd" data-cmd="gamerule doDaylightCycle false" data-label="Freeze Time" data-confirm="Stop the day/night cycle?">Freeze Time</button>
+            <button class="btn btn-sm btn-ghost" data-action="server-cmd" data-cmd="gamerule doDaylightCycle true" data-label="Unfreeze Time">Unfreeze Time</button>
+            <button class="btn btn-sm btn-ghost" data-action="server-cmd" data-cmd="gamerule keepInventory true" data-label="Keep Inventory ON">Keep Inventory ON</button>
+            <button class="btn btn-sm btn-ghost" data-action="server-cmd" data-cmd="gamerule keepInventory false" data-label="Keep Inventory OFF">Keep Inventory OFF</button>
+            <button class="btn btn-sm btn-ghost" data-action="server-cmd" data-cmd="gamerule doMobSpawning false" data-label="Disable Mob Spawning" data-confirm="Disable mob spawning?">Disable Mob Spawning</button>
+            <button class="btn btn-sm btn-ghost" data-action="server-cmd" data-cmd="gamerule doMobSpawning true" data-label="Enable Mob Spawning">Enable Mob Spawning</button>
+          </div>
+        </div>
+        <div class="action-category">
+          <h4>Performance</h4>
+          <div class="action-btn-grid">
+            <button class="btn btn-sm btn-ghost" data-action="server-cmd-prompt" data-template="tick rate {rate}" data-prompts="rate:Tick rate (default 20)" data-label="Set Tick Rate">Set Tick Rate</button>
+            <button class="btn btn-sm btn-ghost" data-action="server-cmd" data-cmd="tick freeze" data-label="Freeze Ticks" data-confirm="Freeze server ticks? Players can still move but the world pauses.">Freeze Ticks</button>
+            <button class="btn btn-sm btn-ghost" data-action="server-cmd" data-cmd="tick unfreeze" data-label="Unfreeze Ticks">Unfreeze Ticks</button>
+            <button class="btn btn-sm btn-ghost" data-action="server-cmd" data-cmd="forceload query" data-label="List Forceloaded Chunks">List Forceloaded Chunks</button>
+            <button class="btn btn-sm btn-ghost" data-action="server-cmd-prompt" data-template="forceload add {x} {z}" data-prompts="x:Chunk X coordinate,z:Chunk Z coordinate" data-label="Forceload Chunk">Forceload Chunk</button>
+            <button class="btn btn-sm btn-ghost" data-action="server-cmd-prompt" data-template="forceload remove {x} {z}" data-prompts="x:Chunk X coordinate,z:Chunk Z coordinate" data-label="Unload Chunk">Unload Chunk</button>
+          </div>
+        </div>
+        <div class="action-category">
+          <h4>Whitelist &amp; Bans</h4>
+          <div class="action-btn-grid">
+            <button class="btn btn-sm btn-ghost" data-action="server-cmd-prompt" data-template="whitelist add {player}" data-prompts="player:Player name" data-label="Whitelist Add">Whitelist Add</button>
+            <button class="btn btn-sm btn-ghost" data-action="server-cmd-prompt" data-template="whitelist remove {player}" data-prompts="player:Player name" data-label="Whitelist Remove">Whitelist Remove</button>
+            <button class="btn btn-sm btn-ghost" data-action="server-cmd" data-cmd="whitelist reload" data-label="Reload Whitelist">Reload Whitelist</button>
+            <button class="btn btn-sm btn-ghost" data-action="server-cmd-prompt" data-template="ban {player} {reason}" data-prompts="player:Player name,reason:Reason (optional)" data-label="Ban Player" data-confirm="Ban this player from the server?">Ban Player</button>
+            <button class="btn btn-sm btn-ghost" data-action="server-cmd-prompt" data-template="pardon {player}" data-prompts="player:Player name" data-label="Unban Player">Unban Player</button>
+          </div>
+        </div>
+      </div>
+      <p id="quick-action-msg" class="control-msg"></p>
+    </details>
+
+    <!-- Console -->
+    <div class="page-header" style="margin-top:0.5rem">
+      <h2 style="font-size:1rem">Server Console</h2>
       <div class="header-actions">
         <label class="toggle-label">
           <input type="checkbox" id="console-autoscroll" checked />
@@ -140,7 +217,7 @@
       <input type="text" id="console-cmd" placeholder="Type a command and press Enter..." />
       <button class="btn btn-primary" id="btn-send-cmd">Send</button>
     </div>
-    <p class="dim console-hint">Commands are sent via RCON when the server is running. Use the raw stdin option only if RCON is unavailable.</p>
+    <p class="dim console-hint">Commands are sent via RCON when the server is running. Quick action results appear in the console above.</p>
   </section>
 
   <!-- Tab: Mods -->

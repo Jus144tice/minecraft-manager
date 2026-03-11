@@ -300,6 +300,46 @@ input:focus, select:focus, textarea:focus {
 }
 .prop-important { border-left: 3px solid var(--warning); padding-left: 0.75rem; }
 
+/* --- Quick Actions --- */
+.quick-actions-details summary {
+  cursor: pointer; list-style: none; user-select: none;
+}
+.quick-actions-details summary::-webkit-details-marker { display: none; }
+.quick-actions-details summary h3 {
+  display: inline;
+}
+.quick-actions-details summary::before {
+  content: '▸ '; font-size: 0.85rem; color: var(--text-dim);
+}
+.quick-actions-details[open] summary::before {
+  content: '▾ ';
+}
+.quick-actions-details[open] .action-categories { margin-top: 0.75rem; }
+.action-categories {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 0.75rem;
+}
+.action-category {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 0.75rem;
+}
+.action-category h4 {
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--text-dim);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin-bottom: 0.5rem;
+}
+.action-btn-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+}
+
 /* --- Console --- */
 .console-wrap {
   background: #020408;

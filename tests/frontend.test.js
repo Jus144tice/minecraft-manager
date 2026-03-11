@@ -312,6 +312,7 @@ test('HTML: all data-action elements reference valid actions', () => {
   const knownActions = new Set([
     'mod-detail', 'toggle-mod', 'delete-mod', 'install-mod', 'download-mod',
     'remove-op', 'remove-wl', 'unban-player', 'restore-backup', 'delete-backup',
+    'server-cmd', 'server-cmd-prompt',
   ]);
   const actionEls = doc.querySelectorAll('[data-action]');
   for (const el of actionEls) {

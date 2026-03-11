@@ -34,6 +34,8 @@ document.addEventListener('click', async e => {
     case 'unban-player': unbanPlayer(el); break;
     case 'restore-backup': openRestoreModal(el.dataset.filename); break;
     case 'delete-backup':  await deleteBackup(el.dataset.filename); break;
+    case 'server-cmd':       await runServerAction(el); break;
+    case 'server-cmd-prompt': await runServerActionPrompt(el); break;
   }
 });
 
@@ -348,6 +350,79 @@ async function sendConsoleCmd() {
     try { await POST('/server/stdin', { command: cmd }); } catch (err) {
       appendConsole(`[Error] ${err.message}`, 'error');
     }
+  }
+}
+
+// --- Quick Actions (Manage Server tab) ---
+async function runServerAction(el) {
+  const cmd = el.dataset.cmd;
+  const label = el.dataset.label || cmd;
+  if (el.dataset.confirm && !confirm(el.dataset.confirm)) return;
+  try {
+    const r = await POST('/server/command', { command: cmd });
+    flash('quick-action-msg', `${label}: ${r.result || 'OK'}`);
+  } catch {
+    try { await POST('/server/stdin', { command: cmd }); flash('quick-action-msg', `${label}: sent via stdin`); }
+    catch (err) { flash('quick-action-msg', err.message, true); }
+  }
+}
+
+async function runServerActionPrompt(el) {
+  const template = el.dataset.template;
+  const label = el.dataset.label || template;
+  // Parse prompt definitions: "player:Player name,reason:Reason (optional)"
+  // If a prompt value contains pipes it's a select: "mode:Gamemode|survival|creative|adventure|spectator"
+  const promptDefs = (el.dataset.prompts || '').split(',').map(p => {
+    const [key, ...rest] = p.split(':');
+    const desc = rest.join(':');
+    const parts = desc.split('|');
+    return { key: key.trim(), label: parts[0].trim(), options: parts.length > 1 ? parts.slice(1) : null, optional: desc.toLowerCase().includes('optional') };
+  });
+
+  const values = {};
+  for (const def of promptDefs) {
+    let val;
+    if (def.options) {
+      val = prompt(`${label}\n\nChoose ${def.label}:\n${def.options.map((o, i) => `  ${i + 1}. ${o}`).join('\n')}\n\nType your choice:`);
+      if (val === null) return; // cancelled
+      val = val.trim();
+      // Accept both the number and the text
+      const idx = parseInt(val, 10);
+      if (idx >= 1 && idx <= def.options.length) val = def.options[idx - 1];
+      // Validate against options
+      if (val && !def.options.includes(val.toLowerCase())) {
+        const lower = val.toLowerCase();
+        const match = def.options.find(o => o.toLowerCase() === lower);
+        if (match) val = match;
+      }
+    } else {
+      val = prompt(`${label}\n\n${def.label}:`);
+      if (val === null) return; // cancelled
+      val = val.trim();
+    }
+    if (!val && !def.optional) {
+      flash('quick-action-msg', `${def.label} is required`, true);
+      return;
+    }
+    values[def.key] = val;
+  }
+
+  if (el.dataset.confirm && !confirm(el.dataset.confirm)) return;
+
+  // Build command from template, replacing {key} placeholders
+  let cmd = template;
+  for (const [key, val] of Object.entries(values)) {
+    cmd = cmd.replace(`{${key}}`, val);
+  }
+  // Remove unfilled optional placeholders
+  cmd = cmd.replace(/\s*\{[^}]+\}/g, '').trim();
+
+  try {
+    const r = await POST('/server/command', { command: cmd });
+    flash('quick-action-msg', `${label}: ${r.result || 'OK'}`);
+  } catch {
+    try { await POST('/server/stdin', { command: cmd }); flash('quick-action-msg', `${label}: sent via stdin`); }
+    catch (err) { flash('quick-action-msg', err.message, true); }
   }
 }
 
