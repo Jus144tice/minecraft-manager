@@ -194,6 +194,15 @@
             <button class="btn btn-sm btn-ghost" data-action="server-cmd-prompt" data-template="pardon {player}" data-prompts="player:Player name" data-label="Unban Player">Unban Player</button>
           </div>
         </div>
+        <div class="action-category">
+          <h4>Recipes</h4>
+          <div class="action-btn-grid">
+            <button class="btn btn-sm btn-ghost" data-action="server-cmd-prompt" data-template="recipe take {player} {recipe}" data-prompts="player:Player name,recipe:Recipe ID (e.g. minecraft:diamond_sword)" data-label="Hide Recipe">Hide Recipe</button>
+            <button class="btn btn-sm btn-ghost" data-action="server-cmd-prompt" data-template="recipe take {player} *" data-prompts="player:Player name" data-label="Hide All Recipes" data-confirm="Remove all discovered recipes from this player's recipe book?">Hide All Recipes</button>
+            <button class="btn btn-sm btn-ghost" data-action="server-cmd-prompt" data-template="recipe give {player} {recipe}" data-prompts="player:Player name,recipe:Recipe ID (e.g. minecraft:diamond_sword)" data-label="Give Recipe">Give Recipe</button>
+            <button class="btn btn-sm btn-ghost" data-action="server-cmd-prompt" data-template="recipe give {player} *" data-prompts="player:Player name" data-label="Give All Recipes">Give All Recipes</button>
+          </div>
+        </div>
       </div>
       <p id="quick-action-msg" class="control-msg"></p>
     </details>
