@@ -1,4 +1,4 @@
-// Security middleware: Helmet headers, rate limiting, origin validation.
+// Security middleware: Helmet headers, rate limiting, origin validation, access control.
 
 import helmet from 'helmet';
 import rateLimit from 'express-rate-limit';
@@ -88,4 +88,13 @@ export function buildSameOriginCheck(appUrl) {
     }
     next();
   };
+}
+
+// ---- Admin access guard ----
+// Requires the logged-in user to have adminLevel >= 1.
+// Apply after requireSession so req.session.user is always populated.
+
+export function requireAdmin(req, res, next) {
+  if ((req.session.user?.adminLevel || 0) >= 1) return next();
+  res.status(403).json({ error: 'Admin access required' });
 }

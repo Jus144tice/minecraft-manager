@@ -742,3 +742,95 @@ input:focus, select:focus, textarea:focus {
   transition: color 0.15s;
 }
 .mod-title-link:hover { color: var(--primary); text-decoration: underline; }
+
+/* --- Backups --- */
+.backup-card {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 0.75rem 1rem;
+  margin-bottom: 0.5rem;
+  transition: border-color 0.15s;
+}
+.backup-card:hover { border-color: #4a4f56; }
+.backup-info { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 0.2rem; }
+.backup-title { display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap; font-weight: 600; font-size: 0.9rem; }
+.backup-date { color: var(--text); }
+.backup-note { color: var(--text-dim); font-size: 0.82rem; font-style: italic; }
+.backup-meta { display: flex; gap: 1rem; flex-wrap: wrap; font-size: 0.78rem; color: var(--text-dim); }
+.backup-actions { display: flex; gap: 0.4rem; flex-shrink: 0; }
+
+.backup-badge {
+  font-size: 0.7rem;
+  padding: 0.1rem 0.45rem;
+  border-radius: 20px;
+  font-weight: 600;
+}
+.backup-scheduled { background: #1c3a5e; color: #79c0ff; }
+.backup-manual { background: #2a1f5e; color: #d2a8ff; }
+.backup-db { background: #1a2e1a; color: #3fb950; }
+
+.restore-warning {
+  background: #3d1212;
+  border: 1px solid #6b2020;
+  border-radius: var(--radius);
+  padding: 0.75rem 1rem;
+  color: var(--danger);
+  font-size: 0.88rem;
+}
+
+/* --- Modpack import/export --- */
+.modpack-modal-wide { max-width: 720px; }
+
+.modpack-summary {
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 0.75rem 1rem;
+  margin-bottom: 0.75rem;
+}
+.modpack-stats { display: flex; flex-wrap: wrap; gap: 0.5rem; margin-top: 0.5rem; }
+.modpack-stat {
+  font-size: 0.82rem;
+  font-weight: 600;
+  padding: 0.15rem 0.5rem;
+  border-radius: 20px;
+}
+.modpack-stat-new { background: #1a2e1a; color: #3fb950; }
+.modpack-stat-conflict { background: #3d2800; color: var(--warning); }
+.modpack-stat-skip { background: #1c3a5e; color: #79c0ff; }
+.modpack-stat-client { background: var(--surface2); color: var(--text-dim); }
+
+.modpack-section { margin-top: 0.75rem; }
+.modpack-section h4 {
+  font-size: 0.88rem;
+  font-weight: 600;
+  margin-bottom: 0.4rem;
+  color: var(--text-dim);
+}
+
+.modpack-conflict-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  padding: 0.4rem 0;
+  border-bottom: 1px solid var(--border);
+}
+.modpack-conflict-row:last-child { border-bottom: none; }
+
+.modpack-mod-list { display: flex; flex-wrap: wrap; gap: 0.35rem; }
+.modpack-mod-chip {
+  font-size: 0.8rem;
+  padding: 0.2rem 0.55rem;
+  border-radius: 20px;
+  background: #1a2e1a;
+  color: #3fb950;
+  border: 1px solid #2a6a2a;
+}
+.modpack-chip-skip { background: #1c3a5e; color: #79c0ff; border-color: #2a4a7a; }
+.modpack-chip-client { background: var(--surface2); color: var(--text-dim); border-color: var(--border); }
+.modpack-chip-fail { background: #3d1212; color: var(--danger); border-color: #6b2020; }

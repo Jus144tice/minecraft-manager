@@ -5,8 +5,13 @@
   "rconPort": 25575,
   "rconPassword": "your-rcon-password-here",
   "webPort": 3000,
+  "bindHost": "0.0.0.0",
   "startCommand": "java -Xms2G -Xmx8G @user_jvm_args.txt @libraries/net/minecraftforge/forge/1.20.1-47.3.0/unix_args.txt nogui",
   "minecraftVersion": "1.20.1",
   "modsFolder": "mods",
-  "disabledModsFolder": "mods_disabled"
+  "disabledModsFolder": "mods_disabled",
+  "backupEnabled": true,
+  "backupSchedule": "0 3 * * *",
+  "backupPath": "/mnt/backups/minecraft",
+  "maxBackups": 14
 }

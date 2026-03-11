@@ -11,15 +11,21 @@
     "test": "node --test tests/*.test.js"
   },
   "dependencies": {
+    "connect-pg-simple": "^10.0.0",
     "express": "^4.19.2",
     "express-rate-limit": "^8.3.0",
     "express-session": "^1.19.0",
     "helmet": "^8.1.0",
     "marked": "^17.0.4",
+    "node-cron": "^4.2.1",
     "openid-client": "^5.7.1",
+    "pg": "^8.20.0",
     "ws": "^8.17.0"
   },
   "engines": {
     "node": ">=18.0.0"
+  },
+  "devDependencies": {
+    "jsdom": "^28.1.0"
   }
 }

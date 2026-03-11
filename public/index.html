@@ -59,6 +59,7 @@
       <button class="tab-btn" data-tab="console">Console</button>
       <button class="tab-btn" data-tab="mods">Mods</button>
       <button class="tab-btn" data-tab="players">Players</button>
+      <button class="tab-btn" data-tab="backups">Backups</button>
       <button class="tab-btn" data-tab="settings">Settings</button>
     </nav>
     <div class="topbar-right">
@@ -147,6 +148,9 @@
     <div class="page-header">
       <h2>Mod Manager</h2>
       <div class="header-actions">
+        <button class="btn btn-sm btn-ghost" id="btn-export-modpack">Export Modpack</button>
+        <button class="btn btn-sm btn-ghost" id="btn-import-modpack">Import Modpack</button>
+        <input type="file" id="modpack-file-input" accept=".json" class="hidden" />
         <button class="btn btn-sm btn-ghost" id="btn-lookup-mods">Identify Mods (Modrinth)</button>
         <button class="btn btn-sm btn-ghost" id="btn-refresh-mods">Refresh List</button>
       </div>
@@ -288,6 +292,61 @@
     </div>
   </section>
 
+  <!-- Tab: Backups -->
+  <section id="tab-backups" class="tab-content hidden">
+    <div class="page-header">
+      <h2>Backups</h2>
+      <div class="header-actions">
+        <button class="btn btn-sm btn-ghost" id="btn-refresh-backups">Refresh</button>
+      </div>
+    </div>
+
+    <!-- Backup actions -->
+    <div class="control-section">
+      <h3>Create Backup</h3>
+      <p class="dim" style="margin-bottom:0.75rem">Creates a full snapshot: Minecraft server files, mods, app config, and database. The server does not need to be stopped for backups.</p>
+      <div class="input-row">
+        <input type="text" id="backup-note" placeholder="Optional note (e.g. 'Before adding new mods')" />
+        <button class="btn btn-primary" id="btn-create-backup">Create Backup Now</button>
+      </div>
+      <p id="backup-create-msg" class="control-msg"></p>
+    </div>
+
+    <!-- Schedule info -->
+    <div class="control-section" id="backup-schedule-section">
+      <h3>Scheduled Backups</h3>
+      <div id="backup-schedule-info" class="dim">Loading schedule...</div>
+    </div>
+
+    <!-- Backup list -->
+    <div class="control-section">
+      <h3>Saved Backups</h3>
+      <div id="backups-list">
+        <p class="dim">Loading...</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- Backup restore confirmation modal -->
+  <div id="restore-modal" class="modal-overlay hidden">
+    <div class="modal">
+      <div class="modal-header">
+        <h3>Confirm Restore</h3>
+        <button class="btn btn-ghost btn-sm" id="restore-modal-close">&times;</button>
+      </div>
+      <div class="modal-body">
+        <p class="restore-warning">This will <strong>replace all server files, mods, config, and database</strong> with the contents of this backup. This action cannot be undone.</p>
+        <p class="restore-warning" style="margin-top:0.5rem">The Minecraft server <strong>must be stopped</strong> before restoring.</p>
+        <div id="restore-modal-details" style="margin-top:0.75rem"></div>
+        <div class="btn-row" style="margin-top:1rem">
+          <button class="btn btn-danger" id="btn-confirm-restore">Restore This Backup</button>
+          <button class="btn btn-ghost" id="btn-cancel-restore">Cancel</button>
+        </div>
+        <p id="restore-msg" class="control-msg"></p>
+      </div>
+    </div>
+  </div>
+
   <!-- Tab: Settings -->
   <section id="tab-settings" class="tab-content hidden">
     <div class="page-header">
@@ -351,6 +410,32 @@
           <label>Change Web Password</label>
           <input type="password" name="webPassword" placeholder="Leave blank to keep current" />
         </div>
+        <hr style="border-color:var(--border); margin:0.5rem 0" />
+        <div class="form-group">
+          <label class="checkbox-label">
+            <input type="checkbox" name="backupEnabled" id="cfg-backup-enabled" />
+            <span>Scheduled Backups</span>
+          </label>
+          <span class="hint">Enable automatic backups on a cron schedule</span>
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label>Backup Schedule (cron)</label>
+            <input type="text" name="backupSchedule" placeholder="0 3 * * *" />
+            <span class="hint">Default: 0 3 * * * (daily at 3 AM)</span>
+          </div>
+          <div class="form-group">
+            <label>Max Scheduled Backups</label>
+            <input type="number" name="maxBackups" placeholder="14" />
+            <span class="hint">Oldest scheduled backups are pruned. 0 = keep all.</span>
+          </div>
+        </div>
+        <div class="form-group">
+          <label>Backup Storage Path</label>
+          <input type="text" name="backupPath" placeholder="/mnt/backups/minecraft" />
+          <span class="hint">Absolute path to the backup directory (e.g. a separate HDD)</span>
+        </div>
+        <hr style="border-color:var(--border); margin:0.5rem 0" />
         <div class="form-group">
           <label class="checkbox-label">
             <input type="checkbox" name="demoMode" id="cfg-demo-mode" />
@@ -384,6 +469,19 @@
       </form>
     </div>
   </section>
+
+  <!-- Modpack import modal -->
+  <div id="modpack-modal" class="modal-overlay hidden">
+    <div class="modal modpack-modal-wide">
+      <div class="modal-header">
+        <h3 id="modpack-modal-title">Import Modpack</h3>
+        <button class="btn btn-ghost btn-sm" id="modpack-modal-close">&times;</button>
+      </div>
+      <div id="modpack-modal-body" class="modal-body">
+        <p class="dim">Analyzing modpack...</p>
+      </div>
+    </div>
+  </div>
 
   <!-- Version info modal for mod downloads -->
   <div id="version-modal" class="modal-overlay hidden">

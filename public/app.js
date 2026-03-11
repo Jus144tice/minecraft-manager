@@ -32,6 +32,8 @@ document.addEventListener('click', async e => {
     case 'remove-op':    removeOp(el); break;
     case 'remove-wl':    removeWl(el); break;
     case 'unban-player': unbanPlayer(el); break;
+    case 'restore-backup': openRestoreModal(el.dataset.filename); break;
+    case 'delete-backup':  await deleteBackup(el.dataset.filename); break;
   }
 });
 
@@ -49,6 +51,7 @@ const browseVersionCache = new Map(); // versionId -> { versionNumber, fileSize 
 let modDetailState = null; // { source: 'installed'|'browse', filename?, author? }
 let modsPage = 0;
 const MODS_PAGE_SIZE = 10;
+let statusInterval = null; // guard against duplicate setInterval on re-login
 
 // --- Generic pagination bar ---
 // Creates a controller for a prev/next pagination bar.
@@ -94,6 +97,7 @@ async function api(method, path, body) {
 }
 const GET = (path) => api('GET', path);
 const POST = (path, body) => api('POST', path, body);
+const PUT = (path, body) => api('PUT', path, body);
 const DEL = (path) => api('DELETE', path);
 
 // --- Utilities ---
@@ -242,6 +246,7 @@ document.querySelectorAll('.subtab-btn').forEach(btn => {
 function onTabActivate(tab) {
   if (tab === 'mods') loadMods();
   if (tab === 'players') { loadOps(); loadWhitelist(); loadBans(); }
+  if (tab === 'backups') { loadBackups(); loadBackupSchedule(); }
   if (tab === 'settings') { loadAppConfig(); loadServerProps(); }
 }
 
@@ -268,7 +273,8 @@ async function initApp() {
   connectWs();
   loadStatus();
   loadOnlinePlayers(); // populate immediately without needing a manual refresh
-  setInterval(loadStatus, 15000);
+  if (statusInterval) clearInterval(statusInterval);
+  statusInterval = setInterval(loadStatus, 15000);
   // Show demo banner if in demo mode; also stash demoMode for UI decisions
   try {
     const cfg = await GET('/config');
@@ -498,7 +504,7 @@ function renderMods() {
     const ver = md?.versionNumber || '';
 
     return `<div class="mod-card ${mod.enabled ? '' : 'mod-disabled'}">
-      ${md?.iconUrl ? `<img class="mod-icon" src="${esc(md.iconUrl)}" alt="" loading="lazy" onerror="this.style.display='none'" />` : '<div class="mod-icon-placeholder"></div>'}
+      ${md?.iconUrl ? `<img class="mod-icon" src="${esc(md.iconUrl)}" alt="" loading="lazy" />` : '<div class="mod-icon-placeholder"></div>'}
       <div class="mod-info">
         <div class="mod-title">
           ${md?.projectSlug || md?.projectId
@@ -689,7 +695,7 @@ function renderBrowseResults(hits) {
     // Populate from cache immediately if already fetched
     const cached = hit.latest_version ? browseVersionCache.get(hit.latest_version) : null;
     return `<div class="mod-card browse-card${isInstalled ? ' mod-disabled' : ''}" id="browse-card-${esc(hit.project_id)}">
-      ${hit.icon_url ? `<img class="mod-icon" src="${esc(hit.icon_url)}" alt="" loading="lazy" onerror="this.style.display='none'" />` : '<div class="mod-icon-placeholder"></div>'}
+      ${hit.icon_url ? `<img class="mod-icon" src="${esc(hit.icon_url)}" alt="" loading="lazy" />` : '<div class="mod-icon-placeholder"></div>'}
       <div class="mod-info">
         <div class="mod-title">
           <span class="mod-title-link" data-action="mod-detail" data-id="${esc(hit.project_id)}" data-source="browse" data-author="${esc(hit.author||'')}">${esc(hit.title)}</span>
@@ -1133,3 +1139,362 @@ $('props-form').addEventListener('submit', async (e) => {
     flash('props-msg', 'server.properties saved! Restart the Minecraft server to apply changes.');
   } catch (err) { flash('props-msg', err.message, true); }
 });
+
+// ============================================================
+// Backups
+// ============================================================
+
+async function loadBackups() {
+  const el = $('backups-list');
+  try {
+    const backups = await GET('/backups');
+    if (backups.length === 0) {
+      el.innerHTML = '<p class="dim">No backups yet. Create one above.</p>';
+      return;
+    }
+    el.innerHTML = backups.map(b => {
+      const date = new Date(b.createdAt);
+      const dateStr = date.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' });
+      const timeStr = date.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
+      const typeBadge = b.type === 'scheduled'
+        ? '<span class="backup-badge backup-scheduled">Scheduled</span>'
+        : '<span class="backup-badge backup-manual">Manual</span>';
+      const dbBadge = b.includesDatabase
+        ? '<span class="backup-badge backup-db">DB</span>' : '';
+      return `<div class="backup-card">
+        <div class="backup-info">
+          <div class="backup-title">
+            ${typeBadge}${dbBadge}
+            <span class="backup-date">${esc(dateStr)} ${esc(timeStr)}</span>
+          </div>
+          ${b.note ? `<div class="backup-note">${esc(b.note)}</div>` : ''}
+          <div class="backup-meta">
+            <span>${formatSize(b.size)}</span>
+            ${b.minecraftVersion ? `<span>MC ${esc(b.minecraftVersion)}</span>` : ''}
+            <span class="dim">${esc(b.filename)}</span>
+          </div>
+        </div>
+        <div class="backup-actions">
+          <button class="btn btn-sm btn-warning" data-action="restore-backup" data-filename="${esc(b.filename)}">Restore</button>
+          <button class="btn btn-sm btn-danger" data-action="delete-backup" data-filename="${esc(b.filename)}">Delete</button>
+        </div>
+      </div>`;
+    }).join('');
+  } catch (err) {
+    el.innerHTML = `<p class="error-msg">${esc(err.message)}</p>`;
+  }
+}
+
+async function loadBackupSchedule() {
+  const el = $('backup-schedule-info');
+  try {
+    const sched = await GET('/backups/schedule');
+    if (!sched.enabled) {
+      el.innerHTML = 'Scheduled backups are <strong>disabled</strong>. Enable them in <strong>Settings → App Config</strong>.';
+      return;
+    }
+    const parts = [];
+    parts.push(`Schedule: <strong>${esc(sched.schedule)}</strong> (cron)`);
+    if (sched.backupPath) parts.push(`Storage: <strong>${esc(sched.backupPath)}</strong>`);
+    if (sched.maxBackups > 0) parts.push(`Retention: keep last <strong>${sched.maxBackups}</strong> scheduled backups`);
+    el.innerHTML = parts.join(' &nbsp;|&nbsp; ');
+  } catch (err) {
+    el.innerHTML = `<span class="error-msg">${esc(err.message)}</span>`;
+  }
+}
+
+$('btn-create-backup').addEventListener('click', async () => {
+  const btn = $('btn-create-backup');
+  const note = $('backup-note').value.trim();
+  btn.disabled = true;
+  btn.textContent = 'Creating backup...';
+  flash('backup-create-msg', '');
+  try {
+    const result = await POST('/backups', { note });
+    flash('backup-create-msg', `Backup created: ${result.filename} (${formatSize(result.size)})`);
+    $('backup-note').value = '';
+    loadBackups();
+  } catch (err) {
+    flash('backup-create-msg', err.message, true);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Create Backup Now';
+  }
+});
+
+$('btn-refresh-backups').addEventListener('click', () => { loadBackups(); loadBackupSchedule(); });
+
+// --- Restore modal ---
+let restoreFilename = null;
+
+function openRestoreModal(filename) {
+  restoreFilename = filename;
+  $('restore-modal-details').innerHTML = `<p>Backup: <strong>${esc(filename)}</strong></p>`;
+  $('restore-msg').textContent = '';
+  show('restore-modal');
+}
+
+$('restore-modal-close').addEventListener('click', () => hide('restore-modal'));
+$('btn-cancel-restore').addEventListener('click', () => hide('restore-modal'));
+
+$('btn-confirm-restore').addEventListener('click', async () => {
+  if (!restoreFilename) return;
+  const btn = $('btn-confirm-restore');
+  btn.disabled = true;
+  btn.textContent = 'Restoring...';
+  try {
+    await POST('/backups/restore', { filename: restoreFilename });
+    flash('restore-msg', 'Restore complete! Restart the manager and Minecraft server to apply all changes.');
+    loadBackups();
+  } catch (err) {
+    flash('restore-msg', err.message, true);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Restore This Backup';
+  }
+});
+
+async function deleteBackup(filename) {
+  if (!confirm(`Delete backup ${filename}? This cannot be undone.`)) return;
+  try {
+    await DEL(`/backups/${encodeURIComponent(filename)}`);
+    loadBackups();
+  } catch (err) {
+    alert('Failed to delete: ' + err.message);
+  }
+}
+
+// ============================================================
+// Modpack Export / Import
+// ============================================================
+
+$('btn-export-modpack').addEventListener('click', async () => {
+  const btn = $('btn-export-modpack');
+  btn.disabled = true;
+  btn.textContent = 'Exporting...';
+  try {
+    const data = await GET('/modpack/export');
+    const blob = new Blob([JSON.stringify(data.modpack, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `modpack-${(data.modpack.minecraftVersion || 'mc').replace(/[^a-zA-Z0-9.-]/g, '_')}-${new Date().toISOString().slice(0, 10)}.json`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+    const msg = `Exported ${data.modpack.modCount} mods.`;
+    const extras = [];
+    if (data.skipped.clientOnly) extras.push(`${data.skipped.clientOnly} client-only skipped`);
+    if (data.skipped.unidentified) extras.push(`${data.skipped.unidentified} unidentified skipped`);
+    alert(extras.length ? `${msg} (${extras.join(', ')})` : msg);
+  } catch (err) {
+    alert('Export failed: ' + err.message);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Export Modpack';
+  }
+});
+
+$('btn-import-modpack').addEventListener('click', () => {
+  $('modpack-file-input').value = '';
+  $('modpack-file-input').click();
+});
+
+$('modpack-file-input').addEventListener('change', async (e) => {
+  const file = e.target.files[0];
+  if (!file) return;
+  try {
+    const text = await file.text();
+    const modpack = JSON.parse(text);
+    if (!modpack.mods || !Array.isArray(modpack.mods)) {
+      throw new Error('Invalid modpack file: missing "mods" array');
+    }
+    await analyzeModpack(modpack);
+  } catch (err) {
+    alert('Failed to read modpack: ' + err.message);
+  }
+});
+
+async function analyzeModpack(modpack) {
+  show('modpack-modal');
+  $('modpack-modal-title').textContent = `Import: ${esc(modpack.name || 'Modpack')}`;
+  $('modpack-modal-body').innerHTML = `<p class="dim">Analyzing ${modpack.mods.length} mods against installed mods...</p>`;
+
+  try {
+    const analysis = await POST('/modpack/analyze', { modpack });
+    renderModpackAnalysis(modpack, analysis);
+  } catch (err) {
+    $('modpack-modal-body').innerHTML = `<p class="error-msg">Analysis failed: ${esc(err.message)}</p>`;
+  }
+}
+
+function renderModpackAnalysis(modpack, analysis) {
+  const { skip, conflict, install, clientOnly } = analysis;
+  const totalActions = install.length + conflict.length;
+
+  let html = `<div class="modpack-summary">
+    <p><strong>${esc(modpack.name || 'Modpack')}</strong> — MC ${esc(modpack.minecraftVersion || '?')} / ${esc(modpack.loader || '?')}</p>
+    <div class="modpack-stats">
+      ${install.length ? `<span class="modpack-stat modpack-stat-new">${install.length} new</span>` : ''}
+      ${conflict.length ? `<span class="modpack-stat modpack-stat-conflict">${conflict.length} version conflicts</span>` : ''}
+      ${skip.length ? `<span class="modpack-stat modpack-stat-skip">${skip.length} already installed</span>` : ''}
+      ${clientOnly.length ? `<span class="modpack-stat modpack-stat-client">${clientOnly.length} client-only (ignored)</span>` : ''}
+    </div>
+  </div>`;
+
+  // Conflicts section with checkboxes
+  if (conflict.length > 0) {
+    html += `<div class="modpack-section">
+      <h4>Version Conflicts</h4>
+      <p class="dim small">These mods are already installed but at a different version. Check the ones you want to replace.</p>
+      <label class="toggle-label modpack-select-all" style="margin-bottom:0.5rem">
+        <input type="checkbox" id="modpack-conflict-all" />
+        <span>Select all conflicts</span>
+      </label>
+      ${conflict.map((mod, i) => `<div class="modpack-conflict-row">
+        <label class="toggle-label">
+          <input type="checkbox" class="modpack-conflict-cb" data-idx="${i}" />
+          <span><strong>${esc(mod.projectTitle)}</strong></span>
+        </label>
+        <span class="dim small">Installed: v${esc(mod.installedVersion || '?')} → Pack: v${esc(mod.versionNumber || '?')}</span>
+      </div>`).join('')}
+    </div>`;
+  }
+
+  // New mods to install
+  if (install.length > 0) {
+    html += `<div class="modpack-section">
+      <h4>New Mods to Install (${install.length})</h4>
+      <div class="modpack-mod-list">
+        ${install.map(mod => `<span class="modpack-mod-chip">${esc(mod.projectTitle)} <span class="dim">v${esc(mod.versionNumber || '?')}</span></span>`).join('')}
+      </div>
+    </div>`;
+  }
+
+  // Skipped (already installed)
+  if (skip.length > 0) {
+    html += `<div class="modpack-section">
+      <h4>Already Installed (${skip.length})</h4>
+      <div class="modpack-mod-list">
+        ${skip.map(mod => `<span class="modpack-mod-chip modpack-chip-skip">${esc(mod.projectTitle)} <span class="dim">v${esc(mod.versionNumber || '?')}</span></span>`).join('')}
+      </div>
+    </div>`;
+  }
+
+  // Client-only (ignored)
+  if (clientOnly.length > 0) {
+    html += `<div class="modpack-section">
+      <h4>Client-Only — Ignored (${clientOnly.length})</h4>
+      <div class="modpack-mod-list">
+        ${clientOnly.map(mod => `<span class="modpack-mod-chip modpack-chip-client">${esc(mod.projectTitle)}</span>`).join('')}
+      </div>
+    </div>`;
+  }
+
+  // Action buttons
+  if (totalActions > 0) {
+    html += `<div class="btn-row" style="margin-top:1rem">
+      <button class="btn btn-primary" id="btn-modpack-install">Install Selected Mods</button>
+      <button class="btn btn-ghost" id="btn-modpack-cancel">Cancel</button>
+    </div>
+    <p id="modpack-install-msg" class="control-msg"></p>`;
+  } else {
+    html += `<div class="btn-row" style="margin-top:1rem">
+      <p class="dim">Nothing to install — all mods are already up to date.</p>
+      <button class="btn btn-ghost" id="btn-modpack-cancel">Close</button>
+    </div>`;
+  }
+
+  $('modpack-modal-body').innerHTML = html;
+
+  // Wire up "select all conflicts" checkbox
+  const selectAllCb = $('modpack-conflict-all');
+  if (selectAllCb) {
+    selectAllCb.addEventListener('change', () => {
+      document.querySelectorAll('.modpack-conflict-cb').forEach(cb => { cb.checked = selectAllCb.checked; });
+    });
+  }
+
+  // Wire up cancel
+  const cancelBtn = $('btn-modpack-cancel');
+  if (cancelBtn) cancelBtn.addEventListener('click', () => hide('modpack-modal'));
+
+  // Wire up install
+  const installBtn = $('btn-modpack-install');
+  if (installBtn) {
+    installBtn.addEventListener('click', () => {
+      // Gather selected conflict mods
+      const selectedConflicts = [];
+      document.querySelectorAll('.modpack-conflict-cb:checked').forEach(cb => {
+        const mod = conflict[parseInt(cb.dataset.idx)];
+        selectedConflicts.push({ ...mod, replaceFilename: mod.installedFilename });
+      });
+
+      const modsToInstall = [...install, ...selectedConflicts];
+      if (modsToInstall.length === 0) {
+        flash('modpack-install-msg', 'No mods selected to install.', true);
+        return;
+      }
+      executeModpackImport(modsToInstall, analysis);
+    });
+  }
+}
+
+async function executeModpackImport(modsToInstall, analysis) {
+  const btn = $('btn-modpack-install');
+  if (btn) { btn.disabled = true; btn.textContent = `Installing ${modsToInstall.length} mods...`; }
+
+  try {
+    const report = await POST('/modpack/import', { mods: modsToInstall });
+    renderModpackReport(report, analysis);
+    await loadMods(); // refresh the mods list
+  } catch (err) {
+    flash('modpack-install-msg', 'Import failed: ' + err.message, true);
+    if (btn) { btn.disabled = false; btn.textContent = 'Install Selected Mods'; }
+  }
+}
+
+function renderModpackReport(report, analysis) {
+  let html = '<h4>Import Complete</h4>';
+
+  if (report.installed.length > 0) {
+    html += `<div class="modpack-section">
+      <p class="modpack-stat modpack-stat-new">${report.installed.length} mods installed successfully</p>
+      <div class="modpack-mod-list">
+        ${report.installed.map(m => `<span class="modpack-mod-chip">${esc(m.title)} <span class="dim">v${esc(m.versionNumber || '?')}${m.size ? ` — ${formatSize(m.size)}` : ''}</span></span>`).join('')}
+      </div>
+    </div>`;
+  }
+
+  if (report.failed.length > 0) {
+    html += `<div class="modpack-section">
+      <p class="modpack-stat modpack-stat-conflict">${report.failed.length} mods failed</p>
+      <div class="modpack-mod-list">
+        ${report.failed.map(m => `<span class="modpack-mod-chip modpack-chip-fail">${esc(m.title)} <span class="dim">— ${esc(m.error)}</span></span>`).join('')}
+      </div>
+    </div>`;
+  }
+
+  if (analysis.skip.length > 0) {
+    html += `<div class="modpack-section">
+      <p class="dim">${analysis.skip.length} mods were already installed at the correct version</p>
+    </div>`;
+  }
+  if (analysis.clientOnly.length > 0) {
+    html += `<div class="modpack-section">
+      <p class="dim">${analysis.clientOnly.length} client-only mods were ignored</p>
+    </div>`;
+  }
+
+  html += `<div class="btn-row" style="margin-top:1rem">
+    <button class="btn btn-ghost" id="btn-modpack-report-close">Close</button>
+  </div>`;
+
+  $('modpack-modal-title').textContent = 'Import Report';
+  $('modpack-modal-body').innerHTML = html;
+  $('btn-modpack-report-close').addEventListener('click', () => hide('modpack-modal'));
+}
+
+$('modpack-modal-close').addEventListener('click', () => hide('modpack-modal'));
+$('modpack-modal').addEventListener('click', e => { if (e.target === $('modpack-modal')) hide('modpack-modal'); });

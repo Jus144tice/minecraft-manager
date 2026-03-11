@@ -14,6 +14,7 @@ A self-hosted web control panel for a Minecraft Forge server running on Linux. B
 - Edit `server.properties` in the browser
 - OIDC authentication (Google and/or Microsoft) with email allowlist; optional local password fallback
 - WebSocket-based live log streaming
+- Full backup & restore — scheduled nightly (configurable cron), stores server files + mods + config + database as a single tar.gz snapshot. Restore to any point in time from the Backups tab.
 
 ---
 
@@ -107,6 +108,12 @@ Fill in `config.json` (copy from `config.example.json`):
   "modsFolder": "mods",
   "disabledModsFolder": "mods_disabled",
 
+  // Backups — all settings can also be changed in Settings → App Config
+  "backupEnabled": true,              // enable scheduled backups
+  "backupSchedule": "0 3 * * *",      // cron expression (default: daily at 3 AM)
+  "backupPath": "/mnt/backups/minecraft", // where to store backup archives
+  "maxBackups": 14,                   // keep last N scheduled backups (0 = keep all)
+
   // Set to false to connect to your real server; restart the panel after changing
   "demoMode": false
 }
@@ -135,6 +142,7 @@ nano .env
 | `MICROSOFT_CLIENT_SECRET` | One provider required | From Azure Portal |
 | `MICROSOFT_TENANT` | Optional | `common` (default), `consumers`, or a tenant ID |
 | `LOCAL_PASSWORD` | Optional | Fallback password login. Rate-limited to 20 attempts/15 min. |
+| `DATABASE_URL` | Optional | PostgreSQL connection string. Enables persistent sessions, user management with admin levels, and queryable audit logs. See [Database setup](#database-postgresql) below. |
 
 In production, set these in the systemd service file (see below) rather than a `.env` file.
 
@@ -149,6 +157,65 @@ rcon.password=pick-a-strong-password
 ```
 
 > The `rcon.password` must exactly match `rconPassword` in `config.json`. RCON lets the panel send commands (op, ban, whitelist, say, etc.) to a running server in real time.
+
+### Database (PostgreSQL)
+
+A PostgreSQL database is **optional**. Without one, the app works exactly as before (sessions in memory, audit logs to stdout only). With one, you get:
+
+- **Persistent sessions** — survive server restarts (no more logging everyone out on redeploy)
+- **User management** — tracks every user who logs in, with an `admin_level` field (0 = regular, 1 = admin)
+- **Queryable audit logs** — every action (login, server start/stop, mod install, ban, etc.) stored with timestamps and searchable via the API
+
+#### Install PostgreSQL
+
+```bash
+sudo apt install -y postgresql
+sudo systemctl enable postgresql
+```
+
+#### Create the database and user
+
+```bash
+sudo -u postgres psql
+```
+
+```sql
+CREATE USER mcmanager WITH PASSWORD 'pick-a-strong-password';
+CREATE DATABASE mcmanager OWNER mcmanager;
+\q
+```
+
+#### Set the connection string
+
+Add `DATABASE_URL` to your `.env` (development) or systemd service file (production):
+
+```
+DATABASE_URL=postgres://mcmanager:pick-a-strong-password@localhost:5432/mcmanager
+```
+
+Tables are created automatically on first startup — no manual migration step needed.
+
+#### Admin levels
+
+The first user to log in gets `admin_level = 0` (regular) by default. To promote a user to admin, use the API:
+
+```bash
+curl -X PUT http://localhost:3000/api/users/you@gmail.com/admin \
+  -H 'Content-Type: application/json' \
+  -H 'X-CSRF-Token: <token>' \
+  -H 'Cookie: mcm.sid=<session>' \
+  -d '{"level": 1}'
+```
+
+Or connect to the database directly:
+
+```sql
+UPDATE users SET admin_level = 1 WHERE email = 'you@gmail.com';
+```
+
+Admin users can access `GET /api/users`, `PUT /api/users/:email/admin`, `DELETE /api/users/:email`, and `GET /api/audit-logs`.
+
+---
 
 ### Find your start command
 
@@ -229,6 +296,9 @@ Environment=GOOGLE_CLIENT_SECRET=
 
 # Optional local password fallback:
 # Environment=LOCAL_PASSWORD=your-password-here
+
+# Optional PostgreSQL (persistent sessions, user management, audit logs):
+# Environment=DATABASE_URL=postgres://mcmanager:your-db-password@localhost:5432/mcmanager
 
 [Install]
 WantedBy=multi-user.target
@@ -399,9 +469,32 @@ Lists every `.jar` in your `mods/` folder. Client-only mods are never shown here
 
 > When RCON is connected, changes take effect immediately on the live server. When the server is offline, the panel edits `ops.json`, `whitelist.json`, and `banned-players.json` directly — changes apply on next start.
 
+### Backups tab
+
+Full point-in-time snapshots of everything needed to restore your server. Each backup is a single `.tar.gz` archive containing:
+
+- **Minecraft server** — world data, mods (enabled + disabled), server configs (`server.properties`, `ops.json`, `whitelist.json`, `banned-players.json`, etc.)
+- **App config** — `config.json`
+- **PostgreSQL database** — users, admin levels, audit logs, sessions (when connected)
+
+**Create a backup** manually at any time with an optional note (e.g. "Before adding new mods"). The server does not need to be stopped for backups.
+
+**Scheduled backups** run automatically on a cron schedule (default: daily at 3 AM). Configure the schedule, storage path, and retention in **Settings → App Config**:
+
+| Setting | Default | Description |
+|---|---|---|
+| Scheduled Backups | Off | Enable/disable the cron schedule |
+| Backup Schedule | `0 3 * * *` | Cron expression (daily at 3 AM) |
+| Backup Storage Path | `./backups` | Where archives are stored — set to a separate HDD mount |
+| Max Scheduled Backups | 14 | Keep the last N scheduled backups; older ones are pruned automatically. Manual backups are never pruned. |
+
+**Restore** from any saved backup. This replaces all server files, mods, config, and database contents. The Minecraft server must be stopped first. After restore, restart the manager app and the Minecraft server.
+
+**Use cases:** roll back after a bad mod corrupts the world, undo damage from a griefer, recover from accidental config changes, or simply maintain regular disaster-recovery snapshots.
+
 ### Settings tab
 
-- **App Config** — edit all `config.json` values in the browser (no SSH needed after initial setup). Change RCON password, start command, memory flags, etc. Toggle demo mode here. Note: secrets like session keys and OIDC credentials are managed as environment variables, not through this UI.
+- **App Config** — edit all `config.json` values in the browser (no SSH needed after initial setup). Change RCON password, start command, memory flags, backup schedule, etc. Toggle demo mode here. Note: secrets like session keys and OIDC credentials are managed as environment variables, not through this UI.
 - **server.properties** — full editor for all server properties. Key settings (RCON, whitelist, online-mode, etc.) are shown first. **Restart the Minecraft server** after saving.
 
 ---

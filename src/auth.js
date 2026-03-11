@@ -17,9 +17,11 @@
 
 import { Router } from 'express';
 import session from 'express-session';
+import connectPgSimple from 'connect-pg-simple';
 import { Issuer, generators } from 'openid-client';
 import crypto from 'crypto';
 import { audit } from './audit.js';
+import { getPool, upsertUser, getUser } from './db.js';
 
 const SESSION_MAX_AGE = 24 * 60 * 60 * 1000; // 24 hours
 
@@ -58,7 +60,7 @@ export function buildSessionMiddleware(config) {
     );
   }
 
-  return session({
+  const sessionOpts = {
     secret,
     name: 'mcm.sid',           // custom name avoids fingerprinting as express-session
     resave: false,
@@ -69,7 +71,22 @@ export function buildSessionMiddleware(config) {
       sameSite: 'lax',          // lax (not strict) allows OIDC redirect-back to include cookie
       maxAge: SESSION_MAX_AGE,
     },
-  });
+  };
+
+  // Use PostgreSQL session store when a DB pool is available,
+  // otherwise fall back to the default in-memory store.
+  const dbPool = getPool();
+  if (dbPool) {
+    const PgSession = connectPgSimple(session);
+    sessionOpts.store = new PgSession({
+      pool: dbPool,
+      tableName: 'session',
+      pruneSessionInterval: 60 * 15, // purge expired sessions every 15 min
+    });
+    console.log('[Auth] Using PostgreSQL session store');
+  }
+
+  return session(sessionOpts);
 }
 
 // ---- Auth router factory (async — discovers OIDC issuers at startup) ----
@@ -150,9 +167,20 @@ export async function buildAuthRouter(config) {
   // --- Internal helper: complete a successful login ---
   function loginUser(req, userInfo, onDone) {
     // Regenerate session ID to prevent session fixation attacks.
-    req.session.regenerate((err) => {
+    req.session.regenerate(async (err) => {
       if (err) return onDone(err);
-      req.session.user = { ...userInfo, loginAt: Date.now() };
+
+      // Upsert user in DB and attach their admin level to the session
+      let adminLevel = 0;
+      try {
+        const dbUser = await upsertUser(userInfo.email, userInfo.name, userInfo.provider);
+        if (dbUser) adminLevel = dbUser.admin_level;
+      } catch (e) {
+        // DB failure should not block login — just log and continue
+        console.error('[Auth] Failed to upsert user in DB:', e.message);
+      }
+
+      req.session.user = { ...userInfo, adminLevel, loginAt: Date.now() };
       // Generate a fresh CSRF token bound to this session.
       req.session.csrfToken = crypto.randomBytes(32).toString('hex');
       req.session.save((saveErr) => {
