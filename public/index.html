@@ -124,6 +124,9 @@
   <section id="tab-console" class="tab-content hidden">
     <div class="page-header">
       <h2>Manage Server</h2>
+      <div class="header-actions">
+        <button class="btn btn-sm btn-ghost" id="btn-cmd-help">&#128214; Command Reference</button>
+      </div>
     </div>
 
     <!-- Quick Actions -->
@@ -622,6 +625,20 @@
       <div id="modpack-modal-body" class="modal-body">
         <p class="dim">Analyzing modpack...</p>
       </div>
+    </div>
+  </div>
+
+  <!-- Command Reference help modal -->
+  <div id="cmd-help-modal" class="modal-overlay hidden">
+    <div class="modal cmd-help-modal-wide">
+      <div class="modal-header">
+        <h3>Command Reference</h3>
+        <button class="btn btn-ghost btn-sm" id="cmd-help-close">&times;</button>
+      </div>
+      <div class="cmd-help-search-bar">
+        <input type="text" id="cmd-help-search" placeholder="Search commands... (e.g. &quot;teleport&quot;, &quot;weather&quot;, &quot;ban&quot;)" />
+      </div>
+      <div id="cmd-help-body" class="modal-body cmd-help-body"></div>
     </div>
   </div>
 

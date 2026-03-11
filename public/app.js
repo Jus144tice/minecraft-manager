@@ -1822,3 +1822,311 @@ function renderModpackReport(report, analysis) {
 
 $('modpack-modal-close').addEventListener('click', () => hide('modpack-modal'));
 $('modpack-modal').addEventListener('click', e => { if (e.target === $('modpack-modal')) hide('modpack-modal'); });
+
+// ============================================================
+// Command Reference (Help Modal)
+// ============================================================
+
+const CMD_HELP_DATA = [
+  { category: 'Getting Started', entries: [
+    { cmd: 'help', syntax: 'help [command]', desc: 'Shows a list of all available commands, or details about a specific command.',
+      detail: 'This is your best friend when you are not sure what a command does. Try <code>help gamemode</code> to see how to use that command.',
+      tip: 'You can type any command name after "help" to learn about it.' },
+    { cmd: 'list', syntax: 'list', desc: 'Shows all players currently online.',
+      detail: 'Displays the names of everyone connected to the server right now.' },
+    { cmd: 'say', syntax: 'say <message>', desc: 'Broadcasts a message to all players on the server.',
+      detail: 'The message appears in chat as <code>[Server] your message</code>. Great for announcements.',
+      example: 'say Server restarting in 5 minutes!' },
+    { cmd: 'tell / msg', syntax: 'tell <player> <message>', desc: 'Sends a private message to a specific player.',
+      example: 'tell Steve Hey, come check out the new base!' },
+  ]},
+  { category: 'World & Saving', entries: [
+    { cmd: 'save-all', syntax: 'save-all', desc: 'Saves the entire world to disk immediately.',
+      detail: 'Forces the server to write all world data to files. Use this before stopping the server or making a backup.',
+      tip: 'The server auto-saves periodically, but running this ensures nothing is lost.' },
+    { cmd: 'save-off', syntax: 'save-off', desc: 'Disables automatic world saving.',
+      detail: 'Useful during backups to prevent file corruption. <strong>Remember to turn it back on!</strong>',
+      tip: 'Always run save-on after your backup is done.' },
+    { cmd: 'save-on', syntax: 'save-on', desc: 'Re-enables automatic world saving.',
+      detail: 'Turns auto-save back on after you disabled it.' },
+    { cmd: 'seed', syntax: 'seed', desc: 'Shows the world seed number.',
+      detail: 'The seed is the number that generated your world. You can use it to create an identical world elsewhere.' },
+    { cmd: 'locate', syntax: 'locate structure <structure>', desc: 'Finds the nearest structure (village, fortress, etc.).',
+      example: 'locate structure minecraft:village_plains',
+      tip: 'Common structures: village_plains, fortress, monument, stronghold, mansion, bastion_remnant' },
+  ]},
+  { category: 'Time & Weather', entries: [
+    { cmd: 'time set', syntax: 'time set <value>', desc: 'Sets the world time.',
+      detail: 'Use named values like <code>day</code>, <code>night</code>, <code>noon</code>, or <code>midnight</code>. You can also use exact tick values (0-24000). Day starts at 1000, sunset at 12000, night at 13000.',
+      example: 'time set day' },
+    { cmd: 'time add', syntax: 'time add <ticks>', desc: 'Advances the clock forward by a number of ticks.',
+      detail: 'There are 24,000 ticks in one Minecraft day. Adding 6000 ticks skips about a quarter of the day.',
+      example: 'time add 6000' },
+    { cmd: 'weather clear', syntax: 'weather clear [seconds]', desc: 'Clears the weather (makes it sunny).',
+      detail: 'Optionally set how many seconds the clear weather lasts. Without a number, it picks a random duration.',
+      example: 'weather clear 999999' },
+    { cmd: 'weather rain', syntax: 'weather rain [seconds]', desc: 'Makes it rain (or snow in cold biomes).', example: 'weather rain' },
+    { cmd: 'weather thunder', syntax: 'weather thunder [seconds]', desc: 'Starts a thunderstorm.', example: 'weather thunder' },
+  ]},
+  { category: 'Players & Permissions', entries: [
+    { cmd: 'gamemode', syntax: 'gamemode <mode> <player>', desc: 'Changes a player\'s game mode.',
+      detail: 'Modes: <code>survival</code> (normal gameplay), <code>creative</code> (fly + unlimited blocks), <code>adventure</code> (can\'t break/place blocks), <code>spectator</code> (invisible, fly through walls).',
+      example: 'gamemode creative Steve' },
+    { cmd: 'kick', syntax: 'kick <player> [reason]', desc: 'Disconnects a player from the server.',
+      detail: 'They can rejoin unless they are banned. Good for players misbehaving.',
+      example: 'kick Steve Please stop griefing' },
+    { cmd: 'ban', syntax: 'ban <player> [reason]', desc: 'Permanently bans a player from the server.',
+      detail: 'The player is immediately kicked and cannot rejoin. Use <code>pardon</code> to unban them.',
+      example: 'ban Griefer123 Destroying other players\' builds' },
+    { cmd: 'pardon', syntax: 'pardon <player>', desc: 'Unbans a previously banned player.', example: 'pardon Steve' },
+    { cmd: 'ban-ip', syntax: 'ban-ip <ip>', desc: 'Bans an IP address from the server.', detail: 'Blocks all accounts from that IP. Use carefully.' },
+    { cmd: 'op', syntax: 'op <player>', desc: 'Gives a player operator (admin) privileges.',
+      detail: 'Operators can use all server commands. Be careful who you op!',
+      tip: 'Use the Players tab for more control over op levels (1-4).' },
+    { cmd: 'deop', syntax: 'deop <player>', desc: 'Removes operator privileges from a player.', example: 'deop Steve' },
+    { cmd: 'whitelist', syntax: 'whitelist <add|remove|list|on|off|reload>', desc: 'Manages the server whitelist.',
+      detail: 'When the whitelist is on, only listed players can join. <code>whitelist add Steve</code> adds a player. <code>whitelist on</code> enables it.',
+      example: 'whitelist add Steve' },
+  ]},
+  { category: 'Teleporting & Movement', entries: [
+    { cmd: 'tp / teleport', syntax: 'tp <player> <x> <y> <z>', desc: 'Teleports a player to specific coordinates.',
+      detail: 'Use exact numbers or <code>~</code> for relative positions. <code>~ ~ ~</code> means "right here".',
+      example: 'tp Steve 100 64 -200',
+      tip: 'tp Steve ~ ~50 ~ will teleport Steve 50 blocks up from their current position.' },
+    { cmd: 'tp (to player)', syntax: 'tp <player> <target>', desc: 'Teleports one player to another player.',
+      example: 'tp Steve Alex' },
+    { cmd: 'spawnpoint', syntax: 'spawnpoint <player> <x> <y> <z>', desc: 'Sets where a player respawns after dying.',
+      example: 'spawnpoint Steve 100 64 -200' },
+    { cmd: 'setworldspawn', syntax: 'setworldspawn <x> <y> <z>', desc: 'Sets the world\'s default spawn point for all new players.',
+      example: 'setworldspawn 0 64 0' },
+    { cmd: 'spreadplayers', syntax: 'spreadplayers <x> <z> <minDist> <maxRange> <player...>', desc: 'Randomly spreads players across an area.',
+      detail: 'Useful for minigames or spreading players out at the start of a challenge.',
+      example: 'spreadplayers 0 0 100 500 @a' },
+  ]},
+  { category: 'Giving Items & Effects', entries: [
+    { cmd: 'give', syntax: 'give <player> <item> [amount]', desc: 'Gives items to a player.',
+      detail: 'Item IDs look like <code>minecraft:diamond</code> or just <code>diamond</code>. Amount defaults to 1.',
+      example: 'give Steve diamond 64',
+      tip: 'Common items: diamond, iron_ingot, golden_apple, netherite_ingot, elytra, ender_pearl' },
+    { cmd: 'clear', syntax: 'clear <player> [item] [amount]', desc: 'Removes items from a player\'s inventory.',
+      detail: 'Without specifying an item, clears their entire inventory!',
+      example: 'clear Steve dirt' },
+    { cmd: 'effect give', syntax: 'effect give <player> <effect> [seconds] [level]', desc: 'Applies a status effect to a player.',
+      detail: 'Effects include speed, strength, regeneration, invisibility, etc. Level 0 = level I, level 1 = level II.',
+      example: 'effect give Steve speed 60 1',
+      tip: 'Useful effects: speed, strength, regeneration, night_vision, invisibility, jump_boost, resistance, fire_resistance, slow_falling' },
+    { cmd: 'effect clear', syntax: 'effect clear <player> [effect]', desc: 'Removes status effects from a player.',
+      detail: 'Without specifying an effect, removes ALL effects.',
+      example: 'effect clear Steve' },
+    { cmd: 'enchant', syntax: 'enchant <player> <enchantment> [level]', desc: 'Enchants the item a player is holding.',
+      example: 'enchant Steve sharpness 5',
+      tip: 'Common enchantments: sharpness, protection, efficiency, unbreaking, fortune, looting, mending' },
+    { cmd: 'xp', syntax: 'xp add <player> <amount> [levels|points]', desc: 'Gives or removes XP from a player.',
+      example: 'xp add Steve 30 levels' },
+  ]},
+  { category: 'Game Rules', entries: [
+    { cmd: 'difficulty', syntax: 'difficulty <level>', desc: 'Changes the server difficulty.',
+      detail: 'Options: <code>peaceful</code> (no mobs), <code>easy</code>, <code>normal</code>, <code>hard</code>.',
+      example: 'difficulty hard' },
+    { cmd: 'gamerule keepInventory', syntax: 'gamerule keepInventory true/false', desc: 'Whether players keep items when they die.',
+      detail: 'When true, dying won\'t drop your items. Great for younger players or when building.',
+      tip: 'This is one of the most popular gamerules to change.' },
+    { cmd: 'gamerule doDaylightCycle', syntax: 'gamerule doDaylightCycle true/false', desc: 'Whether time passes naturally.',
+      detail: 'Set to false to freeze the sun in place. Combine with <code>time set day</code> for permanent daytime.' },
+    { cmd: 'gamerule doMobSpawning', syntax: 'gamerule doMobSpawning true/false', desc: 'Whether mobs spawn naturally.',
+      detail: 'Disabling this stops all natural mob spawning (both hostile and friendly). Spawners still work.' },
+    { cmd: 'gamerule doWeatherCycle', syntax: 'gamerule doWeatherCycle true/false', desc: 'Whether weather changes naturally.',
+      detail: 'Set to false and use <code>weather clear</code> for permanent sunshine.' },
+    { cmd: 'gamerule mobGriefing', syntax: 'gamerule mobGriefing true/false', desc: 'Whether mobs can destroy blocks.',
+      detail: 'When false, creepers won\'t blow up blocks and endermen won\'t pick them up. Mobs still do damage to players.',
+      tip: 'This also prevents villagers from farming, which may not be what you want.' },
+    { cmd: 'gamerule pvp', syntax: 'gamerule pvp true/false', desc: 'Whether players can damage each other.',
+      detail: 'Set to false to prevent PvP combat. Note: this is actually set in server.properties, not as a gamerule. Use the server.properties editor in Settings.' },
+    { cmd: 'gamerule doFireTick', syntax: 'gamerule doFireTick true/false', desc: 'Whether fire spreads and burns things.',
+      detail: 'Set to false to prevent accidental fire damage to builds.' },
+    { cmd: 'gamerule announceAdvancements', syntax: 'gamerule announceAdvancements true/false', desc: 'Whether advancement messages show in chat.',
+      detail: 'Set to false to stop the "[Player] has made the advancement..." messages.' },
+    { cmd: 'gamerule commandBlockOutput', syntax: 'gamerule commandBlockOutput true/false', desc: 'Whether command blocks show output in chat.',
+      detail: 'Set to false to reduce chat spam from command blocks.' },
+    { cmd: 'gamerule showDeathMessages', syntax: 'gamerule showDeathMessages true/false', desc: 'Whether death messages appear in chat.' },
+    { cmd: 'gamerule naturalRegeneration', syntax: 'gamerule naturalRegeneration true/false', desc: 'Whether players regenerate health from being full.',
+      detail: 'When false, players must use potions or golden apples to heal. Makes the game much harder.' },
+    { cmd: 'gamerule randomTickSpeed', syntax: 'gamerule randomTickSpeed <number>', desc: 'Controls how fast crops grow and leaves decay.',
+      detail: 'Default is 3. Higher = faster crop growth. Setting to 0 freezes crop growth entirely.',
+      example: 'gamerule randomTickSpeed 10' },
+  ]},
+  { category: 'World Borders & Spawn', entries: [
+    { cmd: 'worldborder set', syntax: 'worldborder set <size> [seconds]', desc: 'Sets the world border size.',
+      detail: 'Size is the total width/height in blocks. If you add seconds, it gradually shrinks or grows to that size.',
+      example: 'worldborder set 5000',
+      tip: 'Shrinking borders are great for minigames! Try: worldborder set 100 600' },
+    { cmd: 'worldborder center', syntax: 'worldborder center <x> <z>', desc: 'Moves the center of the world border.',
+      example: 'worldborder center 0 0' },
+    { cmd: 'worldborder get', syntax: 'worldborder get', desc: 'Shows the current world border size.' },
+  ]},
+  { category: 'Performance & Advanced', entries: [
+    { cmd: 'tick rate', syntax: 'tick rate <rate>', desc: 'Changes the server tick speed.',
+      detail: 'Default is 20 ticks/second. Lower = slower game. Higher = faster. <strong>Changing this can cause lag.</strong>',
+      example: 'tick rate 20' },
+    { cmd: 'tick freeze', syntax: 'tick freeze', desc: 'Freezes all game ticks.',
+      detail: 'The world stops: mobs freeze, items stop, nothing moves. Players can still walk around. Use <code>tick unfreeze</code> to resume.' },
+    { cmd: 'forceload', syntax: 'forceload add <x> <z>', desc: 'Keeps a chunk loaded even when no players are nearby.',
+      detail: 'Useful for farms or machines that need to run 24/7. Use <code>forceload query</code> to see which chunks are forceloaded.',
+      tip: 'Forceloading too many chunks can cause lag.' },
+    { cmd: 'kill', syntax: 'kill <target>', desc: 'Instantly kills entities.',
+      detail: 'Use <code>@e[type=zombie]</code> to kill all zombies, or <code>@e[type=item]</code> to clean up item drops.',
+      example: 'kill @e[type=zombie]',
+      tip: 'Be very careful with @e (all entities) — it will kill players too! Use @e[type=!player] to exclude players.' },
+    { cmd: 'fill', syntax: 'fill <x1> <y1> <z1> <x2> <y2> <z2> <block> [mode]', desc: 'Fills a region with a specific block.',
+      detail: 'Modes: <code>replace</code> (default), <code>hollow</code> (only edges), <code>outline</code> (only outer shell), <code>destroy</code> (drops items).',
+      example: 'fill 0 60 0 20 64 20 stone' },
+    { cmd: 'setblock', syntax: 'setblock <x> <y> <z> <block>', desc: 'Places a single block at the given coordinates.',
+      example: 'setblock 0 64 0 diamond_block' },
+    { cmd: 'summon', syntax: 'summon <entity> [x] [y] [z]', desc: 'Spawns an entity at the given location.',
+      example: 'summon minecraft:pig ~ ~ ~',
+      tip: 'Fun entities to summon: pig, cow, villager, iron_golem, ender_dragon, lightning_bolt' },
+  ]},
+  { category: 'Recipes', entries: [
+    { cmd: 'recipe give', syntax: 'recipe give <player> <recipe|*>', desc: 'Unlocks recipes in a player\'s recipe book.',
+      detail: 'Use <code>*</code> to unlock all recipes at once. Only affects the recipe book UI — players can still craft anything at a crafting table.',
+      example: 'recipe give Steve *' },
+    { cmd: 'recipe take', syntax: 'recipe take <player> <recipe|*>', desc: 'Removes recipes from a player\'s recipe book.',
+      detail: 'Hides recipes from the recipe book. Use <code>*</code> to hide all. Players can still craft items manually if they know the pattern.',
+      example: 'recipe take Steve minecraft:diamond_sword',
+      tip: 'To truly disable crafting recipes, you need a datapack or mod like CraftTweaker.' },
+  ]},
+  { category: 'Selectors & Shortcuts', entries: [
+    { cmd: '@a', syntax: '@a', desc: 'Targets ALL players on the server.',
+      detail: 'Use in place of a player name to affect everyone. Example: <code>effect give @a speed 60</code> gives everyone speed.',
+      tip: 'You can filter: @a[distance=..10] = players within 10 blocks of the command source.' },
+    { cmd: '@p', syntax: '@p', desc: 'Targets the NEAREST player.',
+      detail: 'Useful when running commands from command blocks.' },
+    { cmd: '@r', syntax: '@r', desc: 'Targets a RANDOM player.',
+      detail: 'Fun for minigames! Example: <code>tp @r 0 64 0</code> teleports a random player to spawn.' },
+    { cmd: '@e', syntax: '@e', desc: 'Targets ALL entities (mobs, items, everything).',
+      detail: 'Very powerful but dangerous. <code>@e</code> includes players! Use <code>@e[type=!player]</code> to exclude them.',
+      tip: 'Filter by type: @e[type=zombie], @e[type=item], @e[type=!player]' },
+    { cmd: '@s', syntax: '@s', desc: 'Targets the entity running the command (yourself).',
+      detail: 'Rarely used from the server console, more useful in-game or from command blocks.' },
+    { cmd: '~ (tilde)', syntax: '~ or ~5 or ~-3', desc: 'Relative coordinates — offset from current position.',
+      detail: '<code>~</code> = exact current position. <code>~5</code> = 5 blocks forward. <code>~-3</code> = 3 blocks backward. Used in place of X, Y, or Z values.',
+      example: 'tp Steve ~ ~10 ~ (teleport 10 blocks up)' },
+  ]},
+];
+
+function renderCmdHelp(filter) {
+  const body = $('cmd-help-body');
+  const q = (filter || '').toLowerCase().trim();
+
+  let html = '';
+  if (!q) {
+    html += `<div class="cmd-help-intro">
+      <strong>Welcome!</strong> This is a reference for all the commands you can run on your Minecraft server.
+      Click any command to see details, examples, and tips. Use the search box above to find what you need.
+      Commands are sent through the console input below the Quick Actions area.
+    </div>`;
+  }
+
+  let totalMatches = 0;
+
+  for (const cat of CMD_HELP_DATA) {
+    const matchingEntries = cat.entries.filter(e => {
+      if (!q) return true;
+      const haystack = `${e.cmd} ${e.desc} ${e.detail || ''} ${e.syntax} ${e.example || ''} ${e.tip || ''} ${cat.category}`.toLowerCase();
+      return q.split(/\s+/).every(word => haystack.includes(word));
+    });
+
+    if (matchingEntries.length === 0) continue;
+    totalMatches += matchingEntries.length;
+
+    html += `<div class="cmd-help-category">
+      <div class="cmd-help-category-title">${esc(cat.category)}</div>`;
+
+    for (const e of matchingEntries) {
+      const detailParts = [];
+      detailParts.push(`<p>${e.desc}</p>`);
+      if (e.detail) detailParts.push(`<p>${e.detail}</p>`);
+      detailParts.push(`<p><strong>Usage:</strong> <span class="cmd-syntax">${esc(e.syntax)}</span></p>`);
+      if (e.example) detailParts.push(`<p class="cmd-example"><strong>Example:</strong> <span class="cmd-syntax">${esc(e.example)}</span></p>`);
+      if (e.tip) detailParts.push(`<div class="cmd-tip">Tip: ${e.tip}</div>`);
+
+      // Only show "Try it" button for commands that are directly runnable (no arguments needed)
+      const isDirectCmd = !e.syntax.includes('<') && !e.syntax.includes('[') && !e.syntax.includes('|');
+      const tryBtn = isDirectCmd
+        ? `<button class="cmd-help-entry-run" data-try-cmd="${esc(e.cmd)}" title="Send this command to the server">Try it</button>`
+        : '';
+
+      html += `<div class="cmd-help-entry">
+        <div class="cmd-help-entry-header">
+          <span class="cmd-help-entry-toggle">&#9654;</span>
+          <span class="cmd-help-cmd">${esc(e.cmd)}</span>
+          ${tryBtn}
+        </div>
+        <div class="cmd-help-detail">${detailParts.join('')}</div>
+      </div>`;
+    }
+
+    html += '</div>';
+  }
+
+  if (totalMatches === 0) {
+    html = `<div class="cmd-help-no-results">
+      <p>No commands found matching "<strong>${esc(q)}</strong>"</p>
+      <p class="dim" style="margin-top:0.5rem">Try different keywords, e.g. "weather", "player", "spawn", "ban"</p>
+    </div>`;
+  }
+
+  body.innerHTML = html;
+
+  // Wire up expand/collapse
+  body.querySelectorAll('.cmd-help-entry-header').forEach(header => {
+    header.addEventListener('click', (e) => {
+      if (e.target.closest('.cmd-help-entry-run')) return; // don't toggle when clicking Try
+      header.closest('.cmd-help-entry').classList.toggle('open');
+    });
+  });
+
+  // Wire up "Try it" buttons
+  body.querySelectorAll('[data-try-cmd]').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      const cmd = btn.dataset.tryCmd;
+      btn.textContent = 'Sending...';
+      try {
+        const r = await POST('/server/command', { command: cmd });
+        btn.textContent = 'Sent!';
+        flash('quick-action-msg', `${cmd}: ${r.result || 'OK'}`);
+      } catch {
+        try {
+          await POST('/server/stdin', { command: cmd });
+          btn.textContent = 'Sent!';
+          flash('quick-action-msg', `${cmd}: sent via stdin`);
+        } catch (err) {
+          btn.textContent = 'Failed';
+          flash('quick-action-msg', err.message, true);
+        }
+      }
+      setTimeout(() => { btn.textContent = 'Try it'; }, 2000);
+    });
+  });
+
+  // If searching, auto-expand all entries for convenience
+  if (q) {
+    body.querySelectorAll('.cmd-help-entry').forEach(e => e.classList.add('open'));
+  }
+}
+
+// Open/close command help modal
+$('btn-cmd-help').addEventListener('click', () => {
+  show('cmd-help-modal');
+  $('cmd-help-search').value = '';
+  renderCmdHelp('');
+  $('cmd-help-search').focus();
+});
+
+$('cmd-help-close').addEventListener('click', () => hide('cmd-help-modal'));
+$('cmd-help-modal').addEventListener('click', e => { if (e.target === $('cmd-help-modal')) hide('cmd-help-modal'); });
+
+// Live search
+$('cmd-help-search').addEventListener('input', (e) => {
+  renderCmdHelp(e.target.value);
+});
