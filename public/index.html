@@ -312,10 +312,73 @@
       <p id="backup-create-msg" class="control-msg"></p>
     </div>
 
-    <!-- Schedule info -->
+    <!-- Schedule settings (inline-editable) -->
     <div class="control-section" id="backup-schedule-section">
       <h3>Scheduled Backups</h3>
-      <div id="backup-schedule-info" class="dim">Loading schedule...</div>
+      <form id="backup-schedule-form" class="settings-form">
+        <div class="form-group">
+          <label class="checkbox-label">
+            <input type="checkbox" name="backupEnabled" id="sched-backup-enabled" />
+            <span>Enable scheduled backups</span>
+          </label>
+        </div>
+        <div class="form-group">
+          <label>Run Backups</label>
+          <div class="schedule-picker" id="schedule-picker">
+            <select id="sched-frequency">
+              <option value="daily">Every day</option>
+              <option value="weekly">Once a week</option>
+              <option value="twice-daily">Twice a day</option>
+              <option value="every-6h">Every 6 hours</option>
+              <option value="custom">Custom (advanced)</option>
+            </select>
+            <span id="sched-on-label" class="schedule-label hidden">on</span>
+            <select id="sched-weekday" class="hidden">
+              <option value="0">Sunday</option>
+              <option value="1">Monday</option>
+              <option value="2">Tuesday</option>
+              <option value="3">Wednesday</option>
+              <option value="4">Thursday</option>
+              <option value="5">Friday</option>
+              <option value="6">Saturday</option>
+            </select>
+            <span id="sched-at-label" class="schedule-label">at</span>
+            <select id="sched-hour"></select>
+            <span class="schedule-label">:</span>
+            <select id="sched-minute">
+              <option value="0">00</option>
+              <option value="15">15</option>
+              <option value="30">30</option>
+              <option value="45">45</option>
+            </select>
+          </div>
+          <p id="sched-summary" class="hint" style="margin-top:0.35rem"></p>
+        </div>
+        <details id="sched-cron-details" class="cron-details">
+          <summary class="hint" style="cursor:pointer">Advanced: edit cron expression directly</summary>
+          <div class="form-group" style="margin-top:0.5rem">
+            <input type="text" name="backupSchedule" placeholder="0 3 * * *" />
+            <span class="hint">Format: minute hour day-of-month month day-of-week</span>
+          </div>
+        </details>
+        <div class="form-group">
+          <label>Max Scheduled Backups</label>
+          <input type="number" name="maxBackups" placeholder="14" />
+          <span class="hint">0 = keep all. Oldest scheduled backups are pruned automatically.</span>
+        </div>
+        <div class="form-group">
+          <label>Storage Path</label>
+          <div class="input-row">
+            <input type="text" name="backupPath" placeholder="/mnt/backups/minecraft" />
+            <button type="button" class="btn btn-ghost btn-sm" id="btn-browse-backup-path">Browse</button>
+          </div>
+          <span class="hint">Absolute path to the backup directory</span>
+        </div>
+        <div class="btn-row">
+          <button type="submit" class="btn btn-primary btn-sm">Save Schedule</button>
+        </div>
+        <p id="backup-schedule-msg" class="control-msg"></p>
+      </form>
     </div>
 
     <!-- Backup list -->
@@ -347,6 +410,25 @@
     </div>
   </div>
 
+  <!-- Directory browser modal -->
+  <div id="dir-browser-modal" class="modal-overlay hidden">
+    <div class="modal">
+      <div class="modal-header">
+        <h3>Browse Server Directories</h3>
+        <button class="btn btn-ghost btn-sm" id="dir-browser-close">&times;</button>
+      </div>
+      <div class="modal-body">
+        <nav id="dir-browser-crumbs" class="dir-crumbs"></nav>
+        <div id="dir-browser-list" class="dir-browser-list"></div>
+        <div class="btn-row" style="margin-top:0.75rem">
+          <button class="btn btn-primary btn-sm" id="dir-browser-select">Select This Folder</button>
+          <button class="btn btn-ghost btn-sm" id="dir-browser-new-folder">New Folder</button>
+          <button class="btn btn-ghost btn-sm" id="dir-browser-cancel">Cancel</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <!-- Tab: Settings -->
   <section id="tab-settings" class="tab-content hidden">
     <div class="page-header">
@@ -362,7 +444,10 @@
       <form id="app-config-form" class="settings-form">
         <div class="form-group">
           <label>Minecraft Server Path</label>
-          <input type="text" name="serverPath" placeholder="/home/minecraft/server" />
+          <div class="input-row">
+            <input type="text" name="serverPath" placeholder="/home/minecraft/server" />
+            <button type="button" class="btn btn-ghost btn-sm" id="btn-browse-server-path">Browse</button>
+          </div>
           <span class="hint">Absolute path to the folder containing server.jar / run.sh</span>
         </div>
         <div class="form-row">
@@ -405,35 +490,6 @@
             <label>Disabled Mods Folder</label>
             <input type="text" name="disabledModsFolder" placeholder="mods_disabled" />
           </div>
-        </div>
-        <div class="form-group">
-          <label>Change Web Password</label>
-          <input type="password" name="webPassword" placeholder="Leave blank to keep current" />
-        </div>
-        <hr style="border-color:var(--border); margin:0.5rem 0" />
-        <div class="form-group">
-          <label class="checkbox-label">
-            <input type="checkbox" name="backupEnabled" id="cfg-backup-enabled" />
-            <span>Scheduled Backups</span>
-          </label>
-          <span class="hint">Enable automatic backups on a cron schedule</span>
-        </div>
-        <div class="form-row">
-          <div class="form-group">
-            <label>Backup Schedule (cron)</label>
-            <input type="text" name="backupSchedule" placeholder="0 3 * * *" />
-            <span class="hint">Default: 0 3 * * * (daily at 3 AM)</span>
-          </div>
-          <div class="form-group">
-            <label>Max Scheduled Backups</label>
-            <input type="number" name="maxBackups" placeholder="14" />
-            <span class="hint">Oldest scheduled backups are pruned. 0 = keep all.</span>
-          </div>
-        </div>
-        <div class="form-group">
-          <label>Backup Storage Path</label>
-          <input type="text" name="backupPath" placeholder="/mnt/backups/minecraft" />
-          <span class="hint">Absolute path to the backup directory (e.g. a separate HDD)</span>
         </div>
         <hr style="border-color:var(--border); margin:0.5rem 0" />
         <div class="form-group">

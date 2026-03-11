@@ -197,10 +197,22 @@ Tables are created automatically on first startup — no manual migration step n
 
 #### Admin levels
 
-The first user to log in gets `admin_level = 0` (regular) by default. To promote a user to admin, use the API:
+Admin access (`admin_level = 1`) is required for backups, user management, and audit logs. There are several ways to become an admin:
+
+**Automatic admin grant:**
+
+| Login method | Admin level | Why |
+|---|---|---|
+| **Demo mode** (any password) | Always admin | Full access needed to demo the UI |
+| **Local password** (`LOCAL_PASSWORD`) | Always admin | You have the server password — you're the admin |
+| **First OIDC user** (Google/Microsoft) | Auto-promoted | When no admins exist in the database yet, the first person to log in via OIDC is automatically promoted to admin |
+
+**Manual promotion** (for additional admins after the first):
+
+Once you're logged in as an admin, promote other users from the Users tab in Settings, or via the API:
 
 ```bash
-curl -X PUT http://localhost:3000/api/users/you@gmail.com/admin \
+curl -X PUT http://localhost:3000/api/users/friend@gmail.com/admin \
   -H 'Content-Type: application/json' \
   -H 'X-CSRF-Token: <token>' \
   -H 'Cookie: mcm.sid=<session>' \
@@ -213,7 +225,7 @@ Or connect to the database directly:
 UPDATE users SET admin_level = 1 WHERE email = 'you@gmail.com';
 ```
 
-Admin users can access `GET /api/users`, `PUT /api/users/:email/admin`, `DELETE /api/users/:email`, and `GET /api/audit-logs`.
+Admin users can access backups, `GET /api/users`, `PUT /api/users/:email/admin`, `DELETE /api/users/:email`, and `GET /api/audit-logs`.
 
 ---
 

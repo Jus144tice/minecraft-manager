@@ -21,7 +21,7 @@ import connectPgSimple from 'connect-pg-simple';
 import { Issuer, generators } from 'openid-client';
 import crypto from 'crypto';
 import { audit } from './audit.js';
-import { getPool, upsertUser, getUser } from './db.js';
+import { getPool, upsertUser, getUser, countAdmins, setAdminLevel } from './db.js';
 
 const SESSION_MAX_AGE = 24 * 60 * 60 * 1000; // 24 hours
 
@@ -165,7 +165,10 @@ export async function buildAuthRouter(config) {
   }
 
   // --- Internal helper: complete a successful login ---
-  function loginUser(req, userInfo, onDone) {
+  // Options:
+  //   forceAdmin: true — grant admin regardless of DB (demo / local-password logins)
+  //   autoPromote: true — promote to admin if no admins exist yet (first OIDC user)
+  function loginUser(req, userInfo, onDone, { forceAdmin = false, autoPromote = false } = {}) {
     // Regenerate session ID to prevent session fixation attacks.
     req.session.regenerate(async (err) => {
       if (err) return onDone(err);
@@ -175,10 +178,22 @@ export async function buildAuthRouter(config) {
       try {
         const dbUser = await upsertUser(userInfo.email, userInfo.name, userInfo.provider);
         if (dbUser) adminLevel = dbUser.admin_level;
+
+        // Auto-promote the first user to admin when no admins exist yet
+        if (autoPromote && dbUser && adminLevel === 0) {
+          const admins = await countAdmins();
+          if (admins === 0) {
+            await setAdminLevel(userInfo.email, 1);
+            adminLevel = 1;
+            audit('AUTO_PROMOTE_ADMIN', { email: userInfo.email, reason: 'first user' });
+          }
+        }
       } catch (e) {
         // DB failure should not block login — just log and continue
         console.error('[Auth] Failed to upsert user in DB:', e.message);
       }
+
+      if (forceAdmin) adminLevel = 1;
 
       req.session.user = { ...userInfo, adminLevel, loginAt: Date.now() };
       // Generate a fresh CSRF token bound to this session.
@@ -255,7 +270,7 @@ export async function buildAuthRouter(config) {
         loginUser(req, { email, name: claims.name || email, provider: providerKey }, (err) => {
           if (err) return res.status(500).send('Session error during login. Please try again.');
           res.redirect('/');
-        });
+        }, { autoPromote: true });
       } catch (err) {
         audit('LOGIN_ERROR', { provider: providerKey, error: err.message, ip: req.ip });
         res.status(500).send(`Authentication failed: ${err.message}`);
@@ -277,7 +292,7 @@ export async function buildAuthRouter(config) {
       loginUser(req, { email: 'demo@local', name: 'Demo User', provider: 'local' }, (err) => {
         if (err) return res.status(500).json({ error: 'Session error.' });
         res.json({ ok: true });
-      });
+      }, { forceAdmin: true });
       return;
     }
 
@@ -294,7 +309,7 @@ export async function buildAuthRouter(config) {
     loginUser(req, { email: 'admin@local', name: 'Admin', provider: 'local' }, (err) => {
       if (err) return res.status(500).json({ error: 'Session error.' });
       res.json({ ok: true });
-    });
+    }, { forceAdmin: true });
   });
 
   // --- Logout ---

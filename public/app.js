@@ -1060,7 +1060,6 @@ $('app-config-form').addEventListener('submit', async (e) => {
     else if (el.type === 'number' && el.value !== '') { data[el.name] = Number(el.value); }
     else if (el.value !== '') { data[el.name] = el.value; }
   }
-  if (!data.webPassword) delete data.webPassword;
   try {
     await POST('/config', data);
     if (data.demoMode === false) {
@@ -1185,23 +1184,273 @@ async function loadBackups() {
   }
 }
 
-async function loadBackupSchedule() {
-  const el = $('backup-schedule-info');
-  try {
-    const sched = await GET('/backups/schedule');
-    if (!sched.enabled) {
-      el.innerHTML = 'Scheduled backups are <strong>disabled</strong>. Enable them in <strong>Settings → App Config</strong>.';
-      return;
-    }
-    const parts = [];
-    parts.push(`Schedule: <strong>${esc(sched.schedule)}</strong> (cron)`);
-    if (sched.backupPath) parts.push(`Storage: <strong>${esc(sched.backupPath)}</strong>`);
-    if (sched.maxBackups > 0) parts.push(`Retention: keep last <strong>${sched.maxBackups}</strong> scheduled backups`);
-    el.innerHTML = parts.join(' &nbsp;|&nbsp; ');
-  } catch (err) {
-    el.innerHTML = `<span class="error-msg">${esc(err.message)}</span>`;
+// --- Schedule picker logic ---
+const WEEKDAY_NAMES = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+
+// Populate hour dropdown with 12-hour labels
+(function initHourSelect() {
+  const sel = $('sched-hour');
+  for (let h = 0; h < 24; h++) {
+    const opt = document.createElement('option');
+    opt.value = h;
+    const h12 = h === 0 ? 12 : h > 12 ? h - 12 : h;
+    const ampm = h < 12 ? 'AM' : 'PM';
+    opt.textContent = `${h12} ${ampm}`;
+    sel.appendChild(opt);
+  }
+})();
+
+function formatHour(h) {
+  const h12 = h === 0 ? 12 : h > 12 ? h - 12 : h;
+  return `${h12}:${$('sched-minute').value.padStart(2, '0')} ${h < 12 ? 'AM' : 'PM'}`;
+}
+
+// Update picker visibility based on frequency
+function updatePickerVisibility() {
+  const freq = $('sched-frequency').value;
+  const showWeekday = freq === 'weekly';
+  const showTime = freq !== 'custom';
+  $('sched-on-label').classList.toggle('hidden', !showWeekday);
+  $('sched-weekday').classList.toggle('hidden', !showWeekday);
+  $('sched-at-label').classList.toggle('hidden', !showTime);
+  $('sched-hour').classList.toggle('hidden', !showTime);
+  $('sched-minute').classList.toggle('hidden', !showTime);
+  // Hide the ":" label between hour and minute
+  const colonLabel = $('sched-hour').nextElementSibling;
+  if (colonLabel) colonLabel.classList.toggle('hidden', !showTime);
+
+  // Auto-open cron details in custom mode
+  if (freq === 'custom') {
+    $('sched-cron-details').open = true;
   }
 }
+
+// Picker → cron expression
+function pickerToCron() {
+  const freq = $('sched-frequency').value;
+  if (freq === 'custom') return; // don't overwrite manual cron
+  const min = $('sched-minute').value;
+  const hr = $('sched-hour').value;
+  const day = $('sched-weekday').value;
+  let expr;
+  switch (freq) {
+    case 'daily':      expr = `${min} ${hr} * * *`; break;
+    case 'weekly':     expr = `${min} ${hr} * * ${day}`; break;
+    case 'twice-daily': expr = `${min} ${hr},${(+hr + 12) % 24} * * *`; break;
+    case 'every-6h':   expr = `${min} */6 * * *`; break;
+    default:           expr = `${min} ${hr} * * *`;
+  }
+  $('backup-schedule-form').elements.backupSchedule.value = expr;
+  updateSummary();
+}
+
+// Cron expression → picker (best effort)
+function cronToPicker(expr) {
+  const parts = (expr || '0 3 * * *').trim().split(/\s+/);
+  if (parts.length < 5) return;
+  const [min, hr, dom, mon, dow] = parts;
+
+  // Try to match a known pattern
+  if (dom === '*' && mon === '*' && dow === '*' && !hr.includes(',') && !hr.includes('/')) {
+    $('sched-frequency').value = 'daily';
+    $('sched-hour').value = parseInt(hr) || 0;
+    $('sched-minute').value = nearestQuarter(parseInt(min) || 0);
+  } else if (dom === '*' && mon === '*' && /^\d$/.test(dow) && !hr.includes(',')) {
+    $('sched-frequency').value = 'weekly';
+    $('sched-weekday').value = dow;
+    $('sched-hour').value = parseInt(hr) || 0;
+    $('sched-minute').value = nearestQuarter(parseInt(min) || 0);
+  } else if (dom === '*' && mon === '*' && dow === '*' && hr.includes(',') && hr.split(',').length === 2) {
+    const hours = hr.split(',').map(Number);
+    if (Math.abs(hours[1] - hours[0]) === 12 || Math.abs(hours[0] - hours[1]) === 12) {
+      $('sched-frequency').value = 'twice-daily';
+      $('sched-hour').value = Math.min(...hours);
+      $('sched-minute').value = nearestQuarter(parseInt(min) || 0);
+    } else {
+      $('sched-frequency').value = 'custom';
+    }
+  } else if (hr === '*/6' && dom === '*' && mon === '*' && dow === '*') {
+    $('sched-frequency').value = 'every-6h';
+    $('sched-minute').value = nearestQuarter(parseInt(min) || 0);
+    $('sched-hour').value = 0;
+  } else {
+    $('sched-frequency').value = 'custom';
+  }
+  updatePickerVisibility();
+  updateSummary();
+}
+
+function nearestQuarter(min) {
+  const quarters = [0, 15, 30, 45];
+  return quarters.reduce((a, b) => Math.abs(b - min) < Math.abs(a - min) ? b : a);
+}
+
+// Human-readable summary
+function updateSummary() {
+  const cronVal = $('backup-schedule-form').elements.backupSchedule.value || '0 3 * * *';
+  const parts = cronVal.trim().split(/\s+/);
+  if (parts.length < 5) { $('sched-summary').textContent = ''; return; }
+  const [min, hr, dom, mon, dow] = parts;
+  let text = '';
+
+  if (dom === '*' && mon === '*' && dow === '*' && !hr.includes('/') && !hr.includes(',')) {
+    text = `Runs every day at ${fmtTime(+hr, +min)}`;
+  } else if (dom === '*' && mon === '*' && /^\d$/.test(dow) && !hr.includes(',')) {
+    text = `Runs every ${WEEKDAY_NAMES[+dow]} at ${fmtTime(+hr, +min)}`;
+  } else if (hr.includes(',')) {
+    const hours = hr.split(',').map(Number);
+    text = `Runs daily at ${hours.map(h => fmtTime(h, +min)).join(' and ')}`;
+  } else if (hr === '*/6') {
+    text = `Runs every 6 hours at :${String(min).padStart(2, '0')}`;
+  } else {
+    text = `Custom schedule: ${cronVal}`;
+  }
+  $('sched-summary').textContent = text;
+}
+
+function fmtTime(h, m) {
+  const h12 = h === 0 ? 12 : h > 12 ? h - 12 : h;
+  return `${h12}:${String(m).padStart(2, '0')} ${h < 12 ? 'AM' : 'PM'}`;
+}
+
+// Wire up picker change events
+$('sched-frequency').addEventListener('change', () => { updatePickerVisibility(); pickerToCron(); });
+$('sched-hour').addEventListener('change', pickerToCron);
+$('sched-minute').addEventListener('change', pickerToCron);
+$('sched-weekday').addEventListener('change', pickerToCron);
+
+// Cron field manual edits → update picker
+$('backup-schedule-form').elements.backupSchedule.addEventListener('input', (e) => {
+  cronToPicker(e.target.value);
+});
+
+async function loadBackupSchedule() {
+  try {
+    const sched = await GET('/backups/schedule');
+    const form = $('backup-schedule-form');
+    form.elements.backupEnabled.checked = !!sched.enabled;
+    form.elements.backupSchedule.value = sched.schedule || '0 3 * * *';
+    form.elements.maxBackups.value = sched.maxBackups || '';
+    form.elements.backupPath.value = sched.backupPath || '';
+    cronToPicker(sched.schedule);
+  } catch (err) {
+    flash('backup-schedule-msg', err.message, true);
+  }
+}
+
+$('backup-schedule-form').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const form = e.target;
+  const data = {
+    backupEnabled: form.elements.backupEnabled.checked,
+    backupSchedule: form.elements.backupSchedule.value || '0 3 * * *',
+    maxBackups: Number(form.elements.maxBackups.value) || 0,
+    backupPath: form.elements.backupPath.value,
+  };
+  try {
+    await POST('/config', data);
+    flash('backup-schedule-msg', 'Backup schedule saved!');
+  } catch (err) {
+    flash('backup-schedule-msg', err.message, true);
+  }
+});
+
+// --- Directory browser ---
+let dirBrowserCallback = null;
+let dirBrowserCurrent = '';
+
+function renderCrumbs(crumbs) {
+  const nav = $('dir-browser-crumbs');
+  nav.innerHTML = '';
+  // On Windows with no path selected yet (drive list), show a root label
+  if (!crumbs.length) {
+    const span = document.createElement('span');
+    span.className = 'dir-crumb-current';
+    span.textContent = 'My Computer';
+    nav.appendChild(span);
+    return;
+  }
+  crumbs.forEach((crumb, i) => {
+    if (i > 0) {
+      const sep = document.createElement('span');
+      sep.className = 'dir-crumb-sep';
+      sep.textContent = ' / ';
+      nav.appendChild(sep);
+    }
+    const el = document.createElement('span');
+    if (i === crumbs.length - 1) {
+      el.className = 'dir-crumb dir-crumb-current';
+      el.textContent = crumb.name;
+    } else {
+      el.className = 'dir-crumb';
+      el.textContent = crumb.name;
+      el.addEventListener('click', () => dirBrowserNavigate(crumb.path));
+    }
+    nav.appendChild(el);
+  });
+}
+
+async function dirBrowserNavigate(dirPath) {
+  const list = $('dir-browser-list');
+  list.innerHTML = '<p class="dim" style="padding:0.75rem">Loading...</p>';
+  try {
+    const qs = dirPath ? `?path=${encodeURIComponent(dirPath)}` : '';
+    const result = await GET(`/browse-dirs${qs}`);
+    dirBrowserCurrent = result.current || '';
+    renderCrumbs(result.crumbs || []);
+
+    list.innerHTML = result.dirs.map(d =>
+      `<div class="dir-entry" data-path="${esc(d.path)}"><span class="dir-entry-icon">&#128193;</span> ${esc(d.name)}</div>`
+    ).join('');
+    for (const entry of list.querySelectorAll('.dir-entry')) {
+      entry.addEventListener('click', () => dirBrowserNavigate(entry.dataset.path));
+    }
+  } catch (err) {
+    list.innerHTML = `<p class="error-msg" style="padding:0.75rem">${esc(err.message)}</p>`;
+  }
+}
+
+function openDirBrowser(startPath, callback) {
+  dirBrowserCallback = callback;
+  show('dir-browser-modal');
+  dirBrowserNavigate(startPath || '');
+}
+
+function closeDirBrowser() { hide('dir-browser-modal'); }
+
+$('dir-browser-select').addEventListener('click', () => {
+  if (dirBrowserCallback && dirBrowserCurrent) {
+    dirBrowserCallback(dirBrowserCurrent);
+  }
+  closeDirBrowser();
+});
+
+$('dir-browser-new-folder').addEventListener('click', () => {
+  const name = prompt('New folder name:');
+  if (!name || !name.trim()) return;
+  const sep = dirBrowserCurrent.includes('\\') ? '\\' : '/';
+  const newPath = dirBrowserCurrent + sep + name.trim();
+  POST('/mkdir', { path: newPath })
+    .then(() => dirBrowserNavigate(newPath))
+    .catch(err => alert('Failed to create folder: ' + err.message));
+});
+
+$('dir-browser-cancel').addEventListener('click', closeDirBrowser);
+$('dir-browser-close').addEventListener('click', closeDirBrowser);
+
+$('btn-browse-backup-path').addEventListener('click', () => {
+  const current = $('backup-schedule-form').elements.backupPath.value;
+  openDirBrowser(current, (selected) => {
+    $('backup-schedule-form').elements.backupPath.value = selected;
+  });
+});
+
+$('btn-browse-server-path').addEventListener('click', () => {
+  const current = $('app-config-form').elements.serverPath.value;
+  openDirBrowser(current, (selected) => {
+    $('app-config-form').elements.serverPath.value = selected;
+  });
+});
 
 $('btn-create-backup').addEventListener('click', async () => {
   const btn = $('btn-create-backup');

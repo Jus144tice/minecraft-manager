@@ -115,6 +115,13 @@ export async function setAdminLevel(email, level) {
   return rows[0] || null;
 }
 
+/** Count the number of admin users (admin_level >= 1). */
+export async function countAdmins() {
+  if (!pool) return 0;
+  const { rows } = await pool.query('SELECT COUNT(*) AS count FROM users WHERE admin_level >= 1');
+  return parseInt(rows[0].count, 10);
+}
+
 /** Delete a user by email. */
 export async function deleteUser(email) {
   if (!pool) return false;
