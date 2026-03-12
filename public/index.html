@@ -583,6 +583,13 @@
         <hr style="border-color:var(--border); margin:0.5rem 0" />
         <div class="form-group">
           <label class="checkbox-label">
+            <input type="checkbox" name="autoStart" id="cfg-auto-start" />
+            <span>Auto-start Minecraft on boot</span>
+          </label>
+          <span class="hint">Automatically launches the Minecraft server when the manager starts. Recommended when running as a systemd service.</span>
+        </div>
+        <div class="form-group">
+          <label class="checkbox-label">
             <input type="checkbox" name="demoMode" id="cfg-demo-mode" />
             <span>Demo Mode</span>
             <span class="badge-important">Shows seed data, no real server connection</span>

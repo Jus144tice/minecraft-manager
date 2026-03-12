@@ -237,6 +237,88 @@ httpServer.listen(PORT, BIND_HOST, () => {
     console.log('Disable: set "demoMode": false in config.json and restart.\n');
   } else {
     console.log(`\nMinecraft Manager running at http://${BIND_HOST}:${PORT}`);
-    console.log(`Server path: ${config.serverPath}\n`);
+    console.log(`Server path: ${config.serverPath}`);
+
+    // Auto-start Minecraft server on boot
+    if (config.autoStart) {
+      console.log('Auto-starting Minecraft server...\n');
+      try {
+        mc.start(config.serverPath, config.startCommand);
+        ctx.scheduleRconConnect(15000);
+        ctx.broadcastStatus();
+        info('Auto-start: Minecraft server starting', { serverPath: config.serverPath });
+      } catch (err) {
+        console.error(`Auto-start failed: ${err.message}`);
+        info('Auto-start failed', { error: err.message });
+      }
+    } else {
+      console.log('Auto-start disabled — start the server from the Dashboard.\n');
+    }
   }
 });
+
+// ============================================================
+// Graceful shutdown — stop Minecraft cleanly before exiting
+// ============================================================
+
+let shuttingDown = false;
+
+async function gracefulShutdown(signal) {
+  if (shuttingDown) return;
+  shuttingDown = true;
+  console.log(`\n[Manager] Received ${signal} — shutting down gracefully...`);
+
+  // Close WebSocket connections
+  for (const ws of wsClients) {
+    try { ws.close(1001, 'Server shutting down'); } catch { /* ignore */ }
+  }
+
+  // Stop Minecraft server if running
+  if (!config.demoMode && mc.running) {
+    console.log('[Manager] Stopping Minecraft server...');
+    try {
+      // Try graceful stop via RCON first, fall back to stdin
+      if (ctx.rconConnected) {
+        await ctx.rconCmd('say Server shutting down...');
+        await ctx.rconCmd('save-all');
+        // Give save-all a moment to flush
+        await new Promise(r => setTimeout(r, 2000));
+        await ctx.rconCmd('stop');
+      } else {
+        mc.stop();
+      }
+
+      // Wait up to 30 seconds for the server to stop
+      await new Promise((resolve) => {
+        const timeout = setTimeout(() => {
+          console.log('[Manager] Minecraft server did not stop in 30s — force killing...');
+          mc.kill();
+          resolve();
+        }, 30000);
+        mc.once('stopped', () => {
+          clearTimeout(timeout);
+          resolve();
+        });
+      });
+      console.log('[Manager] Minecraft server stopped.');
+    } catch (err) {
+      console.error(`[Manager] Error stopping Minecraft: ${err.message}`);
+      mc.kill();
+    }
+  }
+
+  // Close HTTP server
+  httpServer.close(() => {
+    console.log('[Manager] HTTP server closed. Goodbye.');
+    process.exit(0);
+  });
+
+  // Force exit after 5 more seconds if HTTP server hangs
+  setTimeout(() => {
+    console.log('[Manager] Forced exit.');
+    process.exit(1);
+  }, 5000);
+}
+
+process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
+process.on('SIGINT', () => gracefulShutdown('SIGINT'));

@@ -108,6 +108,9 @@ Fill in `config.json` (copy from `config.example.json`):
   "modsFolder": "mods",
   "disabledModsFolder": "mods_disabled",
 
+  // Auto-start the Minecraft server when the manager starts (recommended for systemd service)
+  "autoStart": true,
+
   // Backups — all settings can also be changed in Settings → App Config
   "backupEnabled": true,              // enable scheduled backups
   "backupSchedule": "0 3 * * *",      // cron expression (default: daily at 3 AM)
@@ -271,9 +274,32 @@ For auto-restart on file changes:
 npm run dev
 ```
 
-### Run as a background service (production)
+### Run as a systemd service (production)
 
-Create a systemd service file. Secrets go directly in the service file — they are readable only by root and the service user, and never committed to git.
+In production, you want the manager **and** the Minecraft server to start automatically on boot and shut down gracefully on reboot. The manager handles both:
+
+1. **On start** — if `autoStart` is `true` in `config.json`, the manager launches the Minecraft server and connects RCON automatically
+2. **On stop** (reboot, `systemctl stop`, etc.) — the manager sends `save-all` + `stop` to Minecraft via RCON, waits up to 30 seconds for a clean exit, then shuts itself down
+
+This means you only need **one systemd service** — the manager — and it takes care of everything.
+
+#### 1. Enable auto-start in config.json
+
+Set `autoStart` to `true` (or toggle it in **Settings → App Config** in the UI):
+
+```json
+{
+  "demoMode": false,
+  "autoStart": true,
+  "serverPath": "/home/minecraft/server",
+  "startCommand": "java -Xms2G -Xmx8G @user_jvm_args.txt ...",
+  ...
+}
+```
+
+#### 2. Create the systemd service file
+
+Secrets go directly in the service file — they are readable only by root and the service user, and never committed to git.
 
 ```bash
 sudo nano /etc/systemd/system/mc-manager.service
@@ -289,7 +315,12 @@ User=minecraft
 WorkingDirectory=/home/minecraft/minecraft-manager
 ExecStart=/usr/bin/node server.js
 Restart=on-failure
-RestartSec=5
+RestartSec=10
+
+# Graceful shutdown: the manager catches SIGTERM, saves the world,
+# stops Minecraft, then exits. Give it enough time (up to 45s).
+KillSignal=SIGTERM
+TimeoutStopSec=45
 
 # --- Secrets and deployment config ---
 # Generate SESSION_SECRET with:
@@ -316,19 +347,41 @@ Environment=GOOGLE_CLIENT_SECRET=
 WantedBy=multi-user.target
 ```
 
-Enable and start:
+#### 3. Enable and start
 
 ```bash
 sudo systemctl daemon-reload
-sudo systemctl enable mc-manager
-sudo systemctl start mc-manager
+sudo systemctl enable mc-manager    # start on boot
+sudo systemctl start mc-manager     # start now
 ```
 
-Check status and live logs:
+#### 4. Check status and logs
+
 ```bash
 sudo systemctl status mc-manager
 sudo journalctl -u mc-manager -f
 ```
+
+#### What happens on boot
+
+1. System boots → systemd starts `mc-manager.service`
+2. Manager loads `config.json`, starts the web panel on port 3000
+3. Manager auto-starts the Minecraft server process (if `autoStart: true`)
+4. Manager connects RCON after ~15 seconds (retries for up to 2 minutes)
+5. Web panel is live — you can manage everything from the browser
+
+#### What happens on shutdown
+
+1. `systemctl stop mc-manager` (or system reboot) sends `SIGTERM`
+2. Manager broadcasts "Server shutting down..." to online players
+3. Manager runs `save-all` to flush world data, waits 2 seconds
+4. Manager sends `stop` to Minecraft via RCON (falls back to stdin if RCON is down)
+5. Waits up to 30 seconds for Minecraft to exit cleanly
+6. If Minecraft doesn't stop, force-kills it
+7. Closes all WebSocket connections and the HTTP server
+8. Exits cleanly — systemd sees exit code 0
+
+> **Note:** You can still start/stop the Minecraft server manually from the Dashboard at any time. Auto-start only applies when the manager itself starts up (boot or `systemctl restart`).
 
 ---
 

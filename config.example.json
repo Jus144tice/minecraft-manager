@@ -10,6 +10,7 @@
   "minecraftVersion": "1.20.1",
   "modsFolder": "mods",
   "disabledModsFolder": "mods_disabled",
+  "autoStart": false,
   "backupEnabled": true,
   "backupSchedule": "0 3 * * *",
   "backupPath": "/mnt/backups/minecraft",
