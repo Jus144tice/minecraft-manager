@@ -95,8 +95,12 @@ Fill in `config.json` (copy from `config.example.json`):
   "rconPort": 25575,
   "rconPassword": "pick-a-strong-password",
 
-  // Port the web panel listens on (only exposed to localhost — behind a reverse proxy)
+  // Port the web panel listens on
   "webPort": 3000,
+
+  // Bind address — 127.0.0.1 (default, production) or 0.0.0.0 (LAN testing only)
+  // See "Binding & network access" below
+  "bindHost": "127.0.0.1",
 
   // The command used to launch the server (see "Finding your start command" below)
   "startCommand": "java -Xms2G -Xmx8G @user_jvm_args.txt @libraries/net/minecraftforge/forge/1.20.1-47.3.0/unix_args.txt nogui",
@@ -123,6 +127,25 @@ Fill in `config.json` (copy from `config.example.json`):
 ```
 
 > **Note:** `rconPassword` is stored in `config.json` on the server. It is never sent to the browser. `config.json` is in `.gitignore`.
+
+### Binding & network access
+
+The `bindHost` setting controls which network interfaces the web panel listens on:
+
+| Mode | `bindHost` | Who can reach it | Use case |
+|---|---|---|---|
+| **Production** (default) | `127.0.0.1` | Localhost only — requires Nginx/Caddy reverse proxy | Internet-facing deployment with HTTPS |
+| **LAN testing** | `0.0.0.0` | Any device on the local network | Trying the panel from your phone or another PC on a trusted home LAN |
+
+**Production (recommended):** Leave `bindHost` at `127.0.0.1` and put Nginx or Caddy in front (see [Nginx reverse proxy](#nginx-reverse-proxy) below). This is the default and the only safe option for internet-facing deployments.
+
+**Temporary LAN testing:** Set `bindHost` to `0.0.0.0` to access the panel from other devices on your home network (e.g. `http://192.168.1.50:3000`). A startup warning is printed when this is active outside of demo mode. A ready-made config for LAN testing is provided:
+
+```bash
+cp config.lan-example.json config.json
+```
+
+> **Switch back to `127.0.0.1` before deploying to production.** Binding to `0.0.0.0` without a reverse proxy exposes the panel without HTTPS, making session cookies and credentials vulnerable on untrusted networks.
 
 ### Environment variables
 

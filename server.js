@@ -228,7 +228,14 @@ if (!config.demoMode) {
   Backup.setupBackupSchedule(config, mc);
 }
 
-const BIND_HOST = config.bindHost || '0.0.0.0';
+const BIND_HOST = config.bindHost || '127.0.0.1';
+
+if (BIND_HOST === '0.0.0.0' && !config.demoMode) {
+  console.warn('\n⚠  WARNING: Web panel is bound to all interfaces (0.0.0.0).');
+  console.warn('   This is intended only for trusted LAN testing.');
+  console.warn('   For production, use bindHost=127.0.0.1 behind Nginx or another reverse proxy.\n');
+}
+
 httpServer.listen(PORT, BIND_HOST, () => {
   info('Minecraft Manager started', { port: PORT, demoMode: !!config.demoMode });
   if (config.demoMode) {
