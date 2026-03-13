@@ -5,6 +5,13 @@
 
 import { insertAuditLog } from './db.js';
 
+// Optional notification hook — set at startup by initNotifications().
+let notifyHook = null;
+
+export function setNotifyHook(fn) {
+  notifyHook = fn;
+}
+
 export function audit(action, details = {}) {
   const entry = {
     time: new Date().toISOString(),
@@ -16,6 +23,9 @@ export function audit(action, details = {}) {
 
   // Fire-and-forget write to DB (never blocks the caller)
   insertAuditLog(action, details);
+
+  // Fire-and-forget notification (never blocks the caller)
+  if (notifyHook) notifyHook(action, details);
 }
 
 export function info(message, details = {}) {
