@@ -7,6 +7,9 @@ import {
   isSafeCommand,
   sanitizeReason,
   validateConfig,
+  parseLaunchCommand,
+  migrateLaunchConfig,
+  launchToString,
 } from '../src/validate.js';
 
 // --- isValidMinecraftName ---
@@ -122,7 +125,7 @@ test('sanitizeReason: returns default for empty/null', () => {
 const GOOD_CONFIG = {
   demoMode: false,
   serverPath: '/home/minecraft/server',
-  startCommand: 'java -Xmx8G @args.txt nogui',
+  launch: { executable: 'java', args: ['-Xmx8G', '@args.txt', 'nogui'] },
   rconPort: 25575,
   webPort: 3000,
   bindHost: '127.0.0.1',
@@ -142,10 +145,23 @@ test('validateConfig: errors on missing serverPath', () => {
   assert.match(errors[0], /serverPath/);
 });
 
-test('validateConfig: errors on missing startCommand', () => {
-  const errors = validateConfig({ ...GOOD_CONFIG, startCommand: '' });
+test('validateConfig: errors on missing launch config', () => {
+  const { launch: _, ...noLaunch } = GOOD_CONFIG;
+  const errors = validateConfig(noLaunch);
   assert.equal(errors.length, 1);
-  assert.match(errors[0], /startCommand/);
+  assert.match(errors[0], /launch/);
+});
+
+test('validateConfig: errors on empty launch executable', () => {
+  const errors = validateConfig({ ...GOOD_CONFIG, launch: { executable: '', args: [] } });
+  assert.equal(errors.length, 1);
+  assert.match(errors[0], /executable/);
+});
+
+test('validateConfig: errors on missing launch.args array', () => {
+  const errors = validateConfig({ ...GOOD_CONFIG, launch: { executable: 'java' } });
+  assert.equal(errors.length, 1);
+  assert.match(errors[0], /args/);
 });
 
 test('validateConfig: errors on invalid rconPort', () => {
@@ -177,12 +193,16 @@ test('validateConfig: accepts 0.0.0.0 as bindHost', () => {
 });
 
 test('validateConfig: allows omitted optional fields', () => {
-  const minimal = { demoMode: false, serverPath: '/srv/mc', startCommand: 'java -jar server.jar' };
+  const minimal = {
+    demoMode: false,
+    serverPath: '/srv/mc',
+    launch: { executable: 'java', args: ['-jar', 'server.jar'] },
+  };
   assert.deepEqual(validateConfig(minimal), []);
 });
 
 test('validateConfig: collects multiple errors', () => {
-  const errors = validateConfig({ demoMode: false, serverPath: '', startCommand: '', rconPort: -1 });
+  const errors = validateConfig({ demoMode: false, serverPath: '', rconPort: -1 });
   assert.ok(errors.length >= 3);
 });
 
@@ -210,4 +230,64 @@ test('validateConfig: rejects float port number', () => {
   const errors = validateConfig({ ...GOOD_CONFIG, webPort: 3000.5 });
   assert.equal(errors.length, 1);
   assert.match(errors[0], /webPort/);
+});
+
+// --- parseLaunchCommand ---
+
+test('parseLaunchCommand: parses simple command', () => {
+  const result = parseLaunchCommand('java -jar server.jar nogui');
+  assert.deepEqual(result, { executable: 'java', args: ['-jar', 'server.jar', 'nogui'] });
+});
+
+test('parseLaunchCommand: handles quoted arguments', () => {
+  const result = parseLaunchCommand('java "-Xmx8G" "path with spaces/server.jar"');
+  assert.equal(result.executable, 'java');
+  assert.deepEqual(result.args, ['"-Xmx8G"', '"path with spaces/server.jar"']);
+});
+
+test('parseLaunchCommand: handles @arg files', () => {
+  const result = parseLaunchCommand('java @user_jvm_args.txt @libraries/net/forge/unix_args.txt nogui');
+  assert.equal(result.executable, 'java');
+  assert.ok(result.args.includes('@user_jvm_args.txt'));
+});
+
+test('parseLaunchCommand: returns null for empty string', () => {
+  assert.equal(parseLaunchCommand(''), null);
+  assert.equal(parseLaunchCommand('   '), null);
+});
+
+// --- migrateLaunchConfig ---
+
+test('migrateLaunchConfig: converts startCommand to launch', () => {
+  const config = { startCommand: 'java -Xmx8G -jar server.jar', serverPath: '/srv' };
+  assert.equal(migrateLaunchConfig(config), true);
+  assert.deepEqual(config.launch, { executable: 'java', args: ['-Xmx8G', '-jar', 'server.jar'] });
+  assert.equal(config.startCommand, undefined);
+});
+
+test('migrateLaunchConfig: skips when launch already exists', () => {
+  const config = { launch: { executable: 'java', args: [] }, startCommand: 'old' };
+  assert.equal(migrateLaunchConfig(config), false);
+});
+
+test('migrateLaunchConfig: skips when no startCommand', () => {
+  const config = { serverPath: '/srv' };
+  assert.equal(migrateLaunchConfig(config), false);
+});
+
+// --- launchToString ---
+
+test('launchToString: renders command preview', () => {
+  const result = launchToString({ executable: 'java', args: ['-Xmx8G', '-jar', 'server.jar'] });
+  assert.equal(result, 'java -Xmx8G -jar server.jar');
+});
+
+test('launchToString: quotes args with spaces', () => {
+  const result = launchToString({ executable: 'java', args: ['path with spaces/file.jar'] });
+  assert.equal(result, 'java "path with spaces/file.jar"');
+});
+
+test('launchToString: returns empty string for null/missing', () => {
+  assert.equal(launchToString(null), '');
+  assert.equal(launchToString({}), '');
 });

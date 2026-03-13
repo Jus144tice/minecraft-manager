@@ -179,7 +179,7 @@ export function createServices({ config, saveConfig, loadConfig, mc, broadcast, 
 
     autoRestartTimer = setTimeout(() => {
       try {
-        mc.start(config.serverPath, config.startCommand);
+        mc.start(config.launch, config.serverPath);
         scheduleRconConnect(15000);
         broadcastStatus();
         audit('SERVER_AUTO_RESTART', { attempt, code });

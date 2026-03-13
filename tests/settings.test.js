@@ -38,7 +38,7 @@ test('Config redaction: preserves all other fields', () => {
   const config = {
     demoMode: false,
     serverPath: '/srv/mc',
-    startCommand: 'java -jar server.jar',
+    launch: { executable: 'java', args: ['-jar', 'server.jar'] },
     rconHost: '127.0.0.1',
     rconPort: 25575,
     rconPassword: 'secret',
@@ -67,7 +67,7 @@ const ALLOWED_KEYS = [
   'rconHost',
   'rconPort',
   'rconPassword',
-  'startCommand',
+  'launch',
   'minecraftVersion',
   'modsFolder',
   'disabledModsFolder',
@@ -79,6 +79,9 @@ const ALLOWED_KEYS = [
   'backupTimezone',
   'bindHost',
   'autoStart',
+  'autoRestart',
+  'tpsAlertThreshold',
+  'notifications',
 ];
 
 function filterConfigUpdate(body) {

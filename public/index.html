@@ -877,11 +877,25 @@
               <span class="hint">Must match rcon.password in server.properties</span>
             </div>
             <div class="form-group">
-              <label>Server Start Command</label>
-              <input type="text" name="startCommand" placeholder="java -Xms6G -Xmx10G @user_jvm_args.txt ..." />
+              <label>Executable</label>
+              <input type="text" id="launch-executable" placeholder="java" />
+              <span class="hint">The program to run (e.g. java, ./start.sh)</span>
+            </div>
+            <div class="form-group">
+              <label>Arguments</label>
+              <textarea
+                id="launch-args"
+                rows="3"
+                placeholder="-Xms2G&#10;-Xmx8G&#10;@user_jvm_args.txt&#10;@libraries/net/.../unix_args.txt&#10;nogui"
+              ></textarea>
               <span class="hint"
-                >Modern Forge: use the @arguments file method. Old Forge: java -Xmx10G -jar forge-*.jar nogui</span
+                >One argument per line. Forge example: -Xms2G, -Xmx8G, @user_jvm_args.txt, @libraries/.../unix_args.txt,
+                nogui</span
               >
+            </div>
+            <div class="form-group">
+              <label>Command Preview</label>
+              <code id="launch-preview" class="launch-preview"></code>
             </div>
             <div class="form-row">
               <div class="form-group">

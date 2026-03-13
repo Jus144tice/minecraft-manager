@@ -27,7 +27,7 @@ export default function serverRoutes(ctx) {
       return res.json({ ok: true, message: '[DEMO] Server starting...' });
     }
     try {
-      ctx.mc.start(ctx.config.serverPath, ctx.config.startCommand);
+      ctx.mc.start(ctx.config.launch, ctx.config.serverPath);
       ctx.scheduleRconConnect(15000);
       ctx.broadcastStatus();
       audit('SERVER_START', { user: req.session.user.email, ip: req.ip });
@@ -117,7 +117,7 @@ export default function serverRoutes(ctx) {
         ctx.mc.stop();
       }
       await Promise.race([stopped, new Promise((r) => setTimeout(r, 30000))]);
-      ctx.mc.start(ctx.config.serverPath, ctx.config.startCommand);
+      ctx.mc.start(ctx.config.launch, ctx.config.serverPath);
       ctx.scheduleRconConnect(15000);
       ctx.broadcastStatus();
       audit('SERVER_RESTART', { user: req.session.user.email, ip: req.ip });

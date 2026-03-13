@@ -1139,6 +1139,17 @@ textarea:focus {
   font-size: 0.85rem;
   margin-top: 0.5rem;
 }
+.launch-preview {
+  display: block;
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 0.5rem 0.75rem;
+  font-size: 0.82rem;
+  word-break: break-all;
+  color: var(--text-dim);
+  min-height: 1.5rem;
+}
 .ok-msg {
   color: var(--green);
 }

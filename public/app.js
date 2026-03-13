@@ -1462,11 +1462,31 @@ window.unbanPlayer = async function (btn) {
 };
 
 // --- Settings: App config ---
+
+// Build a command preview string from the launch fields
+function updateLaunchPreview() {
+  const exe = $('launch-executable').value.trim();
+  const argsText = $('launch-args').value.trim();
+  const args = argsText
+    ? argsText
+        .split('\n')
+        .map((a) => a.trim())
+        .filter(Boolean)
+    : [];
+  const parts = [exe, ...args].filter(Boolean);
+  $('launch-preview').textContent =
+    parts.map((p) => (p.includes(' ') ? '"' + p + '"' : p)).join(' ') || '(no command configured)';
+}
+
+$('launch-executable').addEventListener('input', updateLaunchPreview);
+$('launch-args').addEventListener('input', updateLaunchPreview);
+
 async function loadAppConfig() {
   try {
     const cfg = await GET('/config');
     const form = $('app-config-form');
     for (const [k, v] of Object.entries(cfg)) {
+      if (k === 'launch') continue; // handled separately
       const el = form.elements[k];
       if (!el || el.type === 'password') continue;
       if (el.type === 'checkbox') {
@@ -1474,6 +1494,12 @@ async function loadAppConfig() {
       } else {
         el.value = v;
       }
+    }
+    // Populate launch fields
+    if (cfg.launch) {
+      $('launch-executable').value = cfg.launch.executable || '';
+      $('launch-args').value = (cfg.launch.args || []).join('\n');
+      updateLaunchPreview();
     }
   } catch (err) {
     console.error('Config load failed', err);
@@ -1493,6 +1519,20 @@ $('app-config-form').addEventListener('submit', async (e) => {
     } else if (el.value !== '') {
       data[el.name] = el.value;
     }
+  }
+  // Build structured launch config from the dedicated fields
+  const exe = $('launch-executable').value.trim();
+  const argsText = $('launch-args').value.trim();
+  if (exe) {
+    data.launch = {
+      executable: exe,
+      args: argsText
+        ? argsText
+            .split('\n')
+            .map((a) => a.trim())
+            .filter(Boolean)
+        : [],
+    };
   }
   try {
     await POST('/config', data);

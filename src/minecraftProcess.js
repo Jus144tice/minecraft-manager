@@ -13,26 +13,25 @@ export class MinecraftProcess extends EventEmitter {
     this.startTime = null;
   }
 
-  start(serverPath, startCommand) {
+  start(launch, cwd) {
     if (this.running) throw new Error('Server is already running');
+    if (!launch?.executable) throw new Error('Launch config missing executable');
 
-    // Parse the start command - handle @arg files and spaces in paths
-    const parts = startCommand.match(/(?:[^\s"']+|"[^"]*"|'[^']*')+/g) || [];
-    if (parts.length === 0) throw new Error('Invalid start command');
-
-    const [cmd, ...args] = parts;
+    const cmd = launch.executable;
+    const args = launch.args || [];
 
     this.proc = spawn(cmd, args, {
-      cwd: serverPath,
+      cwd,
       stdio: ['pipe', 'pipe', 'pipe'],
       shell: false,
+      env: launch.env ? { ...process.env, ...launch.env } : undefined,
     });
 
     this.running = true;
     this.startTime = Date.now();
     this._log('[Manager] Server process starting...');
-    this._log(`[Manager] CWD: ${serverPath}`);
-    this._log(`[Manager] Command: ${startCommand}`);
+    this._log(`[Manager] CWD: ${cwd}`);
+    this._log(`[Manager] Command: ${cmd} ${args.join(' ')}`);
 
     this.proc.stdout.setEncoding('utf8');
     this.proc.stderr.setEncoding('utf8');

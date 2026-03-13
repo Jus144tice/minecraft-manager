@@ -104,8 +104,11 @@ Fill in `config.json` (copy from `config.example.json`):
   // See "Binding & network access" below
   "bindHost": "127.0.0.1",
 
-  // The command used to launch the server (see "Finding your start command" below)
-  "startCommand": "java -Xms2G -Xmx8G @user_jvm_args.txt @libraries/net/minecraftforge/forge/1.20.1-47.3.0/unix_args.txt nogui",
+  // Structured launch config (see "Finding your start command" below)
+  "launch": {
+    "executable": "java",
+    "args": ["-Xms2G", "-Xmx8G", "@user_jvm_args.txt", "@libraries/net/.../unix_args.txt", "nogui"],
+  },
 
   // Minecraft version — used to filter Modrinth search results
   "minecraftVersion": "1.20.1",
@@ -176,7 +179,7 @@ nano .env
 
 In production, set these in the systemd service file (see below) rather than a `.env` file.
 
-> **Note:** `BIND_HOST` and `WEB_PORT` take precedence over their `config.json` equivalents when set. All other settings (`serverPath`, `rconPort`, `startCommand`, etc.) are configured exclusively in `config.json`.
+> **Note:** `BIND_HOST` and `WEB_PORT` take precedence over their `config.json` equivalents when set. All other settings (`serverPath`, `rconPort`, `launch`, etc.) are configured exclusively in `config.json`.
 
 ### Enable RCON in server.properties
 
@@ -275,10 +278,13 @@ It will look something like:
 java @user_jvm_args.txt @libraries/net/minecraftforge/forge/1.20.1-47.3.0/unix_args.txt "$@"
 ```
 
-Copy that line into `startCommand` in `config.json`, replace `"$@"` with `nogui`, and add your memory flags:
+Use this to build your `launch` config in `config.json` — set the executable to `java` and list each argument separately:
 
-```
-java -Xms2G -Xmx8G @user_jvm_args.txt @libraries/net/minecraftforge/forge/1.20.1-47.3.0/unix_args.txt nogui
+```json
+"launch": {
+  "executable": "java",
+  "args": ["-Xms2G", "-Xmx8G", "@user_jvm_args.txt", "@libraries/net/minecraftforge/forge/1.20.1-47.3.0/unix_args.txt", "nogui"]
+}
 ```
 
 **Old Forge (pre-1.17):**
@@ -325,7 +331,7 @@ Set `autoStart` to `true` (or toggle it in **Settings → App Config** in the UI
   "demoMode": false,
   "autoStart": true,
   "serverPath": "/home/minecraft/server",
-  "startCommand": "java -Xms2G -Xmx8G @user_jvm_args.txt ...",
+  "launch": { "executable": "java", "args": ["-Xms2G", "-Xmx8G", "@user_jvm_args.txt", "..."] },
   ...
 }
 ```
@@ -627,7 +633,7 @@ When players connect via Modrinth, they install the modpack profile which should
 
 - Check `config.json` exists and is valid JSON
 - Make sure Node.js 18+ is installed: `node --version`
-- The manager validates config on startup and prints clear errors if `serverPath`, `startCommand`, `rconPort`, `webPort`, or `bindHost` are invalid. Fix the listed fields and restart.
+- The manager validates config on startup and prints clear errors if `serverPath`, `launch`, `rconPort`, `webPort`, or `bindHost` are invalid. Fix the listed fields and restart.
 
 **"RCON not connected" error:**
 
@@ -663,7 +669,7 @@ When players connect via Modrinth, they install the modpack profile which should
 - **RCON password is never sent to the browser.** The `/api/config` endpoint strips `rconPassword` before responding.
 - **All mod downloads are hash-verified.** Files downloaded from Modrinth are verified against Modrinth's SHA1 before being written to disk.
 - **WebSocket origin validation.** The live console WebSocket rejects connections from cross-origin pages. When `APP_URL` is set, only that origin is allowed. Without `APP_URL`, the manager falls back to the `Host` header (a startup warning is printed in non-demo mode).
-- **Config validation on startup.** The manager checks `serverPath`, `startCommand`, port values, and `bindHost` before starting. Invalid config prints clear errors and exits immediately — no silent misconfigurations.
+- **Config validation on startup.** The manager checks `serverPath`, `launch`, port values, and `bindHost` before starting. Invalid config prints clear errors and exits immediately — no silent misconfigurations.
 - **Run the tests** to verify security utilities are working: `npm test`
 
 ---
