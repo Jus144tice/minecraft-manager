@@ -18,12 +18,13 @@ import {
   buildCsrfCheck,
   checkWsOrigin,
 } from './src/middleware.js';
-import { validateConfig } from './src/validate.js';
-import { info } from './src/audit.js';
+import { validateConfig, migrateLaunchConfig, launchToString } from './src/validate.js';
+import { info, setNotifyHook } from './src/audit.js';
 import { initDatabase } from './src/db.js';
 import * as Backup from './src/backup.js';
 import { createServices } from './src/services.js';
 import { collectMetrics, collectDemoMetrics } from './src/metrics.js';
+import { initNotifications, onAuditEvent, notifyLagSpike, updateNotificationsConfig } from './src/notify.js';
 
 // Route modules
 import statusRoutes from './src/routes/status.js';
@@ -36,6 +37,7 @@ import userRoutes from './src/routes/users.js';
 import backupRoutes from './src/routes/backups.js';
 import modpackRoutes from './src/routes/modpack.js';
 import auditRoutes from './src/routes/audit.js';
+import healthRoutes from './src/routes/health.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const CONFIG_PATH = path.join(__dirname, 'config.json');
@@ -55,10 +57,21 @@ async function loadConfig() {
 
 let config = await loadConfig();
 
+// Migrate legacy startCommand string → structured launch config
+if (migrateLaunchConfig(config)) {
+  await writeFile(CONFIG_PATH, JSON.stringify(config, null, 2), 'utf8');
+  console.log('Migrated legacy startCommand to structured launch config in config.json');
+}
+
 async function saveConfig(updates) {
   config = { ...config, ...updates };
   await writeFile(CONFIG_PATH, JSON.stringify(config, null, 2), 'utf8');
+  updateNotificationsConfig(config);
 }
+
+// ---- Notifications ----
+initNotifications(config);
+setNotifyHook(onAuditEvent);
 
 // ============================================================
 // Database
@@ -125,6 +138,10 @@ async function broadcastMetrics() {
     } else {
       const m = await collectMetrics({ mc, rconCmd: ctx.rconCmd, rconConnected: ctx.rconConnected, config });
       payload = { type: 'status', running: mc.running, uptime: mc.getUptime(), rconConnected: ctx.rconConnected, ...m };
+      // Notify on lag spikes (with cooldown)
+      if (m.lagSpike && m.tps != null) {
+        notifyLagSpike(m.tps, m.tpsThreshold);
+      }
     }
     broadcast(payload);
   } catch {
@@ -146,6 +163,10 @@ app.use(buildHelmet(process.env.APP_URL));
 app.use(sessionMiddleware);
 app.use(express.json({ limit: '1mb' }));
 app.use(express.static(path.join(__dirname, 'public')));
+
+// Ops endpoints — unauthenticated so probes/scrapers work without sessions
+const appStartTime = Date.now();
+app.use(healthRoutes(ctx, { dbReady, startTime: appStartTime }));
 
 // Auth routes
 app.use('/auth', buildAuthLimiter(), authRouter);
@@ -290,7 +311,12 @@ if (config.demoMode) {
 }
 
 if (!config.demoMode) {
-  Backup.setupBackupSchedule(config, mc);
+  Backup.setupBackupSchedule(config, {
+    rconCmd: ctx.rconCmd,
+    get rconConnected() {
+      return ctx.rconConnected;
+    },
+  });
 }
 
 if (BIND_HOST === '0.0.0.0' && !config.demoMode) {
@@ -318,12 +344,13 @@ httpServer.listen(PORT, BIND_HOST, () => {
       console.log(`Binding: ${BIND_HOST} (LAN test mode — use a reverse proxy for production)`);
     }
     console.log(`Server path: ${config.serverPath}`);
+    console.log(`Launch: ${launchToString(config.launch)}`);
 
     // Auto-start Minecraft server on boot
     if (config.autoStart) {
       console.log('Auto-starting Minecraft server...\n');
       try {
-        mc.start(config.serverPath, config.startCommand);
+        mc.start(config.launch, config.serverPath);
         ctx.scheduleRconConnect(15000);
         ctx.broadcastStatus();
         info('Auto-start: Minecraft server starting', { serverPath: config.serverPath });
