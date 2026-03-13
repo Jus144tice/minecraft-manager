@@ -1,3 +1,5 @@
+// Installed mod routes: list, Modrinth lookup (bulk SHA1), toggle, delete.
+
 import { Router } from 'express';
 import * as SF from '../serverFiles.js';
 import * as Modrinth from '../modrinth.js';

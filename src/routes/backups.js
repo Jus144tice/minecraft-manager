@@ -1,3 +1,6 @@
+// Backup routes: list, create, restore, delete, schedule info.
+// All endpoints require admin access (requireAdmin middleware).
+
 import { Router } from 'express';
 import * as Backup from '../backup.js';
 import { requireAdmin } from '../middleware.js';

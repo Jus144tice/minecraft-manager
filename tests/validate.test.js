@@ -1,7 +1,7 @@
 // Tests for input validation in src/validate.js
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { isValidMinecraftName, isSafeModFilename, isSafeCommand, sanitizeReason } from '../src/validate.js';
+import { isValidMinecraftName, isSafeModFilename, isSafeCommand, sanitizeReason, validateConfig } from '../src/validate.js';
 
 // --- isValidMinecraftName ---
 
@@ -109,4 +109,99 @@ test('sanitizeReason: caps at 200 characters', () => {
 test('sanitizeReason: returns default for empty/null', () => {
   assert.equal(sanitizeReason(''), 'Banned by admin');
   assert.equal(sanitizeReason(null), 'Banned by admin');
+});
+
+// --- validateConfig ---
+
+const GOOD_CONFIG = {
+  demoMode: false,
+  serverPath: '/home/minecraft/server',
+  startCommand: 'java -Xmx8G @args.txt nogui',
+  rconPort: 25575,
+  webPort: 3000,
+  bindHost: '127.0.0.1',
+};
+
+test('validateConfig: accepts valid production config', () => {
+  assert.deepEqual(validateConfig(GOOD_CONFIG), []);
+});
+
+test('validateConfig: skips validation in demo mode', () => {
+  assert.deepEqual(validateConfig({ demoMode: true }), []);
+});
+
+test('validateConfig: errors on missing serverPath', () => {
+  const errors = validateConfig({ ...GOOD_CONFIG, serverPath: '' });
+  assert.equal(errors.length, 1);
+  assert.match(errors[0], /serverPath/);
+});
+
+test('validateConfig: errors on missing startCommand', () => {
+  const errors = validateConfig({ ...GOOD_CONFIG, startCommand: '' });
+  assert.equal(errors.length, 1);
+  assert.match(errors[0], /startCommand/);
+});
+
+test('validateConfig: errors on invalid rconPort', () => {
+  const errors = validateConfig({ ...GOOD_CONFIG, rconPort: 99999 });
+  assert.equal(errors.length, 1);
+  assert.match(errors[0], /rconPort/);
+});
+
+test('validateConfig: errors on non-integer rconPort', () => {
+  const errors = validateConfig({ ...GOOD_CONFIG, rconPort: 'abc' });
+  assert.equal(errors.length, 1);
+  assert.match(errors[0], /rconPort/);
+});
+
+test('validateConfig: errors on invalid webPort', () => {
+  const errors = validateConfig({ ...GOOD_CONFIG, webPort: 0 });
+  assert.equal(errors.length, 1);
+  assert.match(errors[0], /webPort/);
+});
+
+test('validateConfig: errors on invalid bindHost', () => {
+  const errors = validateConfig({ ...GOOD_CONFIG, bindHost: 'not-an-ip' });
+  assert.equal(errors.length, 1);
+  assert.match(errors[0], /bindHost/);
+});
+
+test('validateConfig: accepts 0.0.0.0 as bindHost', () => {
+  assert.deepEqual(validateConfig({ ...GOOD_CONFIG, bindHost: '0.0.0.0' }), []);
+});
+
+test('validateConfig: allows omitted optional fields', () => {
+  const minimal = { demoMode: false, serverPath: '/srv/mc', startCommand: 'java -jar server.jar' };
+  assert.deepEqual(validateConfig(minimal), []);
+});
+
+test('validateConfig: collects multiple errors', () => {
+  const errors = validateConfig({ demoMode: false, serverPath: '', startCommand: '', rconPort: -1 });
+  assert.ok(errors.length >= 3);
+});
+
+test('validateConfig: accepts localhost as bindHost', () => {
+  assert.deepEqual(validateConfig({ ...GOOD_CONFIG, bindHost: 'localhost' }), []);
+});
+
+test('validateConfig: accepts ::1 as bindHost', () => {
+  assert.deepEqual(validateConfig({ ...GOOD_CONFIG, bindHost: '::1' }), []);
+});
+
+test('validateConfig: rejects whitespace-only serverPath', () => {
+  const errors = validateConfig({ ...GOOD_CONFIG, serverPath: '   ' });
+  assert.equal(errors.length, 1);
+  assert.match(errors[0], /serverPath/);
+});
+
+test('validateConfig: accepts edge-case valid port numbers', () => {
+  assert.deepEqual(validateConfig({ ...GOOD_CONFIG, webPort: 1 }), []);
+  assert.deepEqual(validateConfig({ ...GOOD_CONFIG, webPort: 65535 }), []);
+  assert.deepEqual(validateConfig({ ...GOOD_CONFIG, rconPort: 1 }), []);
+});
+
+test('validateConfig: rejects float port number', () => {
+  const errors = validateConfig({ ...GOOD_CONFIG, webPort: 3000.5 });
+  assert.equal(errors.length, 1);
+  assert.match(errors[0], /webPort/);
 });

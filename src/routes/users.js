@@ -1,3 +1,6 @@
+// User management routes: list, get, set admin level, delete.
+// All endpoints require admin access. Requires PostgreSQL (db.js).
+
 import { Router } from 'express';
 import { listUsers, getUser, setAdminLevel, deleteUser } from '../db.js';
 import { audit } from '../audit.js';

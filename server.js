@@ -10,7 +10,8 @@ import crypto from 'crypto';
 import { MinecraftProcess } from './src/minecraftProcess.js';
 import * as Demo from './src/demoData.js';
 import { buildSessionMiddleware, buildAuthRouter, requireSession } from './src/auth.js';
-import { buildHelmet, buildAuthLimiter, buildApiLimiter, buildSameOriginCheck, buildCsrfCheck } from './src/middleware.js';
+import { buildHelmet, buildAuthLimiter, buildApiLimiter, buildSameOriginCheck, buildCsrfCheck, checkWsOrigin } from './src/middleware.js';
+import { validateConfig } from './src/validate.js';
 import { info } from './src/audit.js';
 import { initDatabase } from './src/db.js';
 import * as Backup from './src/backup.js';
@@ -175,7 +176,19 @@ app.post('/api/rcon/connect', async (req, res) => {
 // WebSocket server for live console
 // ============================================================
 
+const APP_URL = process.env.APP_URL || null;
+
 wss.on('connection', (ws, req) => {
+  // Origin check — reject cross-origin WebSocket connections
+  const origin = req.headers.origin;
+  const host = req.headers.host;
+  const rejection = checkWsOrigin(origin, host, APP_URL);
+  if (rejection) {
+    info('WebSocket origin rejected', { origin, host, reason: rejection });
+    ws.close(4003, 'Origin not allowed');
+    return;
+  }
+
   sessionMiddleware(req, { getHeader: () => {}, setHeader: () => {}, end: () => {} }, () => {
     if (!req.session?.user) {
       ws.close(4001, 'Unauthorized');
@@ -213,10 +226,24 @@ mc.on('log', (entry) => {
 setInterval(broadcastStatus, 10000);
 
 // ============================================================
+// Config validation
+// ============================================================
+
+const configErrors = validateConfig(config);
+if (configErrors.length > 0) {
+  console.error('\n✖  Config validation failed:');
+  for (const err of configErrors) console.error(`   - ${err}`);
+  console.error('\nFix config.json and restart.\n');
+  process.exit(1);
+}
+
+// ============================================================
 // Start
 // ============================================================
 
-const PORT = config.webPort || 3000;
+// Environment variable overrides (take precedence over config.json)
+const PORT = parseInt(process.env.WEB_PORT, 10) || config.webPort || 3000;
+const BIND_HOST = process.env.BIND_HOST || config.bindHost || '127.0.0.1';
 
 if (config.demoMode) {
   await Demo.enrichDemoIcons().catch(err =>
@@ -228,22 +255,30 @@ if (!config.demoMode) {
   Backup.setupBackupSchedule(config, mc);
 }
 
-const BIND_HOST = config.bindHost || '127.0.0.1';
-
 if (BIND_HOST === '0.0.0.0' && !config.demoMode) {
   console.warn('\n⚠  WARNING: Web panel is bound to all interfaces (0.0.0.0).');
-  console.warn('   This is intended only for trusted LAN testing.');
+  console.warn('   This is LAN test mode — not recommended for production.');
   console.warn('   For production, use bindHost=127.0.0.1 behind Nginx or another reverse proxy.\n');
 }
 
+if (!APP_URL && !config.demoMode) {
+  console.warn('[Security] APP_URL is not set — WebSocket origin checks will fall back to the Host header.');
+  console.warn('           Set APP_URL in your environment for stricter origin validation.\n');
+}
+
 httpServer.listen(PORT, BIND_HOST, () => {
-  info('Minecraft Manager started', { port: PORT, demoMode: !!config.demoMode });
+  info('Minecraft Manager started', { port: PORT, bindHost: BIND_HOST, demoMode: !!config.demoMode });
   if (config.demoMode) {
     console.log(`\nMinecraft Manager running at http://${BIND_HOST}:${PORT}`);
     console.log('*** DEMO MODE — showing seed data, no real server connection ***');
     console.log('Disable: set "demoMode": false in config.json and restart.\n');
   } else {
     console.log(`\nMinecraft Manager running at http://${BIND_HOST}:${PORT}`);
+    if (BIND_HOST === '127.0.0.1' || BIND_HOST === '::1') {
+      console.log('Binding: localhost only (production/reverse-proxy mode)');
+    } else {
+      console.log(`Binding: ${BIND_HOST} (LAN test mode — use a reverse proxy for production)`);
+    }
     console.log(`Server path: ${config.serverPath}`);
 
     // Auto-start Minecraft server on boot

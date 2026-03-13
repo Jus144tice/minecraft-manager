@@ -1,3 +1,6 @@
+// Modpack routes: export current mods as a shareable manifest, import from manifest.
+// Uses Modrinth hashes to identify mods and resolve versions for download.
+
 import { Router } from 'express';
 import * as SF from '../serverFiles.js';
 import * as Modrinth from '../modrinth.js';

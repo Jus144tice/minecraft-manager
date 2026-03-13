@@ -1,3 +1,6 @@
+// Server control routes: start, stop, kill, restart, RCON command, stdin.
+// All endpoints require an authenticated session (applied globally in server.js).
+
 import { Router } from 'express';
 import * as Demo from '../demoData.js';
 import { audit } from '../audit.js';

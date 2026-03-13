@@ -90,6 +90,28 @@ export function buildSameOriginCheck(appUrl) {
   };
 }
 
+// ---- WebSocket origin check ----
+// Returns null if the origin is allowed, or a rejection reason string.
+// When appUrl is set, only that origin is allowed.
+// When appUrl is unset, any origin matching the Host header is allowed (dev/LAN mode).
+
+export function checkWsOrigin(origin, host, appUrl) {
+  if (!origin) return null; // browser same-origin WS omits Origin; non-browser clients too
+
+  try {
+    const originHost = new URL(origin).host;
+    if (appUrl) {
+      const allowed = new URL(appUrl).host;
+      return originHost === allowed ? null : `Origin ${origin} does not match APP_URL (${appUrl})`;
+    }
+    // No APP_URL — allow if origin matches the Host header
+    if (host && originHost === host) return null;
+    return `Origin ${origin} does not match Host header (${host})`;
+  } catch {
+    return `Invalid Origin header: ${origin}`;
+  }
+}
+
 // ---- Admin access guard ----
 // Requires the logged-in user to have adminLevel >= 1.
 // Apply after requireSession so req.session.user is always populated.

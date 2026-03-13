@@ -31,3 +31,35 @@ export function sanitizeReason(reason) {
   if (typeof reason !== 'string') return 'Banned by admin';
   return reason.replace(/\0/g, '').replace(/[\r\n]/g, ' ').slice(0, 200) || 'Banned by admin';
 }
+
+// Startup config validation — returns an array of error strings (empty = valid).
+const VALID_HOST_RE = /^(?:\d{1,3}\.){3}\d{1,3}$|^::[\d]*$|^localhost$/;
+
+export function validateConfig(config) {
+  const errors = [];
+  if (config.demoMode) return errors; // demo mode needs no server config
+
+  if (!config.serverPath || typeof config.serverPath !== 'string' || !config.serverPath.trim()) {
+    errors.push('serverPath is missing or empty — set the absolute path to your Minecraft server folder.');
+  }
+  if (!config.startCommand || typeof config.startCommand !== 'string' || !config.startCommand.trim()) {
+    errors.push('startCommand is missing or empty — set the command used to launch the Minecraft server.');
+  }
+
+  const rconPort = config.rconPort;
+  if (rconPort !== undefined && (typeof rconPort !== 'number' || !Number.isInteger(rconPort) || rconPort < 1 || rconPort > 65535)) {
+    errors.push(`rconPort must be an integer between 1 and 65535 (got ${JSON.stringify(rconPort)}).`);
+  }
+
+  const webPort = config.webPort;
+  if (webPort !== undefined && (typeof webPort !== 'number' || !Number.isInteger(webPort) || webPort < 1 || webPort > 65535)) {
+    errors.push(`webPort must be an integer between 1 and 65535 (got ${JSON.stringify(webPort)}).`);
+  }
+
+  const bindHost = config.bindHost;
+  if (bindHost !== undefined && (typeof bindHost !== 'string' || !VALID_HOST_RE.test(bindHost))) {
+    errors.push(`bindHost must be a valid IP address (got ${JSON.stringify(bindHost)}).`);
+  }
+
+  return errors;
+}

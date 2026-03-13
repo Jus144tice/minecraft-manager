@@ -1,3 +1,6 @@
+// Audit log route: paginated, filterable query of all audited actions.
+// Requires admin access and PostgreSQL (db.js).
+
 import { Router } from 'express';
 import { queryAuditLogs } from '../db.js';
 import { requireAdmin } from '../middleware.js';

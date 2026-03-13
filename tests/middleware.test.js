@@ -1,7 +1,7 @@
 // Tests for security middleware in src/middleware.js
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { buildCsrfCheck, buildSameOriginCheck, requireAdmin } from '../src/middleware.js';
+import { buildCsrfCheck, buildSameOriginCheck, requireAdmin, checkWsOrigin } from '../src/middleware.js';
 
 // --- Mock helpers ---
 
@@ -262,4 +262,41 @@ test('requireAdmin: rejects when user is missing', () => {
   requireAdmin(mockReq({ session: {} }), res, next);
   assert.equal(next.wasCalled(), false);
   assert.equal(res.statusCode, 403);
+});
+
+// ===================== checkWsOrigin =====================
+
+test('WsOrigin: allows when no Origin header (same-origin or non-browser)', () => {
+  assert.equal(checkWsOrigin(undefined, 'localhost:3000', null), null);
+  assert.equal(checkWsOrigin(null, 'localhost:3000', 'http://mc.example.com'), null);
+});
+
+test('WsOrigin: allows matching origin with APP_URL', () => {
+  assert.equal(checkWsOrigin('https://mc.example.com', 'localhost:3000', 'https://mc.example.com'), null);
+});
+
+test('WsOrigin: rejects non-matching origin with APP_URL', () => {
+  const result = checkWsOrigin('https://evil.com', 'localhost:3000', 'https://mc.example.com');
+  assert.ok(result);
+  assert.match(result, /does not match APP_URL/);
+});
+
+test('WsOrigin: allows matching origin via Host fallback (no APP_URL)', () => {
+  assert.equal(checkWsOrigin('http://192.168.1.50:3000', '192.168.1.50:3000', null), null);
+});
+
+test('WsOrigin: rejects non-matching origin via Host fallback', () => {
+  const result = checkWsOrigin('http://evil.com', 'localhost:3000', null);
+  assert.ok(result);
+  assert.match(result, /does not match Host/);
+});
+
+test('WsOrigin: rejects invalid Origin header', () => {
+  const result = checkWsOrigin('not-a-url', 'localhost:3000', null);
+  assert.ok(result);
+  assert.match(result, /Invalid Origin/);
+});
+
+test('WsOrigin: matches host regardless of protocol', () => {
+  assert.equal(checkWsOrigin('http://mc.example.com', 'mc.example.com', 'https://mc.example.com'), null);
 });

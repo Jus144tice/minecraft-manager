@@ -1,3 +1,7 @@
+// Settings routes: server.properties editor, app config (config.json), directory browser.
+// Config POST validates cron expressions and refreshes the backup schedule when changed.
+// GET /config redacts rconPassword and webPassword before responding.
+
 import { Router } from 'express';
 import { readdir, stat, mkdir } from 'fs/promises';
 import path from 'path';
@@ -37,7 +41,8 @@ export default function settingsRoutes(ctx) {
   router.post('/config', async (req, res) => {
     const allowed = ['serverPath', 'rconHost', 'rconPort', 'rconPassword',
       'startCommand', 'minecraftVersion', 'modsFolder', 'disabledModsFolder', 'demoMode',
-      'backupPath', 'backupSchedule', 'backupEnabled', 'maxBackups', 'backupTimezone', 'bindHost'];
+      'backupPath', 'backupSchedule', 'backupEnabled', 'maxBackups', 'backupTimezone',
+      'bindHost', 'autoStart'];
     const updates = {};
     for (const k of allowed) {
       if (k in req.body) updates[k] = req.body[k];

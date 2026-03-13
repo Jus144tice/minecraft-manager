@@ -169,8 +169,12 @@ nano .env
 | `MICROSOFT_TENANT` | Optional | `common` (default), `consumers`, or a tenant ID |
 | `LOCAL_PASSWORD` | Optional | Fallback password login. Rate-limited to 20 attempts/15 min. |
 | `DATABASE_URL` | Optional | PostgreSQL connection string. Enables persistent sessions, user management with admin levels, and queryable audit logs. See [Database setup](#database-postgresql) below. |
+| `BIND_HOST` | Optional | Override `bindHost` from config.json (e.g. `127.0.0.1` or `0.0.0.0`). Useful for switching between production and LAN testing without editing config. |
+| `WEB_PORT` | Optional | Override `webPort` from config.json. |
 
 In production, set these in the systemd service file (see below) rather than a `.env` file.
+
+> **Note:** `BIND_HOST` and `WEB_PORT` take precedence over their `config.json` equivalents when set. All other settings (`serverPath`, `rconPort`, `startCommand`, etc.) are configured exclusively in `config.json`.
 
 ### Enable RCON in server.properties
 
@@ -610,6 +614,7 @@ When players connect via Modrinth, they install the modpack profile which should
 **Panel won't start:**
 - Check `config.json` exists and is valid JSON
 - Make sure Node.js 18+ is installed: `node --version`
+- The manager validates config on startup and prints clear errors if `serverPath`, `startCommand`, `rconPort`, `webPort`, or `bindHost` are invalid. Fix the listed fields and restart.
 
 **"RCON not connected" error:**
 - Verify `enable-rcon=true` is in `server.properties`
@@ -640,6 +645,8 @@ When players connect via Modrinth, they install the modpack profile which should
 - **Secrets stay out of git.** `config.json` and `.env` are both in `.gitignore`. In production, secrets are injected via the systemd `Environment=` directives (readable only by root).
 - **RCON password is never sent to the browser.** The `/api/config` endpoint strips `rconPassword` before responding.
 - **All mod downloads are hash-verified.** Files downloaded from Modrinth are verified against Modrinth's SHA1 before being written to disk.
+- **WebSocket origin validation.** The live console WebSocket rejects connections from cross-origin pages. When `APP_URL` is set, only that origin is allowed. Without `APP_URL`, the manager falls back to the `Host` header (a startup warning is printed in non-demo mode).
+- **Config validation on startup.** The manager checks `serverPath`, `startCommand`, port values, and `bindHost` before starting. Invalid config prints clear errors and exits immediately — no silent misconfigurations.
 - **Run the tests** to verify security utilities are working: `npm test`
 
 ---

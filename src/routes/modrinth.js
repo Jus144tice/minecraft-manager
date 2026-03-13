@@ -1,3 +1,6 @@
+// Modrinth integration routes: browse, search, project detail, versions, download.
+// Client-only mods are filtered out of all search results (they crash the server).
+
 import { Router } from 'express';
 import * as SF from '../serverFiles.js';
 import * as Modrinth from '../modrinth.js';

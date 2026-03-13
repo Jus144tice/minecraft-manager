@@ -1,3 +1,6 @@
+// Player management routes: online list, ops, whitelist, bans, kick, broadcast.
+// Uses RCON when connected; falls back to editing JSON files directly when offline.
+
 import { Router } from 'express';
 import * as SF from '../serverFiles.js';
 import * as Demo from '../demoData.js';

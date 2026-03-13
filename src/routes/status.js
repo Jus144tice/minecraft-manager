@@ -1,3 +1,5 @@
+// Server status route: running state, uptime, RCON status, online player count.
+
 import { Router } from 'express';
 import * as Demo from '../demoData.js';
 
