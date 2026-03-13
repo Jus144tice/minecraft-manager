@@ -529,8 +529,8 @@
         </details>
 
         <!-- Console -->
-        <div class="page-header" style="margin-top: 0.5rem">
-          <h2 style="font-size: 1rem">Server Console</h2>
+        <div class="page-header mt-sm">
+          <h2 class="text-base">Server Console</h2>
           <div class="header-actions">
             <label class="toggle-label">
               <input type="checkbox" id="console-autoscroll" checked />
@@ -709,7 +709,7 @@
         <!-- Backup actions -->
         <div class="control-section">
           <h3>Create Backup</h3>
-          <p class="dim" style="margin-bottom: 0.75rem">
+          <p class="dim mb-md">
             Creates a full snapshot: Minecraft server files, mods, app config, and database. The server does not need to
             be stopped for backups.
           </p>
@@ -760,11 +760,11 @@
                   <option value="45">45</option>
                 </select>
               </div>
-              <p id="sched-summary" class="hint" style="margin-top: 0.35rem"></p>
+              <p id="sched-summary" class="hint mt-xs"></p>
             </div>
             <details id="sched-cron-details" class="cron-details">
-              <summary class="hint" style="cursor: pointer">Advanced: edit cron expression directly</summary>
-              <div class="form-group" style="margin-top: 0.5rem">
+              <summary class="hint cursor-pointer">Advanced: edit cron expression directly</summary>
+              <div class="form-group mt-sm">
                 <input type="text" name="backupSchedule" placeholder="0 3 * * *" />
                 <span class="hint">Format: minute hour day-of-month month day-of-week</span>
               </div>
@@ -810,11 +810,9 @@
               This will <strong>replace all server files, mods, config, and database</strong> with the contents of this
               backup. This action cannot be undone.
             </p>
-            <p class="restore-warning" style="margin-top: 0.5rem">
-              The Minecraft server <strong>must be stopped</strong> before restoring.
-            </p>
-            <div id="restore-modal-details" style="margin-top: 0.75rem"></div>
-            <div class="btn-row" style="margin-top: 1rem">
+            <p class="restore-warning mt-sm">The Minecraft server <strong>must be stopped</strong> before restoring.</p>
+            <div id="restore-modal-details" class="mt-md"></div>
+            <div class="btn-row mt-lg">
               <button class="btn btn-danger" id="btn-confirm-restore">Restore This Backup</button>
               <button class="btn btn-ghost" id="btn-cancel-restore">Cancel</button>
             </div>
@@ -833,7 +831,7 @@
           <div class="modal-body">
             <nav id="dir-browser-crumbs" class="dir-crumbs"></nav>
             <div id="dir-browser-list" class="dir-browser-list"></div>
-            <div class="btn-row" style="margin-top: 0.75rem">
+            <div class="btn-row mt-md">
               <button class="btn btn-primary btn-sm" id="dir-browser-select">Select This Folder</button>
               <button class="btn btn-ghost btn-sm" id="dir-browser-new-folder">New Folder</button>
               <button class="btn btn-ghost btn-sm" id="dir-browser-cancel">Cancel</button>
@@ -906,7 +904,7 @@
                 <input type="text" name="disabledModsFolder" placeholder="mods_disabled" />
               </div>
             </div>
-            <hr style="border-color: var(--border); margin: 0.5rem 0" />
+            <hr class="hr-subtle" />
             <div class="form-group">
               <label class="checkbox-label">
                 <input type="checkbox" name="autoStart" id="cfg-auto-start" />

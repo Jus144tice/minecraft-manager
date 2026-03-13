@@ -5,15 +5,28 @@ import rateLimit from 'express-rate-limit';
 
 // ---- Security headers via Helmet ----
 
-export function buildHelmet() {
+export function buildHelmet(appUrl) {
+  // Compute the allowed WebSocket origin from APP_URL or the request's Host header.
+  // CSP 'self' does not cover ws:/wss: protocols, so we must specify them explicitly.
+  const wsConnectSrc = (req) => {
+    if (appUrl) {
+      const u = new URL(appUrl);
+      const wsProto = u.protocol === 'https:' ? 'wss:' : 'ws:';
+      return `${wsProto}//${u.host}`;
+    }
+    // Dev/LAN: derive from the request's Host header
+    const proto = req.secure || req.headers['x-forwarded-proto'] === 'https' ? 'wss:' : 'ws:';
+    return `${proto}//${req.headers.host}`;
+  };
+
   return helmet({
     contentSecurityPolicy: {
       directives: {
         defaultSrc: ["'self'"],
-        scriptSrc: ["'self'", "'unsafe-inline'"],
-        styleSrc: ["'self'", "'unsafe-inline'"],
+        scriptSrc: ["'self'"],
+        styleSrc: ["'self'"],
         imgSrc: ["'self'", 'https:', 'data:', 'blob:'],
-        connectSrc: ["'self'", 'ws:', 'wss:'],
+        connectSrc: ["'self'", (req) => wsConnectSrc(req)],
         frameAncestors: ["'none'"],
         upgradeInsecureRequests: process.env.TRUST_PROXY === '1' ? [] : null,
       },

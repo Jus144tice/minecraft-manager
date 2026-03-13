@@ -1868,7 +1868,7 @@ function renderCrumbs(crumbs) {
 
 async function dirBrowserNavigate(dirPath) {
   const list = $('dir-browser-list');
-  list.innerHTML = '<p class="dim" style="padding:0.75rem">Loading...</p>';
+  list.innerHTML = '<p class="dim p-md">Loading...</p>';
   try {
     const qs = dirPath ? `?path=${encodeURIComponent(dirPath)}` : '';
     const result = await GET(`/browse-dirs${qs}`);
@@ -1885,7 +1885,7 @@ async function dirBrowserNavigate(dirPath) {
       entry.addEventListener('click', () => dirBrowserNavigate(entry.dataset.path));
     }
   } catch (err) {
-    list.innerHTML = `<p class="error-msg" style="padding:0.75rem">${esc(err.message)}</p>`;
+    list.innerHTML = `<p class="error-msg p-md">${esc(err.message)}</p>`;
   }
 }
 
@@ -2082,7 +2082,7 @@ function renderModpackAnalysis(modpack, analysis) {
     html += `<div class="modpack-section">
       <h4>Version Conflicts</h4>
       <p class="dim small">These mods are already installed but at a different version. Check the ones you want to replace.</p>
-      <label class="toggle-label modpack-select-all" style="margin-bottom:0.5rem">
+      <label class="toggle-label modpack-select-all mb-sm">
         <input type="checkbox" id="modpack-conflict-all" />
         <span>Select all conflicts</span>
       </label>
@@ -2132,13 +2132,13 @@ function renderModpackAnalysis(modpack, analysis) {
 
   // Action buttons
   if (totalActions > 0) {
-    html += `<div class="btn-row" style="margin-top:1rem">
+    html += `<div class="btn-row mt-lg">
       <button class="btn btn-primary" id="btn-modpack-install">Install Selected Mods</button>
       <button class="btn btn-ghost" id="btn-modpack-cancel">Cancel</button>
     </div>
     <p id="modpack-install-msg" class="control-msg"></p>`;
   } else {
-    html += `<div class="btn-row" style="margin-top:1rem">
+    html += `<div class="btn-row mt-lg">
       <p class="dim">Nothing to install — all mods are already up to date.</p>
       <button class="btn btn-ghost" id="btn-modpack-cancel">Close</button>
     </div>`;
@@ -2233,7 +2233,7 @@ function renderModpackReport(report, analysis) {
     </div>`;
   }
 
-  html += `<div class="btn-row" style="margin-top:1rem">
+  html += `<div class="btn-row mt-lg">
     <button class="btn btn-ghost" id="btn-modpack-report-close">Close</button>
   </div>`;
 
@@ -2807,7 +2807,7 @@ function renderCmdHelp(filter) {
   if (totalMatches === 0) {
     html = `<div class="cmd-help-no-results">
       <p>No commands found matching "<strong>${esc(q)}</strong>"</p>
-      <p class="dim" style="margin-top:0.5rem">Try different keywords, e.g. "weather", "player", "spawn", "ban"</p>
+      <p class="dim mt-sm">Try different keywords, e.g. "weather", "player", "spawn", "ban"</p>
     </div>`;
   }
 
