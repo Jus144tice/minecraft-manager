@@ -4,6 +4,7 @@
 import { Router } from 'express';
 import * as Backup from '../backup.js';
 import { requireAdmin } from '../middleware.js';
+import { getActiveOps } from '../operationLock.js';
 
 export default function backupRoutes(ctx) {
   const router = Router();
@@ -48,6 +49,10 @@ export default function backupRoutes(ctx) {
 
   router.get('/backups/lock', requireAdmin, (_req, res) => {
     res.json({ lock: Backup.getBackupLock() });
+  });
+
+  router.get('/operations', requireAdmin, (_req, res) => {
+    res.json({ operations: getActiveOps() });
   });
 
   router.delete('/backups/:filename', requireAdmin, async (req, res) => {

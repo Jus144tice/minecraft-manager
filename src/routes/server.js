@@ -5,9 +5,20 @@ import { Router } from 'express';
 import * as Demo from '../demoData.js';
 import { audit } from '../audit.js';
 import { isSafeCommand } from '../validate.js';
+import { getActiveOps } from '../operationLock.js';
 
 export default function serverRoutes(ctx) {
   const router = Router();
+
+  // Check if a conflicting operation holds the 'lifecycle' scope (e.g. restore).
+  function checkLifecycleLock(action) {
+    const conflict = getActiveOps().find((op) => op.scopes.includes('lifecycle'));
+    if (conflict) {
+      throw new Error(
+        `Cannot ${action}: ${conflict.name} is already in progress (started ${new Date(conflict.startedAt).toISOString()}). Wait for it to finish.`,
+      );
+    }
+  }
 
   router.post('/server/start', async (req, res) => {
     if (ctx.config.demoMode) {
@@ -27,13 +38,15 @@ export default function serverRoutes(ctx) {
       return res.json({ ok: true, message: '[DEMO] Server starting...' });
     }
     try {
+      checkLifecycleLock('start server');
       ctx.mc.start(ctx.config.launch, ctx.config.serverPath);
       ctx.scheduleRconConnect(15000);
       ctx.broadcastStatus();
       audit('SERVER_START', { user: req.session.user.email, ip: req.ip });
       res.json({ ok: true, message: 'Server starting...' });
     } catch (err) {
-      res.status(400).json({ error: err.message });
+      const status = err.message.includes('already in progress') ? 409 : 400;
+      res.status(status).json({ error: err.message });
     }
   });
 
@@ -109,6 +122,7 @@ export default function serverRoutes(ctx) {
       return res.json({ ok: true, message: '[DEMO] Restarting...' });
     }
     try {
+      checkLifecycleLock('restart server');
       ctx.markIntentionalStop();
       const stopped = new Promise((resolve) => ctx.mc.once('stopped', resolve));
       if (ctx.rconConnected) {
@@ -123,7 +137,8 @@ export default function serverRoutes(ctx) {
       audit('SERVER_RESTART', { user: req.session.user.email, ip: req.ip });
       res.json({ ok: true, message: 'Restarting...' });
     } catch (err) {
-      res.status(400).json({ error: err.message });
+      const status = err.message.includes('already in progress') ? 409 : 400;
+      res.status(status).json({ error: err.message });
     }
   });
 

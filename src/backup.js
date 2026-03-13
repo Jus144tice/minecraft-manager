@@ -10,6 +10,7 @@ import { promisify } from 'util';
 import { fileURLToPath } from 'url';
 import { audit, info, warn } from './audit.js';
 import { getPool } from './db.js';
+import { acquireOp, releaseOp, getActiveOps } from './operationLock.js';
 import cron from 'node-cron';
 
 const execFileAsync = promisify(execFile);
@@ -18,30 +19,14 @@ const APP_ROOT = path.resolve(__dirname, '..');
 
 let scheduledTask = null;
 
-// ---- Backup-state lock ----
-// Prevents concurrent backup/restore operations that could corrupt data.
-
-let backupLock = null; // { operation, startedAt } or null
+// ---- Backward-compatible lock API ----
+// Now delegates to the shared operationLock so backup/restore conflicts with
+// server start, modpack import, and other file-mutating operations.
 
 export function getBackupLock() {
-  return backupLock ? { ...backupLock } : null;
-}
-
-function acquireLock(operation) {
-  if (backupLock) {
-    throw new Error(
-      `A ${backupLock.operation} is already in progress (started ${new Date(backupLock.startedAt).toISOString()}). Wait for it to finish before starting another.`,
-    );
-  }
-  backupLock = { operation, startedAt: Date.now() };
-  info(`Backup lock acquired: ${operation}`);
-}
-
-function releaseLock() {
-  if (backupLock) {
-    info(`Backup lock released: ${backupLock.operation}`);
-  }
-  backupLock = null;
+  const ops = getActiveOps();
+  const op = ops.find((o) => o.name === 'backup' || o.name === 'restore');
+  return op ? { operation: op.name, startedAt: op.startedAt } : null;
 }
 
 // ---- Disk-space preflight ----
@@ -154,7 +139,7 @@ export async function listBackups(config) {
 // ---- Create backup ----
 
 export async function createBackup(config, { type = 'manual', note = '', user = null, rconCmd = null } = {}) {
-  acquireLock('backup');
+  const lockId = acquireOp('backup', ['files']);
   let quiesced = false;
 
   const dir = backupDir(config);
@@ -262,7 +247,7 @@ export async function createBackup(config, { type = 'manual', note = '', user = 
     }
     // Clean up staging directory
     await rm(stagingDir, { recursive: true, force: true }).catch(() => {});
-    releaseLock();
+    releaseOp(lockId);
   }
 }
 
@@ -368,7 +353,7 @@ export async function restoreBackup(config, filename, mc) {
     throw new Error('Stop the Minecraft server before restoring a backup');
   }
 
-  acquireLock('restore');
+  const lockId = acquireOp('restore', ['files', 'lifecycle']);
 
   try {
     // Disk-space preflight: need at least the archive size for extraction
@@ -439,7 +424,7 @@ export async function restoreBackup(config, filename, mc) {
       await rm(extractDir, { recursive: true, force: true }).catch(() => {});
     }
   } finally {
-    releaseLock();
+    releaseOp(lockId);
   }
 }
 
