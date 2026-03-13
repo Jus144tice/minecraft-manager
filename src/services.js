@@ -193,6 +193,23 @@ export function createServices({ config, saveConfig, loadConfig, mc, broadcast, 
 
   mc.on('stopped', handleProcessExit);
 
+  // Drain all timers and connections for graceful shutdown.
+  function cleanup() {
+    clearTimeout(rconReconnectTimer);
+    rconReconnectTimer = null;
+    clearTimeout(autoRestartTimer);
+    autoRestartTimer = null;
+    stopDemoActivityTimer();
+    if (rcon) {
+      try {
+        rcon.disconnect();
+      } catch {
+        /* ok */
+      }
+      rcon = null;
+    }
+  }
+
   return {
     get config() {
       return config;
@@ -206,6 +223,7 @@ export function createServices({ config, saveConfig, loadConfig, mc, broadcast, 
     broadcast,
     broadcastStatus,
     markIntentionalStop,
+    cleanup,
     demoState,
     getDemoUptime,
     startDemoActivityTimer,

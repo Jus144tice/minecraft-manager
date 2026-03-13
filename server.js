@@ -282,7 +282,7 @@ mc.on('log', (entry) => {
   for (const ws of wsClients) if (ws.readyState === 1) ws.send(msg);
 });
 
-setInterval(broadcastMetrics, 10000);
+const metricsInterval = setInterval(broadcastMetrics, 10000);
 
 // ============================================================
 // Config validation
@@ -375,6 +375,10 @@ async function gracefulShutdown(signal) {
   shuttingDown = true;
   console.log(`\n[Manager] Received ${signal} — shutting down gracefully...`);
 
+  // Stop timers that could fire during shutdown (cron, metrics broadcast)
+  clearInterval(metricsInterval);
+  Backup.stopBackupSchedule();
+
   // Close WebSocket connections
   for (const ws of wsClients) {
     try {
@@ -384,7 +388,7 @@ async function gracefulShutdown(signal) {
     }
   }
 
-  // Stop Minecraft server if running
+  // Stop Minecraft server if running (needs RCON, so cleanup() comes after)
   if (!config.demoMode && mc.running) {
     ctx.markIntentionalStop();
     console.log('[Manager] Stopping Minecraft server...');
@@ -418,6 +422,9 @@ async function gracefulShutdown(signal) {
       mc.kill();
     }
   }
+
+  // Drain remaining timers (RCON reconnect, auto-restart, demo activity) and disconnect RCON
+  ctx.cleanup();
 
   // Close HTTP server
   httpServer.close(() => {
