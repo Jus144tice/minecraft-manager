@@ -1665,16 +1665,19 @@ async function loadBackups() {
             ? '<span class="backup-badge backup-scheduled">Scheduled</span>'
             : '<span class="backup-badge backup-manual">Manual</span>';
         const dbBadge = b.includesDatabase ? '<span class="backup-badge backup-db">DB</span>' : '';
+        const quiescedBadge = b.quiesced ? '<span class="backup-badge backup-quiesced">Quiesced</span>' : '';
         return `<div class="backup-card">
         <div class="backup-info">
           <div class="backup-title">
-            ${typeBadge}${dbBadge}
+            ${typeBadge}${dbBadge}${quiescedBadge}
             <span class="backup-date">${esc(dateStr)} ${esc(timeStr)}</span>
           </div>
           ${b.note ? `<div class="backup-note">${esc(b.note)}</div>` : ''}
           <div class="backup-meta">
             <span>${formatSize(b.size)}</span>
             ${b.minecraftVersion ? `<span>MC ${esc(b.minecraftVersion)}</span>` : ''}
+            ${b.modCount != null ? `<span>${b.modCount} mod${b.modCount !== 1 ? 's' : ''}</span>` : ''}
+            ${b.appVersion ? `<span>v${esc(b.appVersion)}</span>` : ''}
             <span class="dim">${esc(b.filename)}</span>
           </div>
         </div>
@@ -2000,11 +2003,49 @@ $('btn-refresh-backups').addEventListener('click', () => {
 // --- Restore modal ---
 let restoreFilename = null;
 
-function openRestoreModal(filename) {
+async function openRestoreModal(filename) {
   restoreFilename = filename;
-  $('restore-modal-details').innerHTML = `<p>Backup: <strong>${esc(filename)}</strong></p>`;
+  const details = $('restore-modal-details');
+  details.innerHTML = `<p>Backup: <strong>${esc(filename)}</strong></p><p class="dim">Validating archive...</p>`;
   $('restore-msg').textContent = '';
+  $('btn-confirm-restore').disabled = true;
   show('restore-modal');
+
+  try {
+    const result = await POST('/backups/validate', { filename });
+    let html = `<p>Backup: <strong>${esc(filename)}</strong></p>`;
+
+    if (result.manifest) {
+      const m = result.manifest;
+      const date = m.createdAt ? new Date(m.createdAt).toLocaleString() : 'Unknown';
+      html += '<table class="restore-manifest">';
+      html += `<tr><td>Created</td><td>${esc(date)}</td></tr>`;
+      if (m.minecraftVersion) html += `<tr><td>Minecraft</td><td>${esc(m.minecraftVersion)}</td></tr>`;
+      if (m.modCount != null) html += `<tr><td>Mods</td><td>${m.modCount}</td></tr>`;
+      if (m.appVersion) html += `<tr><td>App version</td><td>v${esc(m.appVersion)}</td></tr>`;
+      if (m.archiveSize) html += `<tr><td>Archive size</td><td>${formatSize(m.archiveSize)}</td></tr>`;
+      html += `<tr><td>Database</td><td>${m.includesDatabase ? 'Included' : 'Not included'}</td></tr>`;
+      html += `<tr><td>Quiesced</td><td>${m.quiesced ? 'Yes' : 'No'}</td></tr>`;
+      html += '</table>';
+    }
+
+    if (result.valid) {
+      html += '<p class="restore-integrity restore-ok">Archive integrity verified</p>';
+      $('btn-confirm-restore').disabled = false;
+    } else {
+      html += `<p class="restore-integrity restore-fail">Validation failed: ${esc(result.errors.join('; '))}</p>`;
+    }
+    if (result.warnings.length > 0) {
+      html += `<p class="restore-integrity restore-warn">${esc(result.warnings.join('; '))}</p>`;
+      // Allow restore even with warnings (e.g. old backups without hash)
+      $('btn-confirm-restore').disabled = false;
+    }
+
+    details.innerHTML = html;
+  } catch (err) {
+    details.innerHTML = `<p>Backup: <strong>${esc(filename)}</strong></p><p class="restore-integrity restore-warn">Could not validate: ${esc(err.message)}</p>`;
+    $('btn-confirm-restore').disabled = false;
+  }
 }
 
 $('restore-modal-close').addEventListener('click', () => hide('restore-modal'));

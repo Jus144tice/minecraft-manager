@@ -5,7 +5,8 @@ import fs from 'fs/promises';
 import { existsSync } from 'fs';
 import path from 'path';
 import os from 'os';
-import { listBackups, deleteBackup, getBackupLock, createBackup } from '../src/backup.js';
+import crypto from 'crypto';
+import { listBackups, deleteBackup, getBackupLock, createBackup, validateBackup } from '../src/backup.js';
 
 // --- Helpers ---
 
@@ -46,7 +47,7 @@ test('listBackups: lists tar.gz files with metadata', async () => {
     // Create fake backup archive
     await writeFile(path.join(dir, 'mc-backup_2024-01-15.tar.gz'), 'fake-archive');
 
-    // Create manifest
+    // Create manifest with new fields
     const manifest = {
       createdAt: '2024-01-15T03:00:00.000Z',
       type: 'scheduled',
@@ -54,6 +55,9 @@ test('listBackups: lists tar.gz files with metadata', async () => {
       minecraftVersion: '1.20.1',
       includesDatabase: true,
       note: 'test backup',
+      appVersion: '1.0.0',
+      modCount: 42,
+      quiesced: true,
     };
     await writeFile(path.join(dir, 'mc-backup_2024-01-15.json'), JSON.stringify(manifest));
 
@@ -64,6 +68,10 @@ test('listBackups: lists tar.gz files with metadata', async () => {
     assert.equal(result[0].minecraftVersion, '1.20.1');
     assert.equal(result[0].includesDatabase, true);
     assert.equal(result[0].note, 'test backup');
+    assert.equal(result[0].appVersion, '1.0.0');
+    assert.equal(result[0].modCount, 42);
+    assert.equal(result[0].quiesced, true);
+    assert.equal(result[0].hasManifest, true);
   } finally {
     await cleanup(dir);
   }
@@ -102,6 +110,9 @@ test('listBackups: handles missing manifest gracefully', async () => {
     assert.equal(result[0].filename, 'no-manifest.tar.gz');
     assert.equal(result[0].type, 'manual'); // default
     assert.equal(result[0].note, ''); // default
+    assert.equal(result[0].hasManifest, false);
+    assert.equal(result[0].appVersion, null);
+    assert.equal(result[0].modCount, null);
   } finally {
     await cleanup(dir);
   }
@@ -241,4 +252,127 @@ test('createBackup: calls rconCmd for quiescing when provided', async () => {
     'Expected save-all command',
   );
   assert.ok(commands.includes('save-on'), 'Expected save-on to re-enable auto-save');
+});
+
+// ===================== validateBackup =====================
+
+test('validateBackup: returns error when archive is missing', async () => {
+  const dir = await makeTempBackupDir();
+  try {
+    const result = await validateBackup({ backupPath: dir }, 'nonexistent.tar.gz');
+    assert.equal(result.valid, false);
+    assert.ok(result.errors.some((e) => e.includes('not found')));
+  } finally {
+    await cleanup(dir);
+  }
+});
+
+test('validateBackup: warns when no manifest exists', async () => {
+  const dir = await makeTempBackupDir();
+  try {
+    await writeFile(path.join(dir, 'old-backup.tar.gz'), 'archive-data');
+    const result = await validateBackup({ backupPath: dir }, 'old-backup.tar.gz');
+    assert.equal(result.valid, true);
+    assert.equal(result.manifest, null);
+    assert.ok(result.warnings.some((w) => w.includes('No manifest')));
+  } finally {
+    await cleanup(dir);
+  }
+});
+
+test('validateBackup: passes when archive hash matches', async () => {
+  const dir = await makeTempBackupDir();
+  try {
+    const content = 'valid-archive-content';
+    await writeFile(path.join(dir, 'valid.tar.gz'), content);
+    const hash = crypto.createHash('sha256').update(content).digest('hex');
+    await writeFile(path.join(dir, 'valid.json'), JSON.stringify({ archiveHash: hash, archiveSize: content.length }));
+
+    const result = await validateBackup({ backupPath: dir }, 'valid.tar.gz');
+    assert.equal(result.valid, true);
+    assert.equal(result.errors.length, 0);
+  } finally {
+    await cleanup(dir);
+  }
+});
+
+test('validateBackup: fails when archive hash does not match', async () => {
+  const dir = await makeTempBackupDir();
+  try {
+    await writeFile(path.join(dir, 'corrupt.tar.gz'), 'corrupted-data');
+    await writeFile(
+      path.join(dir, 'corrupt.json'),
+      JSON.stringify({ archiveHash: 'deadbeef'.repeat(8), archiveSize: 14 }),
+    );
+
+    const result = await validateBackup({ backupPath: dir }, 'corrupt.tar.gz');
+    assert.equal(result.valid, false);
+    assert.ok(result.errors.some((e) => e.includes('integrity check failed')));
+  } finally {
+    await cleanup(dir);
+  }
+});
+
+test('validateBackup: fails when archive size does not match', async () => {
+  const dir = await makeTempBackupDir();
+  try {
+    const content = 'some-content';
+    await writeFile(path.join(dir, 'size-mismatch.tar.gz'), content);
+    const hash = crypto.createHash('sha256').update(content).digest('hex');
+    await writeFile(path.join(dir, 'size-mismatch.json'), JSON.stringify({ archiveHash: hash, archiveSize: 999999 }));
+
+    const result = await validateBackup({ backupPath: dir }, 'size-mismatch.tar.gz');
+    assert.equal(result.valid, false);
+    assert.ok(result.errors.some((e) => e.includes('size mismatch')));
+  } finally {
+    await cleanup(dir);
+  }
+});
+
+test('validateBackup: warns when manifest lacks archiveHash', async () => {
+  const dir = await makeTempBackupDir();
+  try {
+    await writeFile(path.join(dir, 'no-hash.tar.gz'), 'data');
+    await writeFile(
+      path.join(dir, 'no-hash.json'),
+      JSON.stringify({ type: 'manual', createdAt: '2024-01-01T00:00:00Z' }),
+    );
+
+    const result = await validateBackup({ backupPath: dir }, 'no-hash.tar.gz');
+    assert.equal(result.valid, true);
+    assert.ok(result.warnings.some((w) => w.includes('integrity cannot be verified')));
+    assert.ok(result.manifest);
+  } finally {
+    await cleanup(dir);
+  }
+});
+
+test('validateBackup: returns manifest details when valid', async () => {
+  const dir = await makeTempBackupDir();
+  try {
+    const content = 'archive-with-full-manifest';
+    await writeFile(path.join(dir, 'full.tar.gz'), content);
+    const hash = crypto.createHash('sha256').update(content).digest('hex');
+    const manifest = {
+      createdAt: '2024-06-15T12:00:00Z',
+      type: 'manual',
+      appVersion: '1.0.0',
+      minecraftVersion: '1.20.1',
+      modCount: 15,
+      includesDatabase: true,
+      quiesced: true,
+      archiveHash: hash,
+      archiveSize: content.length,
+    };
+    await writeFile(path.join(dir, 'full.json'), JSON.stringify(manifest));
+
+    const result = await validateBackup({ backupPath: dir }, 'full.tar.gz');
+    assert.equal(result.valid, true);
+    assert.equal(result.manifest.appVersion, '1.0.0');
+    assert.equal(result.manifest.modCount, 15);
+    assert.equal(result.manifest.minecraftVersion, '1.20.1');
+    assert.equal(result.manifest.includesDatabase, true);
+  } finally {
+    await cleanup(dir);
+  }
 });

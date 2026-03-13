@@ -55,6 +55,18 @@ export default function backupRoutes(ctx) {
     res.json({ operations: getActiveOps() });
   });
 
+  router.post('/backups/validate', requireAdmin, async (req, res) => {
+    const { filename } = req.body;
+    if (!filename) return res.status(400).json({ error: 'filename required' });
+    if (!filename.endsWith('.tar.gz')) return res.status(400).json({ error: 'Invalid backup file' });
+    try {
+      const result = await Backup.validateBackup(ctx.config, filename);
+      res.json(result);
+    } catch (err) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
   router.delete('/backups/:filename', requireAdmin, async (req, res) => {
     const { filename } = req.params;
     if (!filename.endsWith('.tar.gz')) return res.status(400).json({ error: 'Invalid backup file' });

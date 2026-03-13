@@ -1627,6 +1627,45 @@ textarea:focus {
   background: #1a2e1a;
   color: #3fb950;
 }
+.backup-quiesced {
+  background: #1a2a2e;
+  color: #58d1c9;
+}
+
+.restore-manifest {
+  width: 100%;
+  font-size: 0.85rem;
+  margin: 0.75rem 0;
+  border-collapse: collapse;
+}
+.restore-manifest td {
+  padding: 0.25rem 0.5rem;
+  border-bottom: 1px solid var(--border);
+}
+.restore-manifest td:first-child {
+  color: var(--muted);
+  white-space: nowrap;
+  width: 110px;
+}
+
+.restore-integrity {
+  font-size: 0.85rem;
+  padding: 0.5rem 0.75rem;
+  border-radius: var(--radius);
+  margin-top: 0.5rem;
+}
+.restore-ok {
+  background: #1a2e1a;
+  color: #3fb950;
+}
+.restore-fail {
+  background: #3d1212;
+  color: var(--danger);
+}
+.restore-warn {
+  background: #2e2a1a;
+  color: #d29922;
+}
 
 .restore-warning {
   background: #3d1212;

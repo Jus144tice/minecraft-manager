@@ -3,8 +3,9 @@
 // Backups are stored in a configurable directory with timestamp-based naming.
 
 import { execFile } from 'child_process';
+import crypto from 'crypto';
 import { mkdir, readdir, stat, statfs, unlink, readFile, writeFile, rm } from 'fs/promises';
-import { existsSync } from 'fs';
+import { createReadStream, existsSync } from 'fs';
 import path from 'path';
 import { promisify } from 'util';
 import { fileURLToPath } from 'url';
@@ -16,6 +17,41 @@ import cron from 'node-cron';
 const execFileAsync = promisify(execFile);
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const APP_ROOT = path.resolve(__dirname, '..');
+
+// Read app version once at import time.
+let appVersion = 'unknown';
+try {
+  const pkg = JSON.parse(await readFile(path.join(APP_ROOT, 'package.json'), 'utf8'));
+  appVersion = pkg.version || 'unknown';
+} catch {
+  /* ok */
+}
+
+/** SHA-256 hash of a file on disk. */
+function hashFileSha256(filePath) {
+  return new Promise((resolve, reject) => {
+    const hash = crypto.createHash('sha256');
+    const stream = createReadStream(filePath);
+    stream.on('data', (d) => hash.update(d));
+    stream.on('end', () => resolve(hash.digest('hex')));
+    stream.on('error', reject);
+  });
+}
+
+/** SHA-256 hash of a string/buffer. */
+function hashContent(content) {
+  return crypto.createHash('sha256').update(content).digest('hex');
+}
+
+/** Count .jar files in a directory (returns 0 if missing). */
+async function countJars(dir) {
+  try {
+    const entries = await readdir(dir);
+    return entries.filter((e) => e.endsWith('.jar')).length;
+  } catch {
+    return 0;
+  }
+}
 
 let scheduledTask = null;
 
@@ -129,6 +165,10 @@ export async function listBackups(config) {
       minecraftVersion: manifest.minecraftVersion || null,
       includesDatabase: manifest.includesDatabase || false,
       note: manifest.note || '',
+      appVersion: manifest.appVersion || null,
+      modCount: manifest.modCount ?? null,
+      quiesced: manifest.quiesced || false,
+      hasManifest: Object.keys(manifest).length > 0,
     });
   }
 
@@ -212,23 +252,43 @@ export async function createBackup(config, { type = 'manual', note = '', user = 
 
     await execFileAsync('tar', tarArgs, { maxBuffer: 10 * 1024 * 1024, timeout: 600000 });
 
-    // 4. Write manifest
+    // 4. Compute archive hash and collect extra metadata
+    const archiveStat = await stat(archivePath);
+    const archiveHash = await hashFileSha256(archivePath);
+
+    const modsDir = path.join(serverPath, config.modsFolder || 'mods');
+    const disabledDir = path.join(serverPath, config.disabledModsFolder || 'mods_disabled');
+    const modCount = (await countJars(modsDir)) + (await countJars(disabledDir));
+
+    let configHash = null;
+    const configPath2 = path.join(APP_ROOT, 'config.json');
+    try {
+      configHash = hashContent(await readFile(configPath2));
+    } catch {
+      /* ok */
+    }
+
+    // 5. Write manifest
     const manifest = {
       name,
       createdAt: new Date().toISOString(),
       type,
       note,
       user: user || null,
+      appVersion,
       serverPath: config.serverPath,
       minecraftVersion: config.minecraftVersion || 'unknown',
+      modCount,
+      configHash,
       includesDatabase,
       quiesced,
       modsFolder: config.modsFolder || 'mods',
       disabledModsFolder: config.disabledModsFolder || 'mods_disabled',
+      archiveSize: archiveStat.size,
+      archiveHash,
     };
     await writeFile(path.join(dir, `${name}.json`), JSON.stringify(manifest, null, 2));
 
-    const archiveStat = await stat(archivePath);
     info('Backup created', { name, size: archiveStat.size, type, includesDatabase, quiesced });
     audit('BACKUP_CREATE', { user: user || 'system', type, name, size: archiveStat.size, quiesced });
 
@@ -239,6 +299,8 @@ export async function createBackup(config, { type = 'manual', note = '', user = 
       type,
       includesDatabase,
       quiesced,
+      modCount,
+      appVersion,
     };
   } finally {
     // Re-enable auto-save if we disabled it
@@ -339,6 +401,68 @@ async function dumpDatabaseSql(pool, outDir) {
   }
 }
 
+// ---- Validate backup ----
+
+/**
+ * Validate a backup archive against its manifest.
+ * Returns { valid, manifest, warnings, errors }.
+ */
+export async function validateBackup(config, filename) {
+  const dir = backupDir(config);
+  const archivePath = path.join(dir, filename);
+  const manifestPath = archivePath.replace('.tar.gz', '.json');
+
+  const result = { valid: true, manifest: null, warnings: [], errors: [] };
+
+  if (!existsSync(archivePath)) {
+    result.valid = false;
+    result.errors.push('Archive file not found');
+    return result;
+  }
+
+  // Read manifest
+  let manifest;
+  try {
+    manifest = JSON.parse(await readFile(manifestPath, 'utf8'));
+    result.manifest = manifest;
+  } catch {
+    result.warnings.push('No manifest found — this backup predates manifest support');
+    return result;
+  }
+
+  // Verify archive hash if present
+  if (manifest.archiveHash) {
+    try {
+      const currentHash = await hashFileSha256(archivePath);
+      if (currentHash !== manifest.archiveHash) {
+        result.valid = false;
+        result.errors.push(
+          `Archive integrity check failed: expected ${manifest.archiveHash.slice(0, 16)}…, got ${currentHash.slice(0, 16)}…`,
+        );
+      }
+    } catch (err) {
+      result.warnings.push(`Could not verify archive hash: ${err.message}`);
+    }
+  } else {
+    result.warnings.push('No archive hash in manifest — integrity cannot be verified');
+  }
+
+  // Verify archive size if present
+  if (manifest.archiveSize) {
+    try {
+      const s = await stat(archivePath);
+      if (s.size !== manifest.archiveSize) {
+        result.valid = false;
+        result.errors.push(`Archive size mismatch: expected ${manifest.archiveSize} bytes, got ${s.size} bytes`);
+      }
+    } catch {
+      /* stat failure already covered by hash check */
+    }
+  }
+
+  return result;
+}
+
 // ---- Restore backup ----
 
 export async function restoreBackup(config, filename, mc) {
@@ -353,6 +477,15 @@ export async function restoreBackup(config, filename, mc) {
     throw new Error('Stop the Minecraft server before restoring a backup');
   }
 
+  // Validate archive integrity before proceeding
+  const validation = await validateBackup(config, filename);
+  if (!validation.valid) {
+    throw new Error(`Backup validation failed: ${validation.errors.join('; ')}`);
+  }
+  if (validation.warnings.length > 0) {
+    info('Backup validation warnings', { filename, warnings: validation.warnings });
+  }
+
   const lockId = acquireOp('restore', ['files', 'lifecycle']);
 
   try {
@@ -361,14 +494,7 @@ export async function restoreBackup(config, filename, mc) {
     // Estimate extracted size as ~3x compressed (conservative for gzip)
     await checkDiskSpace(path.dirname(config.serverPath), archiveStat.size * 3);
 
-    // Read manifest
-    const manifestPath = archivePath.replace('.tar.gz', '.json');
-    let manifest = {};
-    try {
-      manifest = JSON.parse(await readFile(manifestPath, 'utf8'));
-    } catch {
-      /* ok */
-    }
+    const manifest = validation.manifest || {};
 
     const serverPath = config.serverPath;
     const serverBasename = path.basename(serverPath);
