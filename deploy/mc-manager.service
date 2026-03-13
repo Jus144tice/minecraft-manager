@@ -1,0 +1,65 @@
+# Minecraft Manager — systemd service file
+# Copy to /etc/systemd/system/mc-manager.service and edit the values below.
+#
+# Quick setup:
+#   sudo cp deploy/mc-manager.service /etc/systemd/system/mc-manager.service
+#   sudo nano /etc/systemd/system/mc-manager.service   # fill in secrets
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable --now mc-manager
+#
+# Logs:
+#   sudo journalctl -u mc-manager -f
+
+[Unit]
+Description=Minecraft Manager Web Panel
+After=network.target postgresql.service
+Wants=postgresql.service
+
+[Service]
+Type=simple
+User=minecraft
+WorkingDirectory=/home/minecraft/minecraft-manager
+ExecStart=/usr/bin/node server.js
+Restart=on-failure
+RestartSec=10
+
+# Graceful shutdown: the manager catches SIGTERM, saves the world,
+# stops Minecraft, then exits. Give it enough time (up to 45s).
+KillSignal=SIGTERM
+TimeoutStopSec=45
+
+# --- Required secrets ---
+# Generate SESSION_SECRET with:
+#   node -e "console.log(require('crypto').randomBytes(48).toString('hex'))"
+Environment=SESSION_SECRET=CHANGE_ME
+
+# Set to "1" when behind a reverse proxy (Nginx, Caddy, etc.)
+Environment=TRUST_PROXY=1
+
+# Public base URL — must match OIDC callback registrations
+Environment=APP_URL=https://mc.example.com
+
+# Restrict login to these email addresses (comma-separated)
+Environment=ALLOWED_EMAILS=you@gmail.com
+
+# --- Authentication (configure at least one) ---
+
+# Google OIDC — https://console.cloud.google.com/apis/credentials
+#Environment=GOOGLE_CLIENT_ID=
+#Environment=GOOGLE_CLIENT_SECRET=
+
+# Microsoft OIDC — https://portal.azure.com/#view/Microsoft_AAD_RegisteredApps
+#Environment=MICROSOFT_CLIENT_ID=
+#Environment=MICROSOFT_CLIENT_SECRET=
+#Environment=MICROSOFT_TENANT=common
+
+# Local password fallback (lower security than OIDC)
+#Environment=LOCAL_PASSWORD=your-password-here
+
+# --- Optional ---
+
+# PostgreSQL for persistent sessions, user management, audit logs
+#Environment=DATABASE_URL=postgres://mcmanager:secretpass@localhost:5432/mcmanager
+
+[Install]
+WantedBy=multi-user.target

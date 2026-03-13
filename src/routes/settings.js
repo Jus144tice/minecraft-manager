@@ -11,6 +11,7 @@ import * as Demo from '../demoData.js';
 import cron from 'node-cron';
 import * as Backup from '../backup.js';
 import { audit } from '../audit.js';
+import { runPreflight } from '../preflight.js';
 
 export default function settingsRoutes(ctx) {
   const router = Router();
@@ -194,6 +195,16 @@ export default function settingsRoutes(ctx) {
       res.json({ current: resolved, sep: path.sep, crumbs, dirs });
     } catch (err) {
       res.status(400).json({ error: err.message });
+    }
+  });
+
+  // ---- Preflight checks ----
+  router.get('/preflight', async (_req, res) => {
+    try {
+      const result = await runPreflight(ctx.config);
+      res.json(result);
+    } catch (err) {
+      res.status(500).json({ error: err.message });
     }
   });
 

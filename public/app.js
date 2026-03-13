@@ -374,6 +374,51 @@ async function initApp() {
   } catch {
     /* ignore */
   }
+
+  // Load preflight checks (non-blocking)
+  loadPreflight();
+}
+
+// --- Preflight checks ---
+async function loadPreflight() {
+  try {
+    const result = await GET('/preflight');
+    renderPreflight(result);
+  } catch {
+    /* preflight is best-effort */
+  }
+}
+
+function renderPreflight(result) {
+  const checksEl = $('preflight-checks');
+  const summaryEl = $('preflight-summary');
+
+  // Only show if there are warnings or errors
+  const issues = result.checks.filter((c) => c.level !== 'ok');
+  if (issues.length === 0) {
+    hide('preflight-panel');
+    return;
+  }
+
+  const parts = [];
+  if (result.failed > 0) parts.push(result.failed + ' error' + (result.failed > 1 ? 's' : ''));
+  if (result.warned > 0) parts.push(result.warned + ' warning' + (result.warned > 1 ? 's' : ''));
+  if (result.passed > 0) parts.push(result.passed + ' passed');
+  summaryEl.textContent = parts.join(', ');
+
+  const icons = { error: '\u2716', warn: '\u26A0', ok: '\u2714' };
+  checksEl.innerHTML = issues
+    .map(
+      (c) =>
+        `<div class="preflight-item preflight-${esc(c.level)}">` +
+        `<span class="preflight-icon">${icons[c.level] || ''}</span>` +
+        `<div><div class="preflight-title">${esc(c.title)}</div>` +
+        (c.detail ? `<div class="preflight-detail">${esc(c.detail)}</div>` : '') +
+        `</div></div>`,
+    )
+    .join('');
+
+  show('preflight-panel');
 }
 
 // --- WebSocket (live console) ---

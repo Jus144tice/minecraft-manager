@@ -19,6 +19,8 @@ A self-hosted web control panel for a Minecraft Forge server running on Linux. B
 - Discord/webhook notifications — server crashes, auto-restarts, backups, lag spikes, player bans/kicks, and mod changes delivered to Discord or any webhook endpoint
 - Ops endpoints — `/healthz`, `/readyz`, and `/metrics` (Prometheus format) for systemd, Nginx, UptimeRobot, or Prometheus/Grafana
 - TPS monitoring with configurable lag-spike alerts and auto-restart on crash
+- Preflight self-checks — Dashboard warns about missing RCON, bad backup path, insecure bind settings, and other common misconfigurations
+- Production-ready deploy files — example systemd unit and Nginx reverse proxy config in `deploy/`
 
 ---
 
@@ -363,53 +365,14 @@ Set `autoStart` to `true` (or toggle it in **Settings → App Config** in the UI
 
 #### 2. Create the systemd service file
 
-Secrets go directly in the service file — they are readable only by root and the service user, and never committed to git.
+A ready-to-use service file is included in the repo. Copy it, fill in your secrets, and enable:
 
 ```bash
-sudo nano /etc/systemd/system/mc-manager.service
+sudo cp deploy/mc-manager.service /etc/systemd/system/mc-manager.service
+sudo nano /etc/systemd/system/mc-manager.service   # fill in SESSION_SECRET, auth, etc.
 ```
 
-```ini
-[Unit]
-Description=Minecraft Manager Web Panel
-After=network.target
-
-[Service]
-User=minecraft
-WorkingDirectory=/home/minecraft/minecraft-manager
-ExecStart=/usr/bin/node server.js
-Restart=on-failure
-RestartSec=10
-
-# Graceful shutdown: the manager catches SIGTERM, saves the world,
-# stops Minecraft, then exits. Give it enough time (up to 45s).
-KillSignal=SIGTERM
-TimeoutStopSec=45
-
-# --- Secrets and deployment config ---
-# Generate SESSION_SECRET with:
-#   node -e "console.log(require('crypto').randomBytes(48).toString('hex'))"
-Environment=SESSION_SECRET=replace-with-a-long-random-string
-Environment=TRUST_PROXY=1
-Environment=APP_URL=https://mc.example.com
-Environment=ALLOWED_EMAILS=you@gmail.com,family@outlook.com
-
-# At least one auth provider (Google and/or Microsoft):
-Environment=GOOGLE_CLIENT_ID=
-Environment=GOOGLE_CLIENT_SECRET=
-# Environment=MICROSOFT_CLIENT_ID=
-# Environment=MICROSOFT_CLIENT_SECRET=
-# Environment=MICROSOFT_TENANT=common
-
-# Optional local password fallback:
-# Environment=LOCAL_PASSWORD=your-password-here
-
-# Optional PostgreSQL (persistent sessions, user management, audit logs):
-# Environment=DATABASE_URL=postgres://mcmanager:your-db-password@localhost:5432/mcmanager
-
-[Install]
-WantedBy=multi-user.target
-```
+Secrets go directly in the service file — they are readable only by root and the service user, and never committed to git. See `deploy/mc-manager.service` for all available options.
 
 #### 3. Enable and start
 
@@ -476,53 +439,18 @@ At least one OIDC provider is required in production. Both can be configured sim
 
 ### Nginx reverse proxy
 
-Install Nginx and Certbot, then create a site config:
+A ready-to-use Nginx config is included in the repo. Install Nginx and Certbot, then copy and enable:
 
 ```bash
 sudo apt install -y nginx certbot python3-certbot-nginx
-sudo certbot --nginx -d mc.example.com
-```
-
-Create `/etc/nginx/sites-available/mc-manager`:
-
-```nginx
-server {
-    listen 443 ssl;
-    server_name mc.example.com;
-
-    # Certbot will populate these:
-    ssl_certificate     /etc/letsencrypt/live/mc.example.com/fullchain.pem;
-    ssl_certificate_key /etc/letsencrypt/live/mc.example.com/privkey.pem;
-    include             /etc/letsencrypt/options-ssl-nginx.conf;
-
-    location / {
-        proxy_pass         http://127.0.0.1:3000;
-        proxy_http_version 1.1;
-
-        # WebSocket support (live console)
-        proxy_set_header Upgrade    $http_upgrade;
-        proxy_set_header Connection "upgrade";
-
-        proxy_set_header Host              $host;
-        proxy_set_header X-Real-IP         $remote_addr;
-        proxy_set_header X-Forwarded-For   $proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto $scheme;
-    }
-}
-
-server {
-    listen 80;
-    server_name mc.example.com;
-    return 301 https://$host$request_uri;
-}
-```
-
-Enable the site:
-
-```bash
+sudo cp deploy/nginx.conf /etc/nginx/sites-available/mc-manager
+sudo nano /etc/nginx/sites-available/mc-manager   # change server_name to your domain
 sudo ln -s /etc/nginx/sites-available/mc-manager /etc/nginx/sites-enabled/
+sudo certbot --nginx -d mc.example.com
 sudo nginx -t && sudo systemctl reload nginx
 ```
+
+See `deploy/nginx.conf` for the full configuration including WebSocket support, SSL, and health check passthrough.
 
 ### Firewall
 
@@ -719,6 +647,26 @@ When players connect via Modrinth, they install the modpack profile which should
 
 - The panel must be restarted after changing `webPort` or `demoMode`. Other settings (RCON paths, launch config) take effect on the next action.
 - Environment variable changes (auth secrets, `ALLOWED_EMAILS`) require a service restart: `sudo systemctl restart mc-manager`
+
+### Common failure modes
+
+These are the issues most likely to trip up a first install:
+
+| Symptom                        | Cause                                                                                     | Fix                                                                                           |
+| ------------------------------ | ----------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------- |
+| Login button does nothing      | `APP_URL` not set or doesn't match the OIDC callback URL registered with Google/Microsoft | Set `APP_URL` in the systemd service to your exact public URL (e.g. `https://mc.example.com`) |
+| "Forbidden" or CSRF errors     | `TRUST_PROXY` not set to `1` behind a reverse proxy                                       | Add `Environment=TRUST_PROXY=1` to the systemd service                                        |
+| Sessions lost on restart       | `SESSION_SECRET` not set (using a temporary secret)                                       | Generate a permanent secret and set `SESSION_SECRET` in the systemd service                   |
+| Anyone can log in              | `ALLOWED_EMAILS` not set                                                                  | Set `ALLOWED_EMAILS` to a comma-separated list of permitted email addresses                   |
+| RCON won't connect             | `enable-rcon=true` missing from `server.properties`, or password mismatch                 | Verify `rcon.password` in `server.properties` matches `rconPassword` in `config.json`         |
+| Backups fail silently          | `backupPath` doesn't exist or isn't writable                                              | Create the directory and `chown` it to the service user                                       |
+| Server won't start             | `launch.executable` (e.g. `java`) not on PATH for the service user                        | Use an absolute path like `/usr/bin/java` in `launch.executable`                              |
+| WebSocket disconnects          | Nginx not configured for WebSocket upgrade                                                | Use the provided `deploy/nginx.conf` which includes `proxy_set_header Upgrade`                |
+| Panel unreachable from network | `bindHost` is `127.0.0.1` (default) without a reverse proxy                               | Set up Nginx (see `deploy/nginx.conf`) or temporarily use `0.0.0.0` for LAN testing           |
+
+### Preflight checks
+
+The Dashboard shows a **Setup Checks** panel that automatically detects common misconfigurations: missing server path, RCON not configured, backup path issues, insecure bind settings, missing authentication, and more. Fix the flagged items to get a clean bill of health. The same checks are available via `GET /api/preflight` (requires login).
 
 ---
 

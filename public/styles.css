@@ -326,6 +326,64 @@ body {
   flex-shrink: 0;
 }
 
+/* --- Preflight checks panel --- */
+.preflight-panel {
+  border-color: var(--warning, #f39c12);
+}
+.preflight-panel h3 {
+  color: var(--warning, #f39c12);
+}
+.preflight-summary {
+  font-size: 0.85rem;
+  margin-bottom: 0.75rem;
+  color: var(--text-dim);
+}
+.preflight-checks {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+.preflight-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.5rem;
+  padding: 0.5rem 0.75rem;
+  border-radius: var(--radius);
+  background: var(--bg);
+  font-size: 0.85rem;
+  line-height: 1.4;
+}
+.preflight-icon {
+  flex-shrink: 0;
+  font-size: 1rem;
+  line-height: 1.4;
+}
+.preflight-item.preflight-error {
+  border-left: 3px solid #e74c3c;
+}
+.preflight-item.preflight-error .preflight-icon {
+  color: #e74c3c;
+}
+.preflight-item.preflight-warn {
+  border-left: 3px solid #f39c12;
+}
+.preflight-item.preflight-warn .preflight-icon {
+  color: #f39c12;
+}
+.preflight-item.preflight-ok {
+  border-left: 3px solid #27ae60;
+}
+.preflight-item.preflight-ok .preflight-icon {
+  color: #27ae60;
+}
+.preflight-title {
+  font-weight: 600;
+}
+.preflight-detail {
+  color: var(--text-dim);
+  margin-top: 0.15rem;
+}
+
 /* --- Control sections --- */
 .control-section {
   background: var(--surface);
