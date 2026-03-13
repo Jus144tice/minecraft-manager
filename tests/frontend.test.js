@@ -222,7 +222,8 @@ test('Utility: formatSize formats bytes correctly', () => {
     function formatSize(bytes) {
       if (bytes < 1024) return bytes + ' B';
       if (bytes < 1048576) return (bytes / 1024).toFixed(1) + ' KB';
-      return (bytes / 1048576).toFixed(1) + ' MB';
+      if (bytes < 1073741824) return (bytes / 1048576).toFixed(1) + ' MB';
+      return (bytes / 1073741824).toFixed(1) + ' GB';
     }
     window.__formatSize = formatSize;
   `);
@@ -232,6 +233,8 @@ test('Utility: formatSize formats bytes correctly', () => {
   assert.equal(f(1536), '1.5 KB');
   assert.equal(f(1048576), '1.0 MB');
   assert.equal(f(2621440), '2.5 MB');
+  assert.equal(f(1073741824), '1.0 GB');
+  assert.equal(f(2147483648), '2.0 GB');
   dom.window.close();
 });
 

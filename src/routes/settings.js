@@ -42,7 +42,7 @@ export default function settingsRoutes(ctx) {
     const allowed = ['serverPath', 'rconHost', 'rconPort', 'rconPassword',
       'startCommand', 'minecraftVersion', 'modsFolder', 'disabledModsFolder', 'demoMode',
       'backupPath', 'backupSchedule', 'backupEnabled', 'maxBackups', 'backupTimezone',
-      'bindHost', 'autoStart'];
+      'bindHost', 'autoStart', 'autoRestart', 'tpsAlertThreshold'];
     const updates = {};
     for (const k of allowed) {
       if (k in req.body) updates[k] = req.body[k];

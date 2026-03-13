@@ -16,6 +16,7 @@ import { info } from './src/audit.js';
 import { initDatabase } from './src/db.js';
 import * as Backup from './src/backup.js';
 import { createServices } from './src/services.js';
+import { collectMetrics, collectDemoMetrics } from './src/metrics.js';
 
 // Route modules
 import statusRoutes from './src/routes/status.js';
@@ -95,6 +96,25 @@ function broadcastStatus() {
   } else {
     broadcast({ type: 'status', running: mc.running, uptime: mc.getUptime() });
   }
+}
+
+// Full metrics broadcast — called on a timer, includes TPS/CPU/RAM/disk/players
+let metricsCollecting = false;
+async function broadcastMetrics() {
+  if (metricsCollecting) return; // prevent overlap
+  metricsCollecting = true;
+  try {
+    let payload;
+    if (config.demoMode) {
+      const m = collectDemoMetrics();
+      payload = { type: 'status', running: ctx.demoState.running, uptime: ctx.getDemoUptime(), demoMode: true, rconConnected: true, ...m };
+    } else {
+      const m = await collectMetrics({ mc, rconCmd: ctx.rconCmd, rconConnected: ctx.rconConnected, config });
+      payload = { type: 'status', running: mc.running, uptime: mc.getUptime(), rconConnected: ctx.rconConnected, ...m };
+    }
+    broadcast(payload);
+  } catch { /* metrics collection should never crash the server */ }
+  metricsCollecting = false;
 }
 
 const ctx = createServices({ config, saveConfig, loadConfig, mc, broadcast, broadcastStatus });
@@ -223,7 +243,7 @@ mc.on('log', (entry) => {
   for (const ws of wsClients) if (ws.readyState === 1) ws.send(msg);
 });
 
-setInterval(broadcastStatus, 10000);
+setInterval(broadcastMetrics, 10000);
 
 // ============================================================
 // Config validation
@@ -317,6 +337,7 @@ async function gracefulShutdown(signal) {
 
   // Stop Minecraft server if running
   if (!config.demoMode && mc.running) {
+    ctx.markIntentionalStop();
     console.log('[Manager] Stopping Minecraft server...');
     try {
       // Try graceful stop via RCON first, fall back to stdin

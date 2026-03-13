@@ -47,6 +47,7 @@ export default function serverRoutes(ctx) {
       return res.json({ ok: true, message: '[DEMO] Server stopped.' });
     }
     try {
+      ctx.markIntentionalStop();
       if (ctx.rconConnected) { await ctx.rconCmd('stop'); } else { ctx.mc.stop(); }
       audit('SERVER_STOP', { user: req.session.user.email, ip: req.ip });
       res.json({ ok: true, message: 'Stop signal sent' });
@@ -62,6 +63,7 @@ export default function serverRoutes(ctx) {
       ctx.broadcastStatus();
       return res.json({ ok: true, message: '[DEMO] Killed.' });
     }
+    ctx.markIntentionalStop();
     ctx.mc.kill();
     audit('SERVER_KILL', { user: req.session.user.email, ip: req.ip });
     res.json({ ok: true, message: 'Process killed' });
@@ -87,6 +89,7 @@ export default function serverRoutes(ctx) {
       return res.json({ ok: true, message: '[DEMO] Restarting...' });
     }
     try {
+      ctx.markIntentionalStop();
       const stopped = new Promise(resolve => ctx.mc.once('stopped', resolve));
       if (ctx.rconConnected) { await ctx.rconCmd('stop'); } else { ctx.mc.stop(); }
       await Promise.race([stopped, new Promise(r => setTimeout(r, 30000))]);

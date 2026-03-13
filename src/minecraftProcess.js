@@ -46,11 +46,12 @@ export class MinecraftProcess extends EventEmitter {
     });
 
     this.proc.on('close', (code) => {
+      const uptime = this.getUptime();
       this.running = false;
       this.proc = null;
       this.startTime = null;
       this._log(`[Manager] Server stopped (exit code: ${code ?? 'unknown'})`);
-      this.emit('stopped', code);
+      this.emit('stopped', code, uptime);
     });
 
     this.proc.on('error', (err) => {

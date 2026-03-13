@@ -73,6 +73,18 @@
     <div class="page-header">
       <h2>Dashboard</h2>
     </div>
+    <!-- Crash alert (hidden by default) -->
+    <div id="crash-alert" class="crash-alert hidden">
+      <span id="crash-alert-text"></span>
+      <button class="btn btn-sm btn-ghost" id="crash-alert-dismiss">&times;</button>
+    </div>
+
+    <!-- Lag spike alert (hidden by default) -->
+    <div id="lag-alert" class="lag-alert hidden">
+      <span id="lag-alert-text"></span>
+      <button class="btn btn-sm btn-ghost" id="lag-alert-dismiss">&times;</button>
+    </div>
+
     <div class="stat-grid">
       <div class="stat-card">
         <div class="stat-label">Server Status</div>
@@ -89,6 +101,22 @@
       <div class="stat-card">
         <div class="stat-label">RCON</div>
         <div class="stat-value" id="stat-rcon">-</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">TPS</div>
+        <div class="stat-value" id="stat-tps">-</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">CPU</div>
+        <div class="stat-value" id="stat-cpu">-</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">RAM</div>
+        <div class="stat-value" id="stat-ram">-</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">Disk</div>
+        <div class="stat-value" id="stat-disk">-</div>
       </div>
     </div>
 
@@ -114,9 +142,8 @@
     <div class="control-section">
       <h3>Online Players</h3>
       <div id="online-players-list" class="player-chips">
-        <span class="dim">Refresh to load</span>
+        <span class="dim">Waiting for data...</span>
       </div>
-      <button class="btn btn-sm btn-ghost mt-sm" id="btn-refresh-online">Refresh</button>
     </div>
   </section>
 
@@ -587,6 +614,13 @@
             <span>Auto-start Minecraft on boot</span>
           </label>
           <span class="hint">Automatically launches the Minecraft server when the manager starts. Recommended when running as a systemd service.</span>
+        </div>
+        <div class="form-group">
+          <label class="checkbox-label">
+            <input type="checkbox" name="autoRestart" id="cfg-auto-restart" />
+            <span>Auto-restart on crash</span>
+          </label>
+          <span class="hint">Automatically restarts the Minecraft server if it crashes. Rate-limited to 3 restarts per 10 minutes to prevent loops.</span>
         </div>
         <div class="form-group">
           <label class="checkbox-label">

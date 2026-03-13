@@ -1,30 +1,33 @@
-// Server status route: running state, uptime, RCON status, online player count.
+// Server status route: running state, uptime, RCON status, performance metrics.
 
 import { Router } from 'express';
 import * as Demo from '../demoData.js';
+import { collectMetrics, collectDemoMetrics } from '../metrics.js';
 
 export default function statusRoutes(ctx) {
   const router = Router();
 
   router.get('/status', async (req, res) => {
     if (ctx.config.demoMode) {
-      return res.json(Demo.getDemoStatus(ctx.demoState.running, ctx.getDemoUptime()));
+      const m = collectDemoMetrics();
+      return res.json({
+        ...Demo.getDemoStatus(ctx.demoState.running, ctx.getDemoUptime()),
+        ...m,
+      });
     }
-    let onlineCount = 0;
-    if (ctx.rconConnected) {
-      try {
-        const r = await ctx.rconCmd('list');
-        const m = r.match(/There are (\d+)/);
-        if (m) onlineCount = parseInt(m[1]);
-      } catch { /* starting */ }
-    }
+    const m = await collectMetrics({
+      mc: ctx.mc,
+      rconCmd: ctx.rconCmd,
+      rconConnected: ctx.rconConnected,
+      config: ctx.config,
+    });
     res.json({
       running: ctx.mc.running,
       uptime: ctx.mc.getUptime(),
       rconConnected: ctx.rconConnected,
-      onlineCount,
       serverPath: ctx.config.serverPath,
       minecraftVersion: ctx.config.minecraftVersion || 'unknown',
+      ...m,
     });
   });
 

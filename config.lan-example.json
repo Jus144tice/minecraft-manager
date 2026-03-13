@@ -11,6 +11,8 @@
   "modsFolder": "mods",
   "disabledModsFolder": "mods_disabled",
   "autoStart": false,
+  "autoRestart": true,
+  "tpsAlertThreshold": 18,
   "backupEnabled": true,
   "backupSchedule": "0 3 * * *",
   "backupPath": "/mnt/backups/minecraft",

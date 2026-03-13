@@ -121,7 +121,8 @@ function formatUptime(secs) {
 function formatSize(bytes) {
   if (bytes < 1024) return `${bytes} B`;
   if (bytes < 1048576) return `${(bytes / 1024).toFixed(1)} KB`;
-  return `${(bytes / 1048576).toFixed(1)} MB`;
+  if (bytes < 1073741824) return `${(bytes / 1048576).toFixed(1)} MB`;
+  return `${(bytes / 1073741824).toFixed(1)} GB`;
 }
 function sideLabel(clientSide, serverSide) {
   const c = clientSide, s = serverSide;
@@ -273,10 +274,9 @@ async function initApp() {
   } catch { /* non-fatal — CSRF check will reject mutating requests until resolved */ }
 
   connectWs();
-  loadStatus();
-  loadOnlinePlayers(); // populate immediately without needing a manual refresh
+  loadStatus(); // initial load; WebSocket takes over for live updates
   if (statusInterval) clearInterval(statusInterval);
-  statusInterval = setInterval(loadStatus, 15000);
+  statusInterval = setInterval(loadStatus, 30000); // fallback poll in case WS drops
   // Show demo banner if in demo mode; also stash demoMode for UI decisions
   try {
     const cfg = await GET('/config');
@@ -304,7 +304,8 @@ function connectWs() {
     try {
       const msg = JSON.parse(ev.data);
       if (msg.type === 'log') appendConsole(msg.line);
-      if (msg.type === 'status') updateStatusBadge(msg.running, msg.uptime);
+      if (msg.type === 'status') updateDashboard(msg);
+      if (msg.type === 'crash') showCrashAlert(msg);
     } catch { /* ignore */ }
   };
 
@@ -426,23 +427,107 @@ async function runServerActionPrompt(el) {
   }
 }
 
-// --- Status & dashboard ---
-function updateStatusBadge(running, uptime) {
+// --- Status & dashboard (live via WebSocket) ---
+
+let lagAlertDismissed = false; // user can dismiss until next spike
+
+function updateDashboard(s) {
+  // Header badge
   const badge = $('server-badge');
-  badge.textContent = running ? 'Running' : 'Stopped';
-  badge.className = running ? 'badge badge-running' : 'badge badge-stopped';
-  $('stat-status').textContent = running ? 'Running' : 'Stopped';
-  $('stat-status').className = 'stat-value ' + (running ? 'text-green' : 'text-red');
-  $('stat-uptime').textContent = formatUptime(uptime);
+  badge.textContent = s.running ? 'Running' : 'Stopped';
+  badge.className = s.running ? 'badge badge-running' : 'badge badge-stopped';
+
+  // Core stat cards
+  $('stat-status').textContent = s.running ? 'Running' : 'Stopped';
+  $('stat-status').className = 'stat-value ' + (s.running ? 'text-green' : 'text-red');
+  $('stat-uptime').textContent = formatUptime(s.uptime);
+  $('stat-players').textContent = s.running ? String(s.onlineCount ?? 0) : '-';
+
+  const rconEl = $('stat-rcon');
+  if (s.rconConnected != null) {
+    rconEl.textContent = s.rconConnected ? 'Connected' : 'Disconnected';
+    rconEl.className = 'stat-value ' + (s.rconConnected ? 'text-green' : 'text-yellow');
+  }
+
+  // Performance metrics
+  const tpsEl = $('stat-tps');
+  if (s.tps != null) {
+    tpsEl.textContent = s.tps.toFixed(1);
+    tpsEl.className = 'stat-value ' + (s.tps >= 18 ? 'text-green' : s.tps >= 15 ? 'text-yellow' : 'text-red');
+  } else {
+    tpsEl.textContent = s.running ? 'N/A' : '-';
+    tpsEl.className = 'stat-value';
+  }
+
+  $('stat-cpu').textContent = s.cpuPercent != null ? s.cpuPercent.toFixed(1) + '%' : (s.running ? 'N/A' : '-');
+  $('stat-ram').textContent = s.memBytes != null ? formatSize(s.memBytes) : (s.running ? 'N/A' : '-');
+  $('stat-disk').textContent = s.diskBytes != null ? formatSize(s.diskBytes) : '-';
+
+  // Lag spike alert
+  if (s.lagSpike && s.tps != null) {
+    lagAlertDismissed = false; // new spike resets dismiss
+    $('lag-alert-text').textContent = `Lag detected — TPS is ${s.tps.toFixed(1)} (threshold: ${s.tpsThreshold ?? 18})`;
+    show('lag-alert');
+  } else if (!s.lagSpike && !lagAlertDismissed) {
+    hide('lag-alert');
+  }
+
+  // Online players — auto-update from WebSocket data
+  if (s.running && s.players) {
+    renderOnlinePlayers(s.players);
+  } else if (!s.running) {
+    $('online-players-list').innerHTML = '<span class="dim">Server is stopped</span>';
+  }
 }
 
+// Lag alert dismiss button
+$('lag-alert-dismiss').addEventListener('click', () => {
+  lagAlertDismissed = true;
+  hide('lag-alert');
+});
+
+// --- Crash alert ---
+function showCrashAlert(msg) {
+  const el = $('crash-alert');
+  $('crash-alert-text').textContent = msg.message;
+  show(el);
+  // Also log to console
+  appendConsole(`[CRASH] ${msg.message}`, 'error');
+  // Auto-hide after 60s if auto-restarting
+  if (msg.autoRestarting) {
+    setTimeout(() => hide(el), 60000);
+  }
+}
+
+$('crash-alert-dismiss').addEventListener('click', () => {
+  hide('crash-alert');
+});
+
+function renderOnlinePlayers(players) {
+  const el = $('online-players-list');
+  if (!players || players.length === 0) {
+    el.innerHTML = '<span class="dim">No players online</span>';
+    return;
+  }
+  el.innerHTML = players.map(name =>
+    `<span class="chip">${esc(name)}
+      <button class="chip-kick" data-name="${esc(name)}" title="Kick">&#10005;</button>
+    </span>`
+  ).join('');
+  el.querySelectorAll('.chip-kick').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      if (!confirm(`Kick ${btn.dataset.name}?`)) return;
+      try { await POST('/players/kick', { name: btn.dataset.name }); }
+      catch (err) { alert(err.message); }
+    });
+  });
+}
+
+// Fallback: load full status via HTTP (used on init and as WS fallback)
 async function loadStatus() {
   try {
     const s = await GET('/status');
-    updateStatusBadge(s.running, s.uptime);
-    $('stat-players').textContent = s.running ? String(s.onlineCount) : '-';
-    $('stat-rcon').textContent = s.rconConnected ? 'Connected' : 'Disconnected';
-    $('stat-rcon').className = 'stat-value ' + (s.rconConnected ? 'text-green' : 'text-yellow');
+    updateDashboard(s);
   } catch { /* ignore */ }
 }
 
@@ -473,33 +558,6 @@ $('btn-say').addEventListener('click', async () => {
   try { await POST('/players/say', { message: msg }); $('say-input').value = ''; flash('control-msg', 'Message sent!'); }
   catch (err) { flash('control-msg', err.message, true); }
 });
-
-$('btn-refresh-online').addEventListener('click', loadOnlinePlayers);
-
-async function loadOnlinePlayers() {
-  const el = $('online-players-list');
-  try {
-    const data = await GET('/players/online');
-    if (data.players.length === 0) {
-      el.innerHTML = '<span class="dim">No players online</span>';
-    } else {
-      el.innerHTML = data.players.map(name =>
-        `<span class="chip">${esc(name)}
-          <button class="chip-kick" data-name="${esc(name)}" title="Kick">&#10005;</button>
-        </span>`
-      ).join('');
-      el.querySelectorAll('.chip-kick').forEach(btn => {
-        btn.addEventListener('click', async () => {
-          if (!confirm(`Kick ${btn.dataset.name}?`)) return;
-          try { await POST('/players/kick', { name: btn.dataset.name }); loadOnlinePlayers(); }
-          catch (err) { alert(err.message); }
-        });
-      });
-    }
-  } catch (err) {
-    el.innerHTML = `<span class="dim">${esc(err.message)}</span>`;
-  }
-}
 
 // --- Mods ---
 let allMods = [];
