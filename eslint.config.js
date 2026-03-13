@@ -36,12 +36,22 @@ export default [
       },
     },
   },
-  // Test files
+  // Unit test files
   {
     files: ['tests/**/*.js'],
     languageOptions: {
       globals: {
         ...globals.node,
+      },
+    },
+  },
+  // E2E tests — page.waitForFunction() callbacks run in browser context
+  {
+    files: ['tests/e2e/**/*.js'],
+    languageOptions: {
+      globals: {
+        ...globals.node,
+        ...globals.browser,
       },
     },
   },
