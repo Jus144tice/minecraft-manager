@@ -49,7 +49,7 @@ export default function settingsRoutes(ctx) {
       'rconHost',
       'rconPort',
       'rconPassword',
-      'startCommand',
+      'launch',
       'minecraftVersion',
       'modsFolder',
       'disabledModsFolder',
@@ -63,10 +63,39 @@ export default function settingsRoutes(ctx) {
       'autoStart',
       'autoRestart',
       'tpsAlertThreshold',
+      'notifications',
     ];
     const updates = {};
     for (const k of allowed) {
       if (k in req.body) updates[k] = req.body[k];
+    }
+    // Validate launch config structure
+    if (updates.launch) {
+      if (typeof updates.launch !== 'object' || !updates.launch.executable || !Array.isArray(updates.launch.args)) {
+        return res.status(400).json({
+          error: 'Invalid launch config: must include "executable" (string) and "args" (array).',
+        });
+      }
+      if (!updates.launch.executable.trim()) {
+        return res.status(400).json({ error: 'Launch executable cannot be empty.' });
+      }
+      // Sanitize: only keep known keys
+      updates.launch = {
+        executable: updates.launch.executable,
+        args: updates.launch.args.map(String),
+        ...(updates.launch.env && typeof updates.launch.env === 'object' ? { env: updates.launch.env } : {}),
+      };
+    }
+    // Sanitize notifications config
+    if (updates.notifications) {
+      if (typeof updates.notifications !== 'object' || Array.isArray(updates.notifications)) {
+        return res.status(400).json({ error: 'notifications must be an object.' });
+      }
+      const n = updates.notifications;
+      updates.notifications = {
+        ...(n.webhookUrl && typeof n.webhookUrl === 'string' ? { webhookUrl: n.webhookUrl.trim() } : {}),
+        ...(Array.isArray(n.events) ? { events: n.events.filter((e) => typeof e === 'string') } : {}),
+      };
     }
     // Validate cron expression before saving
     if (updates.backupSchedule && !cron.validate(updates.backupSchedule)) {
@@ -80,7 +109,12 @@ export default function settingsRoutes(ctx) {
       if (updates.demoMode === false) ctx.stopDemoActivityTimer();
       if (updates.demoMode === true) ctx.startDemoActivityTimer();
       if (['backupPath', 'backupSchedule', 'backupEnabled', 'maxBackups', 'backupTimezone'].some((k) => k in updates)) {
-        Backup.setupBackupSchedule(ctx.config, ctx.mc);
+        Backup.setupBackupSchedule(ctx.config, {
+          rconCmd: ctx.rconCmd,
+          get rconConnected() {
+            return ctx.rconConnected;
+          },
+        });
       }
       audit('CONFIG_SAVE', {
         user: req.session.user.email,

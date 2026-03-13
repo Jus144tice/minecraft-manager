@@ -3,7 +3,7 @@
 // Backups are stored in a configurable directory with timestamp-based naming.
 
 import { execFile } from 'child_process';
-import { mkdir, readdir, stat, unlink, readFile, writeFile, rm } from 'fs/promises';
+import { mkdir, readdir, stat, statfs, unlink, readFile, writeFile, rm } from 'fs/promises';
 import { existsSync } from 'fs';
 import path from 'path';
 import { promisify } from 'util';
@@ -17,6 +17,89 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const APP_ROOT = path.resolve(__dirname, '..');
 
 let scheduledTask = null;
+
+// ---- Backup-state lock ----
+// Prevents concurrent backup/restore operations that could corrupt data.
+
+let backupLock = null; // { operation, startedAt } or null
+
+export function getBackupLock() {
+  return backupLock ? { ...backupLock } : null;
+}
+
+function acquireLock(operation) {
+  if (backupLock) {
+    throw new Error(
+      `A ${backupLock.operation} is already in progress (started ${new Date(backupLock.startedAt).toISOString()}). Wait for it to finish before starting another.`,
+    );
+  }
+  backupLock = { operation, startedAt: Date.now() };
+  info(`Backup lock acquired: ${operation}`);
+}
+
+function releaseLock() {
+  if (backupLock) {
+    info(`Backup lock released: ${backupLock.operation}`);
+  }
+  backupLock = null;
+}
+
+// ---- Disk-space preflight ----
+// Ensure enough free space exists in the backup directory before archiving.
+// We estimate the backup will be roughly the size of the server directory
+// (compressed output is smaller, but staging + archive may coexist briefly).
+
+const MIN_FREE_HEADROOM = 512 * 1024 * 1024; // 512 MB minimum headroom
+
+async function checkDiskSpace(targetDir, estimatedBytes) {
+  try {
+    const s = await statfs(targetDir);
+    const freeBytes = s.bfree * s.bsize;
+    const required = estimatedBytes + MIN_FREE_HEADROOM;
+    if (freeBytes < required) {
+      const freeGB = (freeBytes / 1073741824).toFixed(1);
+      const reqGB = (required / 1073741824).toFixed(1);
+      throw new Error(
+        `Insufficient disk space for backup: ${freeGB} GB free, ~${reqGB} GB required (including ${(MIN_FREE_HEADROOM / 1073741824).toFixed(1)} GB headroom). Free up space or change backupPath.`,
+      );
+    }
+    return freeBytes;
+  } catch (err) {
+    // Re-throw our own insufficient-space error; swallow statfs failures
+    if (err.message.startsWith('Insufficient disk space')) throw err;
+    warn('Disk space preflight check failed, proceeding anyway', { error: err.message });
+    return null;
+  }
+}
+
+// ---- Server quiesce helpers ----
+// Flush world data and disable auto-save during backup for a consistent snapshot.
+
+async function quiesceServer(rconCmd) {
+  info('Quiescing server: save-all flush + save-off');
+  try {
+    await rconCmd('save-all flush');
+  } catch {
+    // Some servers don't support "flush" argument — fall back to plain save-all
+    await rconCmd('save-all');
+  }
+  // Give the server a moment to finish writing chunks to disk
+  await new Promise((r) => setTimeout(r, 3000));
+  try {
+    await rconCmd('save-off');
+  } catch (err) {
+    warn('save-off failed — backup will proceed without disabling auto-save', { error: err.message });
+  }
+}
+
+async function unquiesceServer(rconCmd) {
+  info('Unquiescing server: save-on');
+  try {
+    await rconCmd('save-on');
+  } catch (err) {
+    warn('save-on failed — auto-save may still be disabled, check the server console', { error: err.message });
+  }
+}
 
 // ---- Helpers ----
 
@@ -70,15 +153,38 @@ export async function listBackups(config) {
 
 // ---- Create backup ----
 
-export async function createBackup(config, { type = 'manual', note = '', user = null } = {}) {
+export async function createBackup(config, { type = 'manual', note = '', user = null, rconCmd = null } = {}) {
+  acquireLock('backup');
+  let quiesced = false;
+
   const dir = backupDir(config);
   await mkdir(dir, { recursive: true });
 
   const name = generateBackupName();
   const stagingDir = path.join(dir, `_staging_${name}`);
-  await mkdir(stagingDir, { recursive: true });
 
   try {
+    // Disk-space preflight: estimate size from server directory
+    let estimatedBytes = 0;
+    try {
+      estimatedBytes = await dirSizeQuick(config.serverPath);
+    } catch {
+      /* proceed without estimate */
+    }
+    await checkDiskSpace(dir, estimatedBytes);
+
+    // Quiesce the server if RCON is available (flush + disable auto-save)
+    if (rconCmd) {
+      try {
+        await quiesceServer(rconCmd);
+        quiesced = true;
+      } catch (err) {
+        warn('Server quiesce failed, proceeding with live backup', { error: err.message });
+      }
+    }
+
+    await mkdir(stagingDir, { recursive: true });
+
     // 1. Copy app config
     const appDir = path.join(stagingDir, 'app');
     await mkdir(appDir, { recursive: true });
@@ -131,14 +237,15 @@ export async function createBackup(config, { type = 'manual', note = '', user = 
       serverPath: config.serverPath,
       minecraftVersion: config.minecraftVersion || 'unknown',
       includesDatabase,
+      quiesced,
       modsFolder: config.modsFolder || 'mods',
       disabledModsFolder: config.disabledModsFolder || 'mods_disabled',
     };
     await writeFile(path.join(dir, `${name}.json`), JSON.stringify(manifest, null, 2));
 
     const archiveStat = await stat(archivePath);
-    info('Backup created', { name, size: archiveStat.size, type, includesDatabase });
-    audit('BACKUP_CREATE', { user: user || 'system', type, name, size: archiveStat.size });
+    info('Backup created', { name, size: archiveStat.size, type, includesDatabase, quiesced });
+    audit('BACKUP_CREATE', { user: user || 'system', type, name, size: archiveStat.size, quiesced });
 
     return {
       filename: `${name}.tar.gz`,
@@ -146,11 +253,56 @@ export async function createBackup(config, { type = 'manual', note = '', user = 
       createdAt: manifest.createdAt,
       type,
       includesDatabase,
+      quiesced,
     };
   } finally {
+    // Re-enable auto-save if we disabled it
+    if (quiesced && rconCmd) {
+      await unquiesceServer(rconCmd).catch(() => {});
+    }
     // Clean up staging directory
     await rm(stagingDir, { recursive: true, force: true }).catch(() => {});
+    releaseLock();
   }
+}
+
+// Quick directory size estimate — top-level files + one level of subdirectories.
+// Faster than full recursive walk; good enough for a preflight estimate.
+async function dirSizeQuick(dir) {
+  let total = 0;
+  let entries;
+  try {
+    entries = await readdir(dir, { withFileTypes: true });
+  } catch {
+    return 0;
+  }
+  for (const entry of entries) {
+    const full = path.join(dir, entry.name);
+    if (entry.isFile()) {
+      try {
+        total += (await stat(full)).size;
+      } catch {
+        /* skip */
+      }
+    } else if (entry.isDirectory() && entry.name !== 'node_modules' && entry.name !== '.git') {
+      // Estimate subdirectory: sum top-level files only (one level deep)
+      try {
+        const subEntries = await readdir(full, { withFileTypes: true });
+        for (const sub of subEntries) {
+          if (sub.isFile()) {
+            try {
+              total += (await stat(path.join(full, sub.name))).size;
+            } catch {
+              /* skip */
+            }
+          }
+        }
+      } catch {
+        /* skip */
+      }
+    }
+  }
+  return total;
 }
 
 // ---- SQL-based database dump (no pg_dump binary needed) ----
@@ -216,67 +368,78 @@ export async function restoreBackup(config, filename, mc) {
     throw new Error('Stop the Minecraft server before restoring a backup');
   }
 
-  // Read manifest
-  const manifestPath = archivePath.replace('.tar.gz', '.json');
-  let manifest = {};
-  try {
-    manifest = JSON.parse(await readFile(manifestPath, 'utf8'));
-  } catch {
-    /* ok */
-  }
-
-  const serverPath = config.serverPath;
-  const serverBasename = path.basename(serverPath);
-  const backupName = filename.replace('.tar.gz', '');
-
-  // 1. Extract archive to a temp directory
-  const extractDir = path.join(dir, `_restore_${Date.now()}`);
-  await mkdir(extractDir, { recursive: true });
+  acquireLock('restore');
 
   try {
-    await execFileAsync('tar', ['-xzf', archivePath, '-C', extractDir], {
-      maxBuffer: 10 * 1024 * 1024,
-      timeout: 600000,
-    });
+    // Disk-space preflight: need at least the archive size for extraction
+    const archiveStat = await stat(archivePath);
+    // Estimate extracted size as ~3x compressed (conservative for gzip)
+    await checkDiskSpace(path.dirname(config.serverPath), archiveStat.size * 3);
 
-    // 2. Restore the Minecraft server directory
-    const extractedServerDir = path.join(extractDir, serverBasename);
-    if (existsSync(extractedServerDir)) {
-      // Remove current server contents and replace
-      await rm(serverPath, { recursive: true, force: true });
-      // Move extracted server dir into place
-      const { rename } = await import('fs/promises');
-      try {
-        await rename(extractedServerDir, serverPath);
-      } catch {
-        // Cross-device move — fall back to copy
-        await execFileAsync('cp', ['-a', extractedServerDir, serverPath], { timeout: 300000 });
+    // Read manifest
+    const manifestPath = archivePath.replace('.tar.gz', '.json');
+    let manifest = {};
+    try {
+      manifest = JSON.parse(await readFile(manifestPath, 'utf8'));
+    } catch {
+      /* ok */
+    }
+
+    const serverPath = config.serverPath;
+    const serverBasename = path.basename(serverPath);
+    const backupName = filename.replace('.tar.gz', '');
+
+    // 1. Extract archive to a temp directory
+    const extractDir = path.join(dir, `_restore_${Date.now()}`);
+    await mkdir(extractDir, { recursive: true });
+
+    try {
+      await execFileAsync('tar', ['-xzf', archivePath, '-C', extractDir], {
+        maxBuffer: 10 * 1024 * 1024,
+        timeout: 600000,
+      });
+
+      // 2. Restore the Minecraft server directory
+      const extractedServerDir = path.join(extractDir, serverBasename);
+      if (existsSync(extractedServerDir)) {
+        // Remove current server contents and replace
+        await rm(serverPath, { recursive: true, force: true });
+        // Move extracted server dir into place
+        const { rename } = await import('fs/promises');
+        try {
+          await rename(extractedServerDir, serverPath);
+        } catch {
+          // Cross-device move — fall back to copy
+          await execFileAsync('cp', ['-a', extractedServerDir, serverPath], { timeout: 300000 });
+        }
+        info('Restore: Minecraft server files restored');
       }
-      info('Restore: Minecraft server files restored');
-    }
 
-    // 3. Restore app config
-    const extractedConfig = path.join(extractDir, `_staging_${backupName}`, 'app', 'config.json');
-    if (existsSync(extractedConfig)) {
-      await writeFile(path.join(APP_ROOT, 'config.json'), await readFile(extractedConfig));
-      info('Restore: config.json restored');
-    }
-
-    // 4. Restore database
-    const pool = getPool();
-    if (pool) {
-      const dbDir = path.join(extractDir, `_staging_${backupName}`, 'database');
-      if (existsSync(dbDir)) {
-        await restoreDatabaseSql(pool, dbDir);
-        info('Restore: PostgreSQL data restored');
+      // 3. Restore app config
+      const extractedConfig = path.join(extractDir, `_staging_${backupName}`, 'app', 'config.json');
+      if (existsSync(extractedConfig)) {
+        await writeFile(path.join(APP_ROOT, 'config.json'), await readFile(extractedConfig));
+        info('Restore: config.json restored');
       }
-    }
 
-    audit('BACKUP_RESTORE', { filename, user: 'system' });
-    info('Restore complete', { filename });
-    return { ok: true, filename, includesDatabase: manifest.includesDatabase || false };
+      // 4. Restore database
+      const pool = getPool();
+      if (pool) {
+        const dbDir = path.join(extractDir, `_staging_${backupName}`, 'database');
+        if (existsSync(dbDir)) {
+          await restoreDatabaseSql(pool, dbDir);
+          info('Restore: PostgreSQL data restored');
+        }
+      }
+
+      audit('BACKUP_RESTORE', { filename, user: 'system' });
+      info('Restore complete', { filename });
+      return { ok: true, filename, includesDatabase: manifest.includesDatabase || false };
+    } finally {
+      await rm(extractDir, { recursive: true, force: true }).catch(() => {});
+    }
   } finally {
-    await rm(extractDir, { recursive: true, force: true }).catch(() => {});
+    releaseLock();
   }
 }
 
@@ -329,7 +492,7 @@ export async function deleteBackup(config, filename) {
 
 // ---- Scheduled backups (cron) ----
 
-export function setupBackupSchedule(config, _mc) {
+export function setupBackupSchedule(config, svc = {}) {
   stopBackupSchedule();
 
   if (!config.backupEnabled) {
@@ -349,8 +512,12 @@ export function setupBackupSchedule(config, _mc) {
     async () => {
       info('Scheduled backup starting...');
       try {
-        const result = await createBackup(config, { type: 'scheduled' });
-        info('Scheduled backup complete', { filename: result.filename, size: result.size });
+        // Access rconConnected at execution time (may be a getter)
+        const result = await createBackup(config, {
+          type: 'scheduled',
+          rconCmd: svc.rconConnected ? svc.rconCmd : null,
+        });
+        info('Scheduled backup complete', { filename: result.filename, size: result.size, quiesced: result.quiesced });
 
         // Prune old backups if maxBackups is set
         if (config.maxBackups && config.maxBackups > 0) {

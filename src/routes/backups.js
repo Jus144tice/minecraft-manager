@@ -23,10 +23,12 @@ export default function backupRoutes(ctx) {
         type: 'manual',
         note: String(note || '').slice(0, 200),
         user: req.session.user.email,
+        rconCmd: ctx.rconConnected ? ctx.rconCmd : null,
       });
       res.json(result);
     } catch (err) {
-      res.status(500).json({ error: err.message });
+      const status = err.message.includes('already in progress') ? 409 : 500;
+      res.status(status).json({ error: err.message });
     }
   });
 
@@ -39,8 +41,13 @@ export default function backupRoutes(ctx) {
       ctx.config = await ctx.loadConfig();
       res.json(result);
     } catch (err) {
-      res.status(500).json({ error: err.message });
+      const status = err.message.includes('already in progress') ? 409 : 500;
+      res.status(status).json({ error: err.message });
     }
+  });
+
+  router.get('/backups/lock', requireAdmin, (_req, res) => {
+    res.json({ lock: Backup.getBackupLock() });
   });
 
   router.delete('/backups/:filename', requireAdmin, async (req, res) => {
