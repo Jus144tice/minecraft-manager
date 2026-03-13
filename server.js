@@ -10,7 +10,14 @@ import crypto from 'crypto';
 import { MinecraftProcess } from './src/minecraftProcess.js';
 import * as Demo from './src/demoData.js';
 import { buildSessionMiddleware, buildAuthRouter, requireSession } from './src/auth.js';
-import { buildHelmet, buildAuthLimiter, buildApiLimiter, buildSameOriginCheck, buildCsrfCheck, checkWsOrigin } from './src/middleware.js';
+import {
+  buildHelmet,
+  buildAuthLimiter,
+  buildApiLimiter,
+  buildSameOriginCheck,
+  buildCsrfCheck,
+  checkWsOrigin,
+} from './src/middleware.js';
 import { validateConfig } from './src/validate.js';
 import { info } from './src/audit.js';
 import { initDatabase } from './src/db.js';
@@ -107,13 +114,22 @@ async function broadcastMetrics() {
     let payload;
     if (config.demoMode) {
       const m = collectDemoMetrics();
-      payload = { type: 'status', running: ctx.demoState.running, uptime: ctx.getDemoUptime(), demoMode: true, rconConnected: true, ...m };
+      payload = {
+        type: 'status',
+        running: ctx.demoState.running,
+        uptime: ctx.getDemoUptime(),
+        demoMode: true,
+        rconConnected: true,
+        ...m,
+      };
     } else {
       const m = await collectMetrics({ mc, rconCmd: ctx.rconCmd, rconConnected: ctx.rconConnected, config });
       payload = { type: 'status', running: mc.running, uptime: mc.getUptime(), rconConnected: ctx.rconConnected, ...m };
     }
     broadcast(payload);
-  } catch { /* metrics collection should never crash the server */ }
+  } catch {
+    /* metrics collection should never crash the server */
+  }
   metricsCollecting = false;
 }
 
@@ -224,7 +240,9 @@ wss.on('connection', (ws, req) => {
       for (let i = 0; i < 6; i++) {
         ws.send(JSON.stringify({ type: 'log', time: Date.now(), line: Demo.DEMO_ACTIVITY_LOGS[i] }));
       }
-      ws.send(JSON.stringify({ type: 'status', running: ctx.demoState.running, uptime: ctx.getDemoUptime(), demoMode: true }));
+      ws.send(
+        JSON.stringify({ type: 'status', running: ctx.demoState.running, uptime: ctx.getDemoUptime(), demoMode: true }),
+      );
     } else {
       for (const entry of mc.logs) {
         ws.send(JSON.stringify({ type: 'log', ...entry }));
@@ -266,7 +284,7 @@ const PORT = parseInt(process.env.WEB_PORT, 10) || config.webPort || 3000;
 const BIND_HOST = process.env.BIND_HOST || config.bindHost || '127.0.0.1';
 
 if (config.demoMode) {
-  await Demo.enrichDemoIcons().catch(err =>
+  await Demo.enrichDemoIcons().catch((err) =>
     console.warn('[Demo] Icon enrichment failed (icons may be missing):', err.message),
   );
 }
@@ -332,7 +350,11 @@ async function gracefulShutdown(signal) {
 
   // Close WebSocket connections
   for (const ws of wsClients) {
-    try { ws.close(1001, 'Server shutting down'); } catch { /* ignore */ }
+    try {
+      ws.close(1001, 'Server shutting down');
+    } catch {
+      /* ignore */
+    }
   }
 
   // Stop Minecraft server if running
@@ -345,7 +367,7 @@ async function gracefulShutdown(signal) {
         await ctx.rconCmd('say Server shutting down...');
         await ctx.rconCmd('save-all');
         // Give save-all a moment to flush
-        await new Promise(r => setTimeout(r, 2000));
+        await new Promise((r) => setTimeout(r, 2000));
         await ctx.rconCmd('stop');
       } else {
         mc.stop();

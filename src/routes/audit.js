@@ -13,8 +13,11 @@ export default function auditRoutes() {
     const offset = Math.max(parseInt(req.query.offset) || 0, 0);
     const action = req.query.action || undefined;
     const email = req.query.email || undefined;
-    try { res.json(await queryAuditLogs({ action, email, limit, offset })); }
-    catch (err) { res.status(500).json({ error: err.message }); }
+    try {
+      res.json(await queryAuditLogs({ action, email, limit, offset }));
+    } catch (err) {
+      res.status(500).json({ error: err.message });
+    }
   });
 
   return router;

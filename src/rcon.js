@@ -26,7 +26,10 @@ export class RconClient {
         this.connected = true;
         // Send auth packet
         this._pending.set(1, {
-          resolve: () => { this.authenticated = true; resolve(); },
+          resolve: () => {
+            this.authenticated = true;
+            resolve();
+          },
           reject,
         });
         this._write(TYPE.LOGIN, this.password, 1);

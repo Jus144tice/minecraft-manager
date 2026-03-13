@@ -101,17 +101,16 @@ export async function getUser(email) {
 /** List all users ordered by admin_level desc, email asc. */
 export async function listUsers() {
   if (!pool) return [];
-  const { rows } = await pool.query('SELECT id, email, name, provider, admin_level, created_at, last_login_at FROM users ORDER BY admin_level DESC, email ASC');
+  const { rows } = await pool.query(
+    'SELECT id, email, name, provider, admin_level, created_at, last_login_at FROM users ORDER BY admin_level DESC, email ASC',
+  );
   return rows;
 }
 
 /** Set a user's admin level (0 = regular, 1 = admin). */
 export async function setAdminLevel(email, level) {
   if (!pool) return null;
-  const { rows } = await pool.query(
-    'UPDATE users SET admin_level = $2 WHERE email = $1 RETURNING *',
-    [email, level],
-  );
+  const { rows } = await pool.query('UPDATE users SET admin_level = $2 WHERE email = $1 RETURNING *', [email, level]);
   return rows[0] || null;
 }
 
@@ -137,10 +136,12 @@ export async function insertAuditLog(action, details = {}) {
   const { user, email, ip, ...rest } = details;
   const userEmail = user || email || null;
   try {
-    await pool.query(
-      'INSERT INTO audit_logs (action, user_email, ip, details) VALUES ($1, $2, $3, $4)',
-      [action, userEmail, ip || null, JSON.stringify(rest)],
-    );
+    await pool.query('INSERT INTO audit_logs (action, user_email, ip, details) VALUES ($1, $2, $3, $4)', [
+      action,
+      userEmail,
+      ip || null,
+      JSON.stringify(rest),
+    ]);
   } catch (err) {
     // Never let a DB write failure break the app — fall back to stdout-only
     console.error('[DB] Failed to write audit log:', err.message);
@@ -167,7 +168,7 @@ export async function queryAuditLogs({ action, email, limit = 100, offset = 0 } 
   params.push(limit, offset);
 
   const { rows } = await pool.query(
-    `SELECT * FROM audit_logs ${where} ORDER BY timestamp DESC LIMIT $${idx++} OFFSET $${idx++}`,
+    `SELECT * FROM audit_logs ${where} ORDER BY timestamp DESC LIMIT $${idx++} OFFSET $${idx}`,
     params,
   );
   return rows;

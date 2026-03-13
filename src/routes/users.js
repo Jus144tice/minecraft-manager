@@ -10,8 +10,11 @@ export default function userRoutes() {
   const router = Router();
 
   router.get('/users', requireAdmin, async (req, res) => {
-    try { res.json(await listUsers()); }
-    catch (err) { res.status(500).json({ error: err.message }); }
+    try {
+      res.json(await listUsers());
+    } catch (err) {
+      res.status(500).json({ error: err.message });
+    }
   });
 
   router.get('/users/:email', requireAdmin, async (req, res) => {
@@ -19,7 +22,9 @@ export default function userRoutes() {
       const user = await getUser(req.params.email);
       if (!user) return res.status(404).json({ error: 'User not found' });
       res.json(user);
-    } catch (err) { res.status(500).json({ error: err.message }); }
+    } catch (err) {
+      res.status(500).json({ error: err.message });
+    }
   });
 
   router.put('/users/:email/admin', requireAdmin, async (req, res) => {
@@ -28,9 +33,16 @@ export default function userRoutes() {
     try {
       const user = await setAdminLevel(req.params.email, Number(level));
       if (!user) return res.status(404).json({ error: 'User not found' });
-      audit('ADMIN_LEVEL_CHANGE', { user: req.session.user.email, target: req.params.email, level: Number(level), ip: req.ip });
+      audit('ADMIN_LEVEL_CHANGE', {
+        user: req.session.user.email,
+        target: req.params.email,
+        level: Number(level),
+        ip: req.ip,
+      });
       res.json(user);
-    } catch (err) { res.status(500).json({ error: err.message }); }
+    } catch (err) {
+      res.status(500).json({ error: err.message });
+    }
   });
 
   router.delete('/users/:email', requireAdmin, async (req, res) => {
@@ -42,7 +54,9 @@ export default function userRoutes() {
       if (!ok) return res.status(404).json({ error: 'User not found' });
       audit('USER_DELETE', { user: req.session.user.email, target: req.params.email, ip: req.ip });
       res.json({ ok: true });
-    } catch (err) { res.status(500).json({ error: err.message }); }
+    } catch (err) {
+      res.status(500).json({ error: err.message });
+    }
   });
 
   return router;

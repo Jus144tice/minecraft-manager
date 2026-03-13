@@ -18,12 +18,14 @@ let baseUrl;
 function buildTestApp() {
   const app = express();
 
-  app.use(session({
-    secret: 'test-secret-for-testing-only',
-    resave: false,
-    saveUninitialized: false,
-    cookie: { httpOnly: true, secure: false, sameSite: 'lax' },
-  }));
+  app.use(
+    session({
+      secret: 'test-secret-for-testing-only',
+      resave: false,
+      saveUninitialized: false,
+      cookie: { httpOnly: true, secure: false, sameSite: 'lax' },
+    }),
+  );
 
   app.use(express.json());
 
@@ -88,7 +90,7 @@ function request(method, path, { body, headers = {}, cookie } = {}) {
 
     const req = http.request(opts, (res) => {
       let data = '';
-      res.on('data', chunk => data += chunk);
+      res.on('data', (chunk) => (data += chunk));
       res.on('end', () => {
         try {
           resolve({
@@ -97,7 +99,7 @@ function request(method, path, { body, headers = {}, cookie } = {}) {
             body: data ? JSON.parse(data) : null,
             cookie: res.headers['set-cookie']?.[0]?.split(';')[0] || null,
           });
-        } catch (e) {
+        } catch (_e) {
           resolve({ status: res.statusCode, headers: res.headers, body: data, cookie: null });
         }
       });
@@ -119,13 +121,13 @@ async function loginSession() {
 before(async () => {
   const app = buildTestApp();
   server = http.createServer(app);
-  await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
+  await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
   const addr = server.address();
   baseUrl = `http://127.0.0.1:${addr.port}`;
 });
 
 after(async () => {
-  if (server) await new Promise(resolve => server.close(resolve));
+  if (server) await new Promise((resolve) => server.close(resolve));
 });
 
 // ===================== Authentication =====================
@@ -212,7 +214,7 @@ test('Route: POST with cross-origin Origin header returns 403', async () => {
     body: { test: true },
     headers: {
       'X-CSRF-Token': csrfToken,
-      'Origin': 'http://evil.com',
+      Origin: 'http://evil.com',
     },
   });
   assert.equal(res.status, 403);
@@ -226,7 +228,7 @@ test('Route: POST with same-origin Origin header succeeds', async () => {
     body: { data: 123 },
     headers: {
       'X-CSRF-Token': csrfToken,
-      'Origin': baseUrl,
+      Origin: baseUrl,
     },
   });
   assert.equal(res.status, 200);

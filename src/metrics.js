@@ -1,7 +1,6 @@
 // Metrics collection for the live dashboard.
 // Gathers TPS, CPU, RAM, disk usage, and player list from RCON and the OS.
 
-import os from 'os';
 import { execFile } from 'child_process';
 import { readdir, stat } from 'fs/promises';
 import path from 'path';
@@ -20,10 +19,16 @@ function sampleProcessCpu(pid) {
   return new Promise((resolve) => {
     if (process.platform === 'win32') {
       // wmic gives KernelModeTime + UserModeTime in 100-ns units
-      execFile('wmic', ['process', 'where', `ProcessId=${pid}`, 'get', 'KernelModeTime,UserModeTime', '/FORMAT:CSV'],
-        { timeout: 3000 }, (err, stdout) => {
+      execFile(
+        'wmic',
+        ['process', 'where', `ProcessId=${pid}`, 'get', 'KernelModeTime,UserModeTime', '/FORMAT:CSV'],
+        { timeout: 3000 },
+        (err, stdout) => {
           if (err) return resolve(null);
-          const lines = stdout.trim().split('\n').filter(l => l.includes(','));
+          const lines = stdout
+            .trim()
+            .split('\n')
+            .filter((l) => l.includes(','));
           if (lines.length < 2) return resolve(null);
           const parts = lines[lines.length - 1].split(',');
           // CSV: Node,KernelModeTime,UserModeTime
@@ -37,15 +42,15 @@ function sampleProcessCpu(pid) {
           prevWall = now;
           if (wallUs <= 0 || cpuUs < 0) return resolve(null);
           resolve(Math.min(100, (cpuUs / wallUs) * 100));
-        });
+        },
+      );
     } else {
       // Linux/macOS: read /proc/<pid>/stat for utime+stime (clock ticks)
-      execFile('ps', ['-o', '%cpu=', '-p', String(pid)],
-        { timeout: 3000 }, (err, stdout) => {
-          if (err) return resolve(null);
-          const val = parseFloat(stdout.trim());
-          resolve(Number.isFinite(val) ? val : null);
-        });
+      execFile('ps', ['-o', '%cpu=', '-p', String(pid)], { timeout: 3000 }, (err, stdout) => {
+        if (err) return resolve(null);
+        const val = parseFloat(stdout.trim());
+        resolve(Number.isFinite(val) ? val : null);
+      });
     }
   });
 }
@@ -57,22 +62,20 @@ function getProcessMemory(pid) {
   if (!pid) return Promise.resolve(null);
   return new Promise((resolve) => {
     if (process.platform === 'win32') {
-      execFile('tasklist', ['/FI', `PID eq ${pid}`, '/FO', 'CSV', '/NH'],
-        { timeout: 3000 }, (err, stdout) => {
-          if (err) return resolve(null);
-          // tasklist CSV: "name","PID","Session Name","Session#","Mem Usage"
-          // Mem Usage looks like: "1,234,567 K"
-          const match = stdout.match(/"([0-9,]+)\s*K"/);
-          if (match) return resolve(parseInt(match[1].replace(/,/g, '')) * 1024);
-          resolve(null);
-        });
+      execFile('tasklist', ['/FI', `PID eq ${pid}`, '/FO', 'CSV', '/NH'], { timeout: 3000 }, (err, stdout) => {
+        if (err) return resolve(null);
+        // tasklist CSV: "name","PID","Session Name","Session#","Mem Usage"
+        // Mem Usage looks like: "1,234,567 K"
+        const match = stdout.match(/"([0-9,]+)\s*K"/);
+        if (match) return resolve(parseInt(match[1].replace(/,/g, '')) * 1024);
+        resolve(null);
+      });
     } else {
-      execFile('ps', ['-o', 'rss=', '-p', String(pid)],
-        { timeout: 3000 }, (err, stdout) => {
-          if (err) return resolve(null);
-          const kb = parseInt(stdout.trim());
-          resolve(Number.isFinite(kb) ? kb * 1024 : null);
-        });
+      execFile('ps', ['-o', 'rss=', '-p', String(pid)], { timeout: 3000 }, (err, stdout) => {
+        if (err) return resolve(null);
+        const kb = parseInt(stdout.trim());
+        resolve(Number.isFinite(kb) ? kb * 1024 : null);
+      });
     }
   });
 }
@@ -98,11 +101,19 @@ async function getDiskUsage(serverPath) {
 async function dirSize(dir) {
   let total = 0;
   let entries;
-  try { entries = await readdir(dir, { withFileTypes: true }); } catch { return 0; }
+  try {
+    entries = await readdir(dir, { withFileTypes: true });
+  } catch {
+    return 0;
+  }
   for (const entry of entries) {
     const full = path.join(dir, entry.name);
     if (entry.isFile()) {
-      try { total += (await stat(full)).size; } catch { /* skip */ }
+      try {
+        total += (await stat(full)).size;
+      } catch {
+        /* skip */
+      }
     } else if (entry.isDirectory() && entry.name !== 'node_modules' && entry.name !== '.git') {
       total += await dirSize(full);
     }
@@ -189,20 +200,29 @@ export async function collectMetrics({ mc, rconCmd, rconConnected, config }) {
       if (countMatch) metrics.onlineCount = parseInt(countMatch[1]);
       const namesMatch = listResult.match(/players online:\s*(.*)/);
       if (namesMatch && namesMatch[1].trim()) {
-        metrics.players = namesMatch[1].split(',').map(n => n.trim()).filter(Boolean);
+        metrics.players = namesMatch[1]
+          .split(',')
+          .map((n) => n.trim())
+          .filter(Boolean);
       }
-    } catch { /* RCON not ready */ }
+    } catch {
+      /* RCON not ready */
+    }
 
     // TPS — try paper/spigot first, then forge, then give up
     try {
       const tpsRaw = await rconCmd('tps');
       metrics.tps = parseTps(tpsRaw);
-    } catch { /* no tps command */ }
+    } catch {
+      /* no tps command */
+    }
     if (metrics.tps == null) {
       try {
         const forgeRaw = await rconCmd('forge tps');
         metrics.tps = parseTps(forgeRaw);
-      } catch { /* not forge either */ }
+      } catch {
+        /* not forge either */
+      }
     }
   }
 

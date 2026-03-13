@@ -11,14 +11,22 @@ function mockReq({ method = 'GET', headers = {}, session = {} } = {}) {
 
 function mockRes() {
   const res = { statusCode: undefined, body: undefined };
-  res.status = (code) => { res.statusCode = code; return res; };
-  res.json = (body) => { res.body = body; return res; };
+  res.status = (code) => {
+    res.statusCode = code;
+    return res;
+  };
+  res.json = (body) => {
+    res.body = body;
+    return res;
+  };
   return res;
 }
 
 function trackNext() {
   let called = false;
-  const fn = () => { called = true; };
+  const fn = () => {
+    called = true;
+  };
   fn.wasCalled = () => called;
   return fn;
 }
@@ -57,11 +65,15 @@ test('CSRF: rejects POST without token header', () => {
 test('CSRF: rejects POST with wrong token', () => {
   const res = mockRes();
   const next = trackNext();
-  csrfCheck(mockReq({
-    method: 'POST',
-    headers: { 'x-csrf-token': 'wrong' },
-    session: { csrfToken: 'correct' },
-  }), res, next);
+  csrfCheck(
+    mockReq({
+      method: 'POST',
+      headers: { 'x-csrf-token': 'wrong' },
+      session: { csrfToken: 'correct' },
+    }),
+    res,
+    next,
+  );
   assert.equal(next.wasCalled(), false);
   assert.equal(res.statusCode, 403);
 });
@@ -69,11 +81,15 @@ test('CSRF: rejects POST with wrong token', () => {
 test('CSRF: rejects POST when session has no csrfToken', () => {
   const res = mockRes();
   const next = trackNext();
-  csrfCheck(mockReq({
-    method: 'POST',
-    headers: { 'x-csrf-token': 'something' },
-    session: {},
-  }), res, next);
+  csrfCheck(
+    mockReq({
+      method: 'POST',
+      headers: { 'x-csrf-token': 'something' },
+      session: {},
+    }),
+    res,
+    next,
+  );
   assert.equal(next.wasCalled(), false);
   assert.equal(res.statusCode, 403);
 });
@@ -89,31 +105,43 @@ test('CSRF: rejects POST when session is undefined', () => {
 
 test('CSRF: allows POST with matching token', () => {
   const next = trackNext();
-  csrfCheck(mockReq({
-    method: 'POST',
-    headers: { 'x-csrf-token': 'mytoken123' },
-    session: { csrfToken: 'mytoken123' },
-  }), mockRes(), next);
+  csrfCheck(
+    mockReq({
+      method: 'POST',
+      headers: { 'x-csrf-token': 'mytoken123' },
+      session: { csrfToken: 'mytoken123' },
+    }),
+    mockRes(),
+    next,
+  );
   assert.ok(next.wasCalled());
 });
 
 test('CSRF: allows PUT with matching token', () => {
   const next = trackNext();
-  csrfCheck(mockReq({
-    method: 'PUT',
-    headers: { 'x-csrf-token': 'tok' },
-    session: { csrfToken: 'tok' },
-  }), mockRes(), next);
+  csrfCheck(
+    mockReq({
+      method: 'PUT',
+      headers: { 'x-csrf-token': 'tok' },
+      session: { csrfToken: 'tok' },
+    }),
+    mockRes(),
+    next,
+  );
   assert.ok(next.wasCalled());
 });
 
 test('CSRF: allows DELETE with matching token', () => {
   const next = trackNext();
-  csrfCheck(mockReq({
-    method: 'DELETE',
-    headers: { 'x-csrf-token': 'tok' },
-    session: { csrfToken: 'tok' },
-  }), mockRes(), next);
+  csrfCheck(
+    mockReq({
+      method: 'DELETE',
+      headers: { 'x-csrf-token': 'tok' },
+      session: { csrfToken: 'tok' },
+    }),
+    mockRes(),
+    next,
+  );
   assert.ok(next.wasCalled());
 });
 
@@ -136,10 +164,14 @@ test('SameOrigin: allows POST without Origin header (same-origin SPA)', () => {
 test('SameOrigin: allows POST with matching origin', () => {
   const check = buildSameOriginCheck('http://localhost:3000');
   const next = trackNext();
-  check(mockReq({
-    method: 'POST',
-    headers: { origin: 'http://localhost:3000' },
-  }), mockRes(), next);
+  check(
+    mockReq({
+      method: 'POST',
+      headers: { origin: 'http://localhost:3000' },
+    }),
+    mockRes(),
+    next,
+  );
   assert.ok(next.wasCalled());
 });
 
@@ -147,10 +179,14 @@ test('SameOrigin: rejects POST with different origin', () => {
   const check = buildSameOriginCheck('http://localhost:3000');
   const res = mockRes();
   const next = trackNext();
-  check(mockReq({
-    method: 'POST',
-    headers: { origin: 'http://evil.com' },
-  }), res, next);
+  check(
+    mockReq({
+      method: 'POST',
+      headers: { origin: 'http://evil.com' },
+    }),
+    res,
+    next,
+  );
   assert.equal(next.wasCalled(), false);
   assert.equal(res.statusCode, 403);
   assert.match(res.body.error, /cross-origin/i);
@@ -160,10 +196,14 @@ test('SameOrigin: rejects DELETE with different origin', () => {
   const check = buildSameOriginCheck('http://localhost:3000');
   const res = mockRes();
   const next = trackNext();
-  check(mockReq({
-    method: 'DELETE',
-    headers: { origin: 'http://attacker.example.com' },
-  }), res, next);
+  check(
+    mockReq({
+      method: 'DELETE',
+      headers: { origin: 'http://attacker.example.com' },
+    }),
+    res,
+    next,
+  );
   assert.equal(next.wasCalled(), false);
   assert.equal(res.statusCode, 403);
 });
@@ -172,10 +212,14 @@ test('SameOrigin: rejects invalid origin header', () => {
   const check = buildSameOriginCheck('http://localhost:3000');
   const res = mockRes();
   const next = trackNext();
-  check(mockReq({
-    method: 'POST',
-    headers: { origin: 'not-a-url' },
-  }), res, next);
+  check(
+    mockReq({
+      method: 'POST',
+      headers: { origin: 'not-a-url' },
+    }),
+    res,
+    next,
+  );
   assert.equal(next.wasCalled(), false);
   assert.equal(res.statusCode, 403);
   assert.match(res.body.error, /invalid origin/i);
@@ -184,10 +228,14 @@ test('SameOrigin: rejects invalid origin header', () => {
 test('SameOrigin: falls back to req.headers.host when appUrl is null', () => {
   const check = buildSameOriginCheck(null);
   const next = trackNext();
-  check(mockReq({
-    method: 'POST',
-    headers: { origin: 'http://myserver:3000', host: 'myserver:3000' },
-  }), mockRes(), next);
+  check(
+    mockReq({
+      method: 'POST',
+      headers: { origin: 'http://myserver:3000', host: 'myserver:3000' },
+    }),
+    mockRes(),
+    next,
+  );
   assert.ok(next.wasCalled());
 });
 
@@ -195,10 +243,14 @@ test('SameOrigin: rejects when host fallback does not match origin', () => {
   const check = buildSameOriginCheck(null);
   const res = mockRes();
   const next = trackNext();
-  check(mockReq({
-    method: 'POST',
-    headers: { origin: 'http://evil.com', host: 'myserver:3000' },
-  }), res, next);
+  check(
+    mockReq({
+      method: 'POST',
+      headers: { origin: 'http://evil.com', host: 'myserver:3000' },
+    }),
+    res,
+    next,
+  );
   assert.equal(next.wasCalled(), false);
   assert.equal(res.statusCode, 403);
 });
@@ -206,10 +258,14 @@ test('SameOrigin: rejects when host fallback does not match origin', () => {
 test('SameOrigin: matches origin with different protocol but same host', () => {
   const check = buildSameOriginCheck('https://myserver:3000');
   const next = trackNext();
-  check(mockReq({
-    method: 'POST',
-    headers: { origin: 'http://myserver:3000' },
-  }), mockRes(), next);
+  check(
+    mockReq({
+      method: 'POST',
+      headers: { origin: 'http://myserver:3000' },
+    }),
+    mockRes(),
+    next,
+  );
   assert.ok(next.wasCalled());
 });
 
@@ -217,10 +273,14 @@ test('SameOrigin: rejects origin with same host but different port', () => {
   const check = buildSameOriginCheck('http://localhost:3000');
   const res = mockRes();
   const next = trackNext();
-  check(mockReq({
-    method: 'POST',
-    headers: { origin: 'http://localhost:4000' },
-  }), res, next);
+  check(
+    mockReq({
+      method: 'POST',
+      headers: { origin: 'http://localhost:4000' },
+    }),
+    res,
+    next,
+  );
   assert.equal(next.wasCalled(), false);
   assert.equal(res.statusCode, 403);
 });

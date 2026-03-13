@@ -1,702 +1,1013 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
-<head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Minecraft Server Manager</title>
-  <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
-  <link rel="stylesheet" href="styles.css" />
-</head>
-<body>
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Minecraft Server Manager</title>
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <!-- LOGIN SCREEN -->
+    <div id="login-screen" class="login-screen">
+      <div class="login-box">
+        <div class="login-logo">
+          <span class="logo-icon">&#9733;</span>
+          <h1>Minecraft Manager</h1>
+          <p>Server Control Panel</p>
+        </div>
 
-<!-- LOGIN SCREEN -->
-<div id="login-screen" class="login-screen">
-  <div class="login-box">
-    <div class="login-logo">
-      <span class="logo-icon">&#9733;</span>
-      <h1>Minecraft Manager</h1>
-      <p>Server Control Panel</p>
-    </div>
+        <!-- OIDC buttons — shown when Google/Microsoft providers are configured -->
+        <div id="login-oidc-section" class="hidden">
+          <a class="btn btn-full btn-oidc hidden" id="btn-login-google" href="/auth/google">Sign in with Google</a>
+          <a class="btn btn-full btn-oidc hidden" id="btn-login-microsoft" href="/auth/microsoft"
+            >Sign in with Microsoft</a
+          >
+          <hr id="login-divider" class="login-divider hidden" />
+        </div>
 
-    <!-- OIDC buttons — shown when Google/Microsoft providers are configured -->
-    <div id="login-oidc-section" class="hidden">
-      <a class="btn btn-full btn-oidc hidden" id="btn-login-google" href="/auth/google">Sign in with Google</a>
-      <a class="btn btn-full btn-oidc hidden" id="btn-login-microsoft" href="/auth/microsoft">Sign in with Microsoft</a>
-      <hr id="login-divider" class="login-divider hidden" />
-    </div>
+        <!-- Local password form — shown for local password or demo mode -->
+        <div id="login-local-section" class="hidden">
+          <div class="form-group">
+            <label>Password</label>
+            <input type="password" id="login-password" placeholder="Enter password" autocomplete="current-password" />
+          </div>
+          <p id="demo-hint" class="demo-hint hidden">
+            Demo mode &mdash; use password <strong>changeme</strong> (or any password)
+          </p>
+          <button class="btn btn-primary btn-full" id="login-btn">Log In</button>
+        </div>
 
-    <!-- Local password form — shown for local password or demo mode -->
-    <div id="login-local-section" class="hidden">
-      <div class="form-group">
-        <label>Password</label>
-        <input type="password" id="login-password" placeholder="Enter password" autocomplete="current-password" />
-      </div>
-      <p id="demo-hint" class="demo-hint hidden">Demo mode &mdash; use password <strong>changeme</strong> (or any password)</p>
-      <button class="btn btn-primary btn-full" id="login-btn">Log In</button>
-    </div>
-
-    <p id="login-error" class="error-msg hidden"></p>
-  </div>
-</div>
-
-<!-- MAIN APP -->
-<div id="app" class="hidden">
-  <!-- Demo mode banner -->
-  <div id="demo-banner" class="demo-banner hidden">
-    <span class="demo-banner-icon">&#9432;</span>
-    <span><strong>Demo Mode</strong> &mdash; Showing seed data. No real server connection. Go to <strong>Settings &rarr; App Config</strong> to configure and disable demo mode.</span>
-    <button class="demo-banner-close" id="demo-banner-close">&times;</button>
-  </div>
-
-  <!-- Top nav -->
-  <header class="topbar">
-    <div class="topbar-left">
-      <span class="logo-icon">&#9733;</span>
-      <span class="site-name">Minecraft Manager</span>
-    </div>
-    <nav class="tab-nav">
-      <button class="tab-btn active" data-tab="dashboard">Dashboard</button>
-      <button class="tab-btn" data-tab="console">Manage Server</button>
-      <button class="tab-btn" data-tab="mods">Mods</button>
-      <button class="tab-btn" data-tab="players">Players</button>
-      <button class="tab-btn" data-tab="backups">Backups</button>
-      <button class="tab-btn" data-tab="settings">Settings</button>
-    </nav>
-    <div class="topbar-right">
-      <span id="server-badge" class="badge badge-stopped">Stopped</span>
-      <button class="btn btn-sm btn-ghost" id="logout-btn">Logout</button>
-    </div>
-  </header>
-
-  <!-- Tab: Dashboard -->
-  <section id="tab-dashboard" class="tab-content active">
-    <div class="page-header">
-      <h2>Dashboard</h2>
-    </div>
-    <!-- Crash alert (hidden by default) -->
-    <div id="crash-alert" class="crash-alert hidden">
-      <span id="crash-alert-text"></span>
-      <button class="btn btn-sm btn-ghost" id="crash-alert-dismiss">&times;</button>
-    </div>
-
-    <!-- Lag spike alert (hidden by default) -->
-    <div id="lag-alert" class="lag-alert hidden">
-      <span id="lag-alert-text"></span>
-      <button class="btn btn-sm btn-ghost" id="lag-alert-dismiss">&times;</button>
-    </div>
-
-    <div class="stat-grid">
-      <div class="stat-card">
-        <div class="stat-label">Server Status</div>
-        <div class="stat-value" id="stat-status">Stopped</div>
-      </div>
-      <div class="stat-card">
-        <div class="stat-label">Players Online</div>
-        <div class="stat-value" id="stat-players">-</div>
-      </div>
-      <div class="stat-card">
-        <div class="stat-label">Uptime</div>
-        <div class="stat-value" id="stat-uptime">-</div>
-      </div>
-      <div class="stat-card">
-        <div class="stat-label">RCON</div>
-        <div class="stat-value" id="stat-rcon">-</div>
-      </div>
-      <div class="stat-card">
-        <div class="stat-label">TPS</div>
-        <div class="stat-value" id="stat-tps">-</div>
-      </div>
-      <div class="stat-card">
-        <div class="stat-label">CPU</div>
-        <div class="stat-value" id="stat-cpu">-</div>
-      </div>
-      <div class="stat-card">
-        <div class="stat-label">RAM</div>
-        <div class="stat-value" id="stat-ram">-</div>
-      </div>
-      <div class="stat-card">
-        <div class="stat-label">Disk</div>
-        <div class="stat-value" id="stat-disk">-</div>
+        <p id="login-error" class="error-msg hidden"></p>
       </div>
     </div>
 
-    <div class="control-section">
-      <h3>Server Control</h3>
-      <div class="btn-row">
-        <button class="btn btn-success" id="btn-start">Start Server</button>
-        <button class="btn btn-danger" id="btn-stop">Stop Server</button>
-        <button class="btn btn-warning" id="btn-restart">Restart</button>
-        <button class="btn btn-ghost" id="btn-kill">Force Kill</button>
+    <!-- MAIN APP -->
+    <div id="app" class="hidden">
+      <!-- Demo mode banner -->
+      <div id="demo-banner" class="demo-banner hidden">
+        <span class="demo-banner-icon">&#9432;</span>
+        <span
+          ><strong>Demo Mode</strong> &mdash; Showing seed data. No real server connection. Go to
+          <strong>Settings &rarr; App Config</strong> to configure and disable demo mode.</span
+        >
+        <button class="demo-banner-close" id="demo-banner-close">&times;</button>
       </div>
-      <p id="control-msg" class="control-msg"></p>
-    </div>
 
-    <div class="control-section">
-      <h3>Quick Broadcast</h3>
-      <div class="input-row">
-        <input type="text" id="say-input" placeholder="Message to all players..." />
-        <button class="btn btn-primary" id="btn-say">Send</button>
-      </div>
-    </div>
+      <!-- Top nav -->
+      <header class="topbar">
+        <div class="topbar-left">
+          <span class="logo-icon">&#9733;</span>
+          <span class="site-name">Minecraft Manager</span>
+        </div>
+        <nav class="tab-nav">
+          <button class="tab-btn active" data-tab="dashboard">Dashboard</button>
+          <button class="tab-btn" data-tab="console">Manage Server</button>
+          <button class="tab-btn" data-tab="mods">Mods</button>
+          <button class="tab-btn" data-tab="players">Players</button>
+          <button class="tab-btn" data-tab="backups">Backups</button>
+          <button class="tab-btn" data-tab="settings">Settings</button>
+        </nav>
+        <div class="topbar-right">
+          <span id="server-badge" class="badge badge-stopped">Stopped</span>
+          <button class="btn btn-sm btn-ghost" id="logout-btn">Logout</button>
+        </div>
+      </header>
 
-    <div class="control-section">
-      <h3>Online Players</h3>
-      <div id="online-players-list" class="player-chips">
-        <span class="dim">Waiting for data...</span>
-      </div>
-    </div>
-  </section>
+      <!-- Tab: Dashboard -->
+      <section id="tab-dashboard" class="tab-content active">
+        <div class="page-header">
+          <h2>Dashboard</h2>
+        </div>
+        <!-- Crash alert (hidden by default) -->
+        <div id="crash-alert" class="crash-alert hidden">
+          <span id="crash-alert-text"></span>
+          <button class="btn btn-sm btn-ghost" id="crash-alert-dismiss">&times;</button>
+        </div>
 
-  <!-- Tab: Manage Server (formerly Console) -->
-  <section id="tab-console" class="tab-content hidden">
-    <div class="page-header">
-      <h2>Manage Server</h2>
-      <div class="header-actions">
-        <button class="btn btn-sm btn-ghost" id="btn-cmd-help">&#128214; Command Reference</button>
-      </div>
-    </div>
+        <!-- Lag spike alert (hidden by default) -->
+        <div id="lag-alert" class="lag-alert hidden">
+          <span id="lag-alert-text"></span>
+          <button class="btn btn-sm btn-ghost" id="lag-alert-dismiss">&times;</button>
+        </div>
 
-    <!-- Quick Actions -->
-    <details class="control-section quick-actions-details" open>
-      <summary><h3>Quick Actions</h3></summary>
-      <div class="action-categories">
-        <div class="action-category">
-          <h4>World</h4>
-          <div class="action-btn-grid">
-            <button class="btn btn-sm btn-ghost" data-action="server-cmd" data-cmd="save-all" data-label="Save World">Save World</button>
-            <button class="btn btn-sm btn-ghost" data-action="server-cmd" data-cmd="save-off" data-label="Disable Auto-save" data-confirm="Disable automatic world saving? Remember to re-enable it later.">Disable Auto-save</button>
-            <button class="btn btn-sm btn-ghost" data-action="server-cmd" data-cmd="save-on" data-label="Enable Auto-save">Enable Auto-save</button>
+        <div class="stat-grid">
+          <div class="stat-card">
+            <div class="stat-label">Server Status</div>
+            <div class="stat-value" id="stat-status">Stopped</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-label">Players Online</div>
+            <div class="stat-value" id="stat-players">-</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-label">Uptime</div>
+            <div class="stat-value" id="stat-uptime">-</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-label">RCON</div>
+            <div class="stat-value" id="stat-rcon">-</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-label">TPS</div>
+            <div class="stat-value" id="stat-tps">-</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-label">CPU</div>
+            <div class="stat-value" id="stat-cpu">-</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-label">RAM</div>
+            <div class="stat-value" id="stat-ram">-</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-label">Disk</div>
+            <div class="stat-value" id="stat-disk">-</div>
           </div>
         </div>
-        <div class="action-category">
-          <h4>Time &amp; Weather</h4>
-          <div class="action-btn-grid">
-            <button class="btn btn-sm btn-ghost" data-action="server-cmd" data-cmd="time set day" data-label="Set Day">Set Day</button>
-            <button class="btn btn-sm btn-ghost" data-action="server-cmd" data-cmd="time set night" data-label="Set Night">Set Night</button>
-            <button class="btn btn-sm btn-ghost" data-action="server-cmd" data-cmd="time set noon" data-label="Set Noon">Set Noon</button>
-            <button class="btn btn-sm btn-ghost" data-action="server-cmd" data-cmd="time set midnight" data-label="Set Midnight">Set Midnight</button>
-            <button class="btn btn-sm btn-ghost" data-action="server-cmd" data-cmd="weather clear" data-label="Clear Weather">Clear Weather</button>
-            <button class="btn btn-sm btn-ghost" data-action="server-cmd" data-cmd="weather rain" data-label="Rain">Rain</button>
-            <button class="btn btn-sm btn-ghost" data-action="server-cmd" data-cmd="weather thunder" data-label="Thunderstorm">Thunderstorm</button>
+
+        <div class="control-section">
+          <h3>Server Control</h3>
+          <div class="btn-row">
+            <button class="btn btn-success" id="btn-start">Start Server</button>
+            <button class="btn btn-danger" id="btn-stop">Stop Server</button>
+            <button class="btn btn-warning" id="btn-restart">Restart</button>
+            <button class="btn btn-ghost" id="btn-kill">Force Kill</button>
+          </div>
+          <p id="control-msg" class="control-msg"></p>
+        </div>
+
+        <div class="control-section">
+          <h3>Quick Broadcast</h3>
+          <div class="input-row">
+            <input type="text" id="say-input" placeholder="Message to all players..." />
+            <button class="btn btn-primary" id="btn-say">Send</button>
           </div>
         </div>
-        <div class="action-category">
-          <h4>Players</h4>
-          <div class="action-btn-grid">
-            <button class="btn btn-sm btn-ghost" data-action="server-cmd-prompt" data-template="kick {player} {reason}" data-prompts="player:Player name,reason:Reason (optional)" data-label="Kick Player">Kick Player</button>
-            <button class="btn btn-sm btn-ghost" data-action="server-cmd-prompt" data-template="gamemode {mode} {player}" data-prompts="mode:Gamemode|survival|creative|adventure|spectator,player:Player name" data-label="Change Gamemode">Change Gamemode</button>
-            <button class="btn btn-sm btn-ghost" data-action="server-cmd-prompt" data-template="tp {player} {x} {y} {z}" data-prompts="player:Player name,x:X coordinate,y:Y coordinate,z:Z coordinate" data-label="Teleport Player">Teleport Player</button>
-            <button class="btn btn-sm btn-ghost" data-action="server-cmd-prompt" data-template="give {player} {item} {amount}" data-prompts="player:Player name,item:Item ID (e.g. diamond),amount:Amount (optional)" data-label="Give Item">Give Item</button>
-            <button class="btn btn-sm btn-ghost" data-action="server-cmd-prompt" data-template="effect give {player} {effect} {seconds}" data-prompts="player:Player name,effect:Effect ID (e.g. speed),seconds:Duration in seconds (optional)" data-label="Give Effect">Give Effect</button>
-            <button class="btn btn-sm btn-ghost" data-action="server-cmd-prompt" data-template="effect clear {player}" data-prompts="player:Player name" data-label="Clear Effects">Clear Effects</button>
+
+        <div class="control-section">
+          <h3>Online Players</h3>
+          <div id="online-players-list" class="player-chips">
+            <span class="dim">Waiting for data...</span>
           </div>
         </div>
-        <div class="action-category">
-          <h4>Difficulty &amp; Rules</h4>
-          <div class="action-btn-grid">
-            <button class="btn btn-sm btn-ghost" data-action="server-cmd-prompt" data-template="difficulty {level}" data-prompts="level:Difficulty|peaceful|easy|normal|hard" data-label="Set Difficulty">Set Difficulty</button>
-            <button class="btn btn-sm btn-ghost" data-action="server-cmd" data-cmd="gamerule doDaylightCycle false" data-label="Freeze Time" data-confirm="Stop the day/night cycle?">Freeze Time</button>
-            <button class="btn btn-sm btn-ghost" data-action="server-cmd" data-cmd="gamerule doDaylightCycle true" data-label="Unfreeze Time">Unfreeze Time</button>
-            <button class="btn btn-sm btn-ghost" data-action="server-cmd" data-cmd="gamerule keepInventory true" data-label="Keep Inventory ON">Keep Inventory ON</button>
-            <button class="btn btn-sm btn-ghost" data-action="server-cmd" data-cmd="gamerule keepInventory false" data-label="Keep Inventory OFF">Keep Inventory OFF</button>
-            <button class="btn btn-sm btn-ghost" data-action="server-cmd" data-cmd="gamerule doMobSpawning false" data-label="Disable Mob Spawning" data-confirm="Disable mob spawning?">Disable Mob Spawning</button>
-            <button class="btn btn-sm btn-ghost" data-action="server-cmd" data-cmd="gamerule doMobSpawning true" data-label="Enable Mob Spawning">Enable Mob Spawning</button>
+      </section>
+
+      <!-- Tab: Manage Server (formerly Console) -->
+      <section id="tab-console" class="tab-content hidden">
+        <div class="page-header">
+          <h2>Manage Server</h2>
+          <div class="header-actions">
+            <button class="btn btn-sm btn-ghost" id="btn-cmd-help">&#128214; Command Reference</button>
           </div>
         </div>
-        <div class="action-category">
-          <h4>Performance</h4>
-          <div class="action-btn-grid">
-            <button class="btn btn-sm btn-ghost" data-action="server-cmd-prompt" data-template="tick rate {rate}" data-prompts="rate:Tick rate (default 20)" data-label="Set Tick Rate">Set Tick Rate</button>
-            <button class="btn btn-sm btn-ghost" data-action="server-cmd" data-cmd="tick freeze" data-label="Freeze Ticks" data-confirm="Freeze server ticks? Players can still move but the world pauses.">Freeze Ticks</button>
-            <button class="btn btn-sm btn-ghost" data-action="server-cmd" data-cmd="tick unfreeze" data-label="Unfreeze Ticks">Unfreeze Ticks</button>
-            <button class="btn btn-sm btn-ghost" data-action="server-cmd" data-cmd="forceload query" data-label="List Forceloaded Chunks">List Forceloaded Chunks</button>
-            <button class="btn btn-sm btn-ghost" data-action="server-cmd-prompt" data-template="forceload add {x} {z}" data-prompts="x:Chunk X coordinate,z:Chunk Z coordinate" data-label="Forceload Chunk">Forceload Chunk</button>
-            <button class="btn btn-sm btn-ghost" data-action="server-cmd-prompt" data-template="forceload remove {x} {z}" data-prompts="x:Chunk X coordinate,z:Chunk Z coordinate" data-label="Unload Chunk">Unload Chunk</button>
+
+        <!-- Quick Actions -->
+        <details class="control-section quick-actions-details" open>
+          <summary><h3>Quick Actions</h3></summary>
+          <div class="action-categories">
+            <div class="action-category">
+              <h4>World</h4>
+              <div class="action-btn-grid">
+                <button
+                  class="btn btn-sm btn-ghost"
+                  data-action="server-cmd"
+                  data-cmd="save-all"
+                  data-label="Save World"
+                >
+                  Save World
+                </button>
+                <button
+                  class="btn btn-sm btn-ghost"
+                  data-action="server-cmd"
+                  data-cmd="save-off"
+                  data-label="Disable Auto-save"
+                  data-confirm="Disable automatic world saving? Remember to re-enable it later."
+                >
+                  Disable Auto-save
+                </button>
+                <button
+                  class="btn btn-sm btn-ghost"
+                  data-action="server-cmd"
+                  data-cmd="save-on"
+                  data-label="Enable Auto-save"
+                >
+                  Enable Auto-save
+                </button>
+              </div>
+            </div>
+            <div class="action-category">
+              <h4>Time &amp; Weather</h4>
+              <div class="action-btn-grid">
+                <button
+                  class="btn btn-sm btn-ghost"
+                  data-action="server-cmd"
+                  data-cmd="time set day"
+                  data-label="Set Day"
+                >
+                  Set Day
+                </button>
+                <button
+                  class="btn btn-sm btn-ghost"
+                  data-action="server-cmd"
+                  data-cmd="time set night"
+                  data-label="Set Night"
+                >
+                  Set Night
+                </button>
+                <button
+                  class="btn btn-sm btn-ghost"
+                  data-action="server-cmd"
+                  data-cmd="time set noon"
+                  data-label="Set Noon"
+                >
+                  Set Noon
+                </button>
+                <button
+                  class="btn btn-sm btn-ghost"
+                  data-action="server-cmd"
+                  data-cmd="time set midnight"
+                  data-label="Set Midnight"
+                >
+                  Set Midnight
+                </button>
+                <button
+                  class="btn btn-sm btn-ghost"
+                  data-action="server-cmd"
+                  data-cmd="weather clear"
+                  data-label="Clear Weather"
+                >
+                  Clear Weather
+                </button>
+                <button class="btn btn-sm btn-ghost" data-action="server-cmd" data-cmd="weather rain" data-label="Rain">
+                  Rain
+                </button>
+                <button
+                  class="btn btn-sm btn-ghost"
+                  data-action="server-cmd"
+                  data-cmd="weather thunder"
+                  data-label="Thunderstorm"
+                >
+                  Thunderstorm
+                </button>
+              </div>
+            </div>
+            <div class="action-category">
+              <h4>Players</h4>
+              <div class="action-btn-grid">
+                <button
+                  class="btn btn-sm btn-ghost"
+                  data-action="server-cmd-prompt"
+                  data-template="kick {player} {reason}"
+                  data-prompts="player:Player name,reason:Reason (optional)"
+                  data-label="Kick Player"
+                >
+                  Kick Player
+                </button>
+                <button
+                  class="btn btn-sm btn-ghost"
+                  data-action="server-cmd-prompt"
+                  data-template="gamemode {mode} {player}"
+                  data-prompts="mode:Gamemode|survival|creative|adventure|spectator,player:Player name"
+                  data-label="Change Gamemode"
+                >
+                  Change Gamemode
+                </button>
+                <button
+                  class="btn btn-sm btn-ghost"
+                  data-action="server-cmd-prompt"
+                  data-template="tp {player} {x} {y} {z}"
+                  data-prompts="player:Player name,x:X coordinate,y:Y coordinate,z:Z coordinate"
+                  data-label="Teleport Player"
+                >
+                  Teleport Player
+                </button>
+                <button
+                  class="btn btn-sm btn-ghost"
+                  data-action="server-cmd-prompt"
+                  data-template="give {player} {item} {amount}"
+                  data-prompts="player:Player name,item:Item ID (e.g. diamond),amount:Amount (optional)"
+                  data-label="Give Item"
+                >
+                  Give Item
+                </button>
+                <button
+                  class="btn btn-sm btn-ghost"
+                  data-action="server-cmd-prompt"
+                  data-template="effect give {player} {effect} {seconds}"
+                  data-prompts="player:Player name,effect:Effect ID (e.g. speed),seconds:Duration in seconds (optional)"
+                  data-label="Give Effect"
+                >
+                  Give Effect
+                </button>
+                <button
+                  class="btn btn-sm btn-ghost"
+                  data-action="server-cmd-prompt"
+                  data-template="effect clear {player}"
+                  data-prompts="player:Player name"
+                  data-label="Clear Effects"
+                >
+                  Clear Effects
+                </button>
+              </div>
+            </div>
+            <div class="action-category">
+              <h4>Difficulty &amp; Rules</h4>
+              <div class="action-btn-grid">
+                <button
+                  class="btn btn-sm btn-ghost"
+                  data-action="server-cmd-prompt"
+                  data-template="difficulty {level}"
+                  data-prompts="level:Difficulty|peaceful|easy|normal|hard"
+                  data-label="Set Difficulty"
+                >
+                  Set Difficulty
+                </button>
+                <button
+                  class="btn btn-sm btn-ghost"
+                  data-action="server-cmd"
+                  data-cmd="gamerule doDaylightCycle false"
+                  data-label="Freeze Time"
+                  data-confirm="Stop the day/night cycle?"
+                >
+                  Freeze Time
+                </button>
+                <button
+                  class="btn btn-sm btn-ghost"
+                  data-action="server-cmd"
+                  data-cmd="gamerule doDaylightCycle true"
+                  data-label="Unfreeze Time"
+                >
+                  Unfreeze Time
+                </button>
+                <button
+                  class="btn btn-sm btn-ghost"
+                  data-action="server-cmd"
+                  data-cmd="gamerule keepInventory true"
+                  data-label="Keep Inventory ON"
+                >
+                  Keep Inventory ON
+                </button>
+                <button
+                  class="btn btn-sm btn-ghost"
+                  data-action="server-cmd"
+                  data-cmd="gamerule keepInventory false"
+                  data-label="Keep Inventory OFF"
+                >
+                  Keep Inventory OFF
+                </button>
+                <button
+                  class="btn btn-sm btn-ghost"
+                  data-action="server-cmd"
+                  data-cmd="gamerule doMobSpawning false"
+                  data-label="Disable Mob Spawning"
+                  data-confirm="Disable mob spawning?"
+                >
+                  Disable Mob Spawning
+                </button>
+                <button
+                  class="btn btn-sm btn-ghost"
+                  data-action="server-cmd"
+                  data-cmd="gamerule doMobSpawning true"
+                  data-label="Enable Mob Spawning"
+                >
+                  Enable Mob Spawning
+                </button>
+              </div>
+            </div>
+            <div class="action-category">
+              <h4>Performance</h4>
+              <div class="action-btn-grid">
+                <button
+                  class="btn btn-sm btn-ghost"
+                  data-action="server-cmd-prompt"
+                  data-template="tick rate {rate}"
+                  data-prompts="rate:Tick rate (default 20)"
+                  data-label="Set Tick Rate"
+                >
+                  Set Tick Rate
+                </button>
+                <button
+                  class="btn btn-sm btn-ghost"
+                  data-action="server-cmd"
+                  data-cmd="tick freeze"
+                  data-label="Freeze Ticks"
+                  data-confirm="Freeze server ticks? Players can still move but the world pauses."
+                >
+                  Freeze Ticks
+                </button>
+                <button
+                  class="btn btn-sm btn-ghost"
+                  data-action="server-cmd"
+                  data-cmd="tick unfreeze"
+                  data-label="Unfreeze Ticks"
+                >
+                  Unfreeze Ticks
+                </button>
+                <button
+                  class="btn btn-sm btn-ghost"
+                  data-action="server-cmd"
+                  data-cmd="forceload query"
+                  data-label="List Forceloaded Chunks"
+                >
+                  List Forceloaded Chunks
+                </button>
+                <button
+                  class="btn btn-sm btn-ghost"
+                  data-action="server-cmd-prompt"
+                  data-template="forceload add {x} {z}"
+                  data-prompts="x:Chunk X coordinate,z:Chunk Z coordinate"
+                  data-label="Forceload Chunk"
+                >
+                  Forceload Chunk
+                </button>
+                <button
+                  class="btn btn-sm btn-ghost"
+                  data-action="server-cmd-prompt"
+                  data-template="forceload remove {x} {z}"
+                  data-prompts="x:Chunk X coordinate,z:Chunk Z coordinate"
+                  data-label="Unload Chunk"
+                >
+                  Unload Chunk
+                </button>
+              </div>
+            </div>
+            <div class="action-category">
+              <h4>Whitelist &amp; Bans</h4>
+              <div class="action-btn-grid">
+                <button
+                  class="btn btn-sm btn-ghost"
+                  data-action="server-cmd-prompt"
+                  data-template="whitelist add {player}"
+                  data-prompts="player:Player name"
+                  data-label="Whitelist Add"
+                >
+                  Whitelist Add
+                </button>
+                <button
+                  class="btn btn-sm btn-ghost"
+                  data-action="server-cmd-prompt"
+                  data-template="whitelist remove {player}"
+                  data-prompts="player:Player name"
+                  data-label="Whitelist Remove"
+                >
+                  Whitelist Remove
+                </button>
+                <button
+                  class="btn btn-sm btn-ghost"
+                  data-action="server-cmd"
+                  data-cmd="whitelist reload"
+                  data-label="Reload Whitelist"
+                >
+                  Reload Whitelist
+                </button>
+                <button
+                  class="btn btn-sm btn-ghost"
+                  data-action="server-cmd-prompt"
+                  data-template="ban {player} {reason}"
+                  data-prompts="player:Player name,reason:Reason (optional)"
+                  data-label="Ban Player"
+                  data-confirm="Ban this player from the server?"
+                >
+                  Ban Player
+                </button>
+                <button
+                  class="btn btn-sm btn-ghost"
+                  data-action="server-cmd-prompt"
+                  data-template="pardon {player}"
+                  data-prompts="player:Player name"
+                  data-label="Unban Player"
+                >
+                  Unban Player
+                </button>
+              </div>
+            </div>
+            <div class="action-category">
+              <h4>Recipes</h4>
+              <div class="action-btn-grid">
+                <button
+                  class="btn btn-sm btn-ghost"
+                  data-action="server-cmd-prompt"
+                  data-template="recipe take {player} {recipe}"
+                  data-prompts="player:Player name,recipe:Recipe ID (e.g. minecraft:diamond_sword)"
+                  data-label="Hide Recipe"
+                >
+                  Hide Recipe
+                </button>
+                <button
+                  class="btn btn-sm btn-ghost"
+                  data-action="server-cmd-prompt"
+                  data-template="recipe take {player} *"
+                  data-prompts="player:Player name"
+                  data-label="Hide All Recipes"
+                  data-confirm="Remove all discovered recipes from this player's recipe book?"
+                >
+                  Hide All Recipes
+                </button>
+                <button
+                  class="btn btn-sm btn-ghost"
+                  data-action="server-cmd-prompt"
+                  data-template="recipe give {player} {recipe}"
+                  data-prompts="player:Player name,recipe:Recipe ID (e.g. minecraft:diamond_sword)"
+                  data-label="Give Recipe"
+                >
+                  Give Recipe
+                </button>
+                <button
+                  class="btn btn-sm btn-ghost"
+                  data-action="server-cmd-prompt"
+                  data-template="recipe give {player} *"
+                  data-prompts="player:Player name"
+                  data-label="Give All Recipes"
+                >
+                  Give All Recipes
+                </button>
+              </div>
+            </div>
           </div>
-        </div>
-        <div class="action-category">
-          <h4>Whitelist &amp; Bans</h4>
-          <div class="action-btn-grid">
-            <button class="btn btn-sm btn-ghost" data-action="server-cmd-prompt" data-template="whitelist add {player}" data-prompts="player:Player name" data-label="Whitelist Add">Whitelist Add</button>
-            <button class="btn btn-sm btn-ghost" data-action="server-cmd-prompt" data-template="whitelist remove {player}" data-prompts="player:Player name" data-label="Whitelist Remove">Whitelist Remove</button>
-            <button class="btn btn-sm btn-ghost" data-action="server-cmd" data-cmd="whitelist reload" data-label="Reload Whitelist">Reload Whitelist</button>
-            <button class="btn btn-sm btn-ghost" data-action="server-cmd-prompt" data-template="ban {player} {reason}" data-prompts="player:Player name,reason:Reason (optional)" data-label="Ban Player" data-confirm="Ban this player from the server?">Ban Player</button>
-            <button class="btn btn-sm btn-ghost" data-action="server-cmd-prompt" data-template="pardon {player}" data-prompts="player:Player name" data-label="Unban Player">Unban Player</button>
-          </div>
-        </div>
-        <div class="action-category">
-          <h4>Recipes</h4>
-          <div class="action-btn-grid">
-            <button class="btn btn-sm btn-ghost" data-action="server-cmd-prompt" data-template="recipe take {player} {recipe}" data-prompts="player:Player name,recipe:Recipe ID (e.g. minecraft:diamond_sword)" data-label="Hide Recipe">Hide Recipe</button>
-            <button class="btn btn-sm btn-ghost" data-action="server-cmd-prompt" data-template="recipe take {player} *" data-prompts="player:Player name" data-label="Hide All Recipes" data-confirm="Remove all discovered recipes from this player's recipe book?">Hide All Recipes</button>
-            <button class="btn btn-sm btn-ghost" data-action="server-cmd-prompt" data-template="recipe give {player} {recipe}" data-prompts="player:Player name,recipe:Recipe ID (e.g. minecraft:diamond_sword)" data-label="Give Recipe">Give Recipe</button>
-            <button class="btn btn-sm btn-ghost" data-action="server-cmd-prompt" data-template="recipe give {player} *" data-prompts="player:Player name" data-label="Give All Recipes">Give All Recipes</button>
-          </div>
-        </div>
-      </div>
-      <p id="quick-action-msg" class="control-msg"></p>
-    </details>
-
-    <!-- Console -->
-    <div class="page-header" style="margin-top:0.5rem">
-      <h2 style="font-size:1rem">Server Console</h2>
-      <div class="header-actions">
-        <label class="toggle-label">
-          <input type="checkbox" id="console-autoscroll" checked />
-          Auto-scroll
-        </label>
-        <button class="btn btn-sm btn-ghost" id="btn-clear-console">Clear</button>
-      </div>
-    </div>
-    <div class="console-wrap">
-      <div id="console-output" class="console-output"></div>
-    </div>
-    <div class="console-input-bar">
-      <span class="console-prompt">&gt;</span>
-      <input type="text" id="console-cmd" placeholder="Type a command and press Enter..." />
-      <button class="btn btn-primary" id="btn-send-cmd">Send</button>
-    </div>
-    <p class="dim console-hint">Commands are sent via RCON when the server is running. Quick action results appear in the console above.</p>
-  </section>
-
-  <!-- Tab: Mods -->
-  <section id="tab-mods" class="tab-content hidden">
-    <div class="page-header">
-      <h2>Mod Manager</h2>
-      <div class="header-actions">
-        <button class="btn btn-sm btn-ghost" id="btn-export-modpack">Export Modpack</button>
-        <button class="btn btn-sm btn-ghost" id="btn-import-modpack">Import Modpack</button>
-        <input type="file" id="modpack-file-input" accept=".json" class="hidden" />
-        <button class="btn btn-sm btn-ghost" id="btn-lookup-mods">Identify Mods (Modrinth)</button>
-        <button class="btn btn-sm btn-ghost" id="btn-refresh-mods">Refresh List</button>
-      </div>
-    </div>
-
-    <!-- Sub-tabs -->
-    <div class="subtab-nav">
-      <button class="subtab-btn active" data-subtab="installed">Installed Mods</button>
-      <button class="subtab-btn" data-subtab="browse">Browse Modrinth</button>
-    </div>
-
-    <!-- Installed mods -->
-    <div id="subtab-installed" class="subtab-content">
-      <div class="filter-bar">
-        <input type="text" id="mod-filter" placeholder="Filter by name..." />
-        <select id="mod-side-filter">
-          <option value="all">All Sides</option>
-          <option value="both">Client + Server</option>
-          <option value="server">Server-only</option>
-          <option value="unknown">Unknown</option>
-        </select>
-        <select id="mod-sort">
-          <option value="name-asc">Name A→Z</option>
-          <option value="name-desc">Name Z→A</option>
-          <option value="size-desc">Largest first</option>
-          <option value="size-asc">Smallest first</option>
-          <option value="enabled">Enabled first</option>
-        </select>
-        <label class="toggle-label">
-          <input type="checkbox" id="mod-show-disabled" checked />
-          Show disabled
-        </label>
-      </div>
-      <div id="mod-lookup-progress" class="hidden">
-        <div class="progress-bar"><div class="progress-fill" id="lookup-progress-fill"></div></div>
-        <p class="dim">Looking up mods on Modrinth...</p>
-      </div>
-      <div id="mods-list" class="mods-list">
-        <p class="dim">Loading...</p>
-      </div>
-    </div>
-
-    <!-- Browse Modrinth -->
-    <div id="subtab-browse" class="subtab-content hidden">
-      <div class="filter-bar">
-        <input type="text" id="browse-query" placeholder="Search Modrinth for server-compatible Forge mods..." />
-        <select id="browse-side">
-          <option value="all">Any Side</option>
-          <option value="both">Client + Server</option>
-          <option value="server">Server-only</option>
-        </select>
-        <button class="btn btn-primary" id="btn-browse-search">Search</button>
-        <label class="toggle-label">
-          <input type="checkbox" id="browse-show-installed" />
-          Show installed
-        </label>
-      </div>
-      <p id="browse-heading" class="browse-heading dim">Popular server-compatible Forge mods</p>
-      <div id="browse-results" class="browse-results">
-        <p class="dim">Loading popular mods...</p>
-      </div>
-    </div>
-
-    <!-- Mod detail panel — shown instead of subtab content -->
-    <div id="mod-detail-panel" class="subtab-content hidden">
-      <button class="btn btn-sm btn-ghost" id="btn-mod-detail-back">← Back to results</button>
-      <div id="mod-detail-content">
-        <p class="dim">Loading mod details...</p>
-      </div>
-    </div>
-
-    <!-- Shared pagination bar — used by both Installed and Browse subtabs -->
-    <div class="pagination-bar hidden" id="mods-tab-pagination">
-      <button class="btn btn-sm btn-ghost" id="tab-page-prev">Previous</button>
-      <span id="tab-page-info"></span>
-      <button class="btn btn-sm btn-ghost" id="tab-page-next">Next</button>
-    </div>
-  </section>
-
-  <!-- Tab: Players -->
-  <section id="tab-players" class="tab-content hidden">
-    <div class="page-header">
-      <h2>Player Management</h2>
-    </div>
-    <div class="subtab-nav">
-      <button class="subtab-btn active" data-subtab="ops">Operators</button>
-      <button class="subtab-btn" data-subtab="whitelist">Whitelist</button>
-      <button class="subtab-btn" data-subtab="bans">Bans</button>
-    </div>
-
-    <!-- Ops -->
-    <div id="subtab-ops" class="subtab-content">
-      <div class="legend-box">
-        <strong>Op Levels:</strong>
-        Level 1 = bypass spawn protection &nbsp;|&nbsp;
-        Level 2 = most commands &nbsp;|&nbsp;
-        Level 3 = /kick, /ban, manage players &nbsp;|&nbsp;
-        Level 4 = /stop, all commands
-      </div>
-      <div class="add-row">
-        <input type="text" id="op-name" placeholder="Player name" />
-        <select id="op-level">
-          <option value="4">Level 4 (Admin)</option>
-          <option value="3">Level 3 (Moderator)</option>
-          <option value="2">Level 2 (Builder)</option>
-          <option value="1">Level 1 (Basic)</option>
-        </select>
-        <button class="btn btn-primary" id="btn-add-op">Add Operator</button>
-      </div>
-      <div id="ops-list" class="player-table-wrap">
-        <p class="dim">Loading...</p>
-      </div>
-    </div>
-
-    <!-- Whitelist -->
-    <div id="subtab-whitelist" class="subtab-content hidden">
-      <div class="legend-box">
-        When whitelist is enabled in server.properties, only listed players can join.
-      </div>
-      <div class="add-row">
-        <input type="text" id="wl-name" placeholder="Player name" />
-        <button class="btn btn-primary" id="btn-add-wl">Add to Whitelist</button>
-      </div>
-      <div id="whitelist-list" class="player-table-wrap">
-        <p class="dim">Loading...</p>
-      </div>
-    </div>
-
-    <!-- Bans -->
-    <div id="subtab-bans" class="subtab-content hidden">
-      <div class="add-row">
-        <input type="text" id="ban-name" placeholder="Player name" />
-        <input type="text" id="ban-reason" placeholder="Reason (optional)" />
-        <button class="btn btn-danger" id="btn-ban">Ban Player</button>
-      </div>
-      <div id="bans-list" class="player-table-wrap">
-        <p class="dim">Loading...</p>
-      </div>
-    </div>
-  </section>
-
-  <!-- Tab: Backups -->
-  <section id="tab-backups" class="tab-content hidden">
-    <div class="page-header">
-      <h2>Backups</h2>
-      <div class="header-actions">
-        <button class="btn btn-sm btn-ghost" id="btn-refresh-backups">Refresh</button>
-      </div>
-    </div>
-
-    <!-- Backup actions -->
-    <div class="control-section">
-      <h3>Create Backup</h3>
-      <p class="dim" style="margin-bottom:0.75rem">Creates a full snapshot: Minecraft server files, mods, app config, and database. The server does not need to be stopped for backups.</p>
-      <div class="input-row">
-        <input type="text" id="backup-note" placeholder="Optional note (e.g. 'Before adding new mods')" />
-        <button class="btn btn-primary" id="btn-create-backup">Create Backup Now</button>
-      </div>
-      <p id="backup-create-msg" class="control-msg"></p>
-    </div>
-
-    <!-- Schedule settings (inline-editable) -->
-    <div class="control-section" id="backup-schedule-section">
-      <h3>Scheduled Backups</h3>
-      <form id="backup-schedule-form" class="settings-form">
-        <div class="form-group">
-          <label class="checkbox-label">
-            <input type="checkbox" name="backupEnabled" id="sched-backup-enabled" />
-            <span>Enable scheduled backups</span>
-          </label>
-        </div>
-        <div class="form-group">
-          <label>Run Backups</label>
-          <div class="schedule-picker" id="schedule-picker">
-            <select id="sched-frequency">
-              <option value="daily">Every day</option>
-              <option value="weekly">Once a week</option>
-              <option value="twice-daily">Twice a day</option>
-              <option value="every-6h">Every 6 hours</option>
-              <option value="custom">Custom (advanced)</option>
-            </select>
-            <span id="sched-on-label" class="schedule-label hidden">on</span>
-            <select id="sched-weekday" class="hidden">
-              <option value="0">Sunday</option>
-              <option value="1">Monday</option>
-              <option value="2">Tuesday</option>
-              <option value="3">Wednesday</option>
-              <option value="4">Thursday</option>
-              <option value="5">Friday</option>
-              <option value="6">Saturday</option>
-            </select>
-            <span id="sched-at-label" class="schedule-label">at</span>
-            <select id="sched-hour"></select>
-            <span class="schedule-label">:</span>
-            <select id="sched-minute">
-              <option value="0">00</option>
-              <option value="15">15</option>
-              <option value="30">30</option>
-              <option value="45">45</option>
-            </select>
-          </div>
-          <p id="sched-summary" class="hint" style="margin-top:0.35rem"></p>
-        </div>
-        <details id="sched-cron-details" class="cron-details">
-          <summary class="hint" style="cursor:pointer">Advanced: edit cron expression directly</summary>
-          <div class="form-group" style="margin-top:0.5rem">
-            <input type="text" name="backupSchedule" placeholder="0 3 * * *" />
-            <span class="hint">Format: minute hour day-of-month month day-of-week</span>
-          </div>
+          <p id="quick-action-msg" class="control-msg"></p>
         </details>
-        <div class="form-group">
-          <label>Max Scheduled Backups</label>
-          <input type="number" name="maxBackups" placeholder="14" />
-          <span class="hint">0 = keep all. Oldest scheduled backups are pruned automatically.</span>
+
+        <!-- Console -->
+        <div class="page-header" style="margin-top: 0.5rem">
+          <h2 style="font-size: 1rem">Server Console</h2>
+          <div class="header-actions">
+            <label class="toggle-label">
+              <input type="checkbox" id="console-autoscroll" checked />
+              Auto-scroll
+            </label>
+            <button class="btn btn-sm btn-ghost" id="btn-clear-console">Clear</button>
+          </div>
         </div>
-        <div class="form-group">
-          <label>Storage Path</label>
+        <div class="console-wrap">
+          <div id="console-output" class="console-output"></div>
+        </div>
+        <div class="console-input-bar">
+          <span class="console-prompt">&gt;</span>
+          <input type="text" id="console-cmd" placeholder="Type a command and press Enter..." />
+          <button class="btn btn-primary" id="btn-send-cmd">Send</button>
+        </div>
+        <p class="dim console-hint">
+          Commands are sent via RCON when the server is running. Quick action results appear in the console above.
+        </p>
+      </section>
+
+      <!-- Tab: Mods -->
+      <section id="tab-mods" class="tab-content hidden">
+        <div class="page-header">
+          <h2>Mod Manager</h2>
+          <div class="header-actions">
+            <button class="btn btn-sm btn-ghost" id="btn-export-modpack">Export Modpack</button>
+            <button class="btn btn-sm btn-ghost" id="btn-import-modpack">Import Modpack</button>
+            <input type="file" id="modpack-file-input" accept=".json" class="hidden" />
+            <button class="btn btn-sm btn-ghost" id="btn-lookup-mods">Identify Mods (Modrinth)</button>
+            <button class="btn btn-sm btn-ghost" id="btn-refresh-mods">Refresh List</button>
+          </div>
+        </div>
+
+        <!-- Sub-tabs -->
+        <div class="subtab-nav">
+          <button class="subtab-btn active" data-subtab="installed">Installed Mods</button>
+          <button class="subtab-btn" data-subtab="browse">Browse Modrinth</button>
+        </div>
+
+        <!-- Installed mods -->
+        <div id="subtab-installed" class="subtab-content">
+          <div class="filter-bar">
+            <input type="text" id="mod-filter" placeholder="Filter by name..." />
+            <select id="mod-side-filter">
+              <option value="all">All Sides</option>
+              <option value="both">Client + Server</option>
+              <option value="server">Server-only</option>
+              <option value="unknown">Unknown</option>
+            </select>
+            <select id="mod-sort">
+              <option value="name-asc">Name A→Z</option>
+              <option value="name-desc">Name Z→A</option>
+              <option value="size-desc">Largest first</option>
+              <option value="size-asc">Smallest first</option>
+              <option value="enabled">Enabled first</option>
+            </select>
+            <label class="toggle-label">
+              <input type="checkbox" id="mod-show-disabled" checked />
+              Show disabled
+            </label>
+          </div>
+          <div id="mod-lookup-progress" class="hidden">
+            <div class="progress-bar"><div class="progress-fill" id="lookup-progress-fill"></div></div>
+            <p class="dim">Looking up mods on Modrinth...</p>
+          </div>
+          <div id="mods-list" class="mods-list">
+            <p class="dim">Loading...</p>
+          </div>
+        </div>
+
+        <!-- Browse Modrinth -->
+        <div id="subtab-browse" class="subtab-content hidden">
+          <div class="filter-bar">
+            <input type="text" id="browse-query" placeholder="Search Modrinth for server-compatible Forge mods..." />
+            <select id="browse-side">
+              <option value="all">Any Side</option>
+              <option value="both">Client + Server</option>
+              <option value="server">Server-only</option>
+            </select>
+            <button class="btn btn-primary" id="btn-browse-search">Search</button>
+            <label class="toggle-label">
+              <input type="checkbox" id="browse-show-installed" />
+              Show installed
+            </label>
+          </div>
+          <p id="browse-heading" class="browse-heading dim">Popular server-compatible Forge mods</p>
+          <div id="browse-results" class="browse-results">
+            <p class="dim">Loading popular mods...</p>
+          </div>
+        </div>
+
+        <!-- Mod detail panel — shown instead of subtab content -->
+        <div id="mod-detail-panel" class="subtab-content hidden">
+          <button class="btn btn-sm btn-ghost" id="btn-mod-detail-back">← Back to results</button>
+          <div id="mod-detail-content">
+            <p class="dim">Loading mod details...</p>
+          </div>
+        </div>
+
+        <!-- Shared pagination bar — used by both Installed and Browse subtabs -->
+        <div class="pagination-bar hidden" id="mods-tab-pagination">
+          <button class="btn btn-sm btn-ghost" id="tab-page-prev">Previous</button>
+          <span id="tab-page-info"></span>
+          <button class="btn btn-sm btn-ghost" id="tab-page-next">Next</button>
+        </div>
+      </section>
+
+      <!-- Tab: Players -->
+      <section id="tab-players" class="tab-content hidden">
+        <div class="page-header">
+          <h2>Player Management</h2>
+        </div>
+        <div class="subtab-nav">
+          <button class="subtab-btn active" data-subtab="ops">Operators</button>
+          <button class="subtab-btn" data-subtab="whitelist">Whitelist</button>
+          <button class="subtab-btn" data-subtab="bans">Bans</button>
+        </div>
+
+        <!-- Ops -->
+        <div id="subtab-ops" class="subtab-content">
+          <div class="legend-box">
+            <strong>Op Levels:</strong>
+            Level 1 = bypass spawn protection &nbsp;|&nbsp; Level 2 = most commands &nbsp;|&nbsp; Level 3 = /kick, /ban,
+            manage players &nbsp;|&nbsp; Level 4 = /stop, all commands
+          </div>
+          <div class="add-row">
+            <input type="text" id="op-name" placeholder="Player name" />
+            <select id="op-level">
+              <option value="4">Level 4 (Admin)</option>
+              <option value="3">Level 3 (Moderator)</option>
+              <option value="2">Level 2 (Builder)</option>
+              <option value="1">Level 1 (Basic)</option>
+            </select>
+            <button class="btn btn-primary" id="btn-add-op">Add Operator</button>
+          </div>
+          <div id="ops-list" class="player-table-wrap">
+            <p class="dim">Loading...</p>
+          </div>
+        </div>
+
+        <!-- Whitelist -->
+        <div id="subtab-whitelist" class="subtab-content hidden">
+          <div class="legend-box">When whitelist is enabled in server.properties, only listed players can join.</div>
+          <div class="add-row">
+            <input type="text" id="wl-name" placeholder="Player name" />
+            <button class="btn btn-primary" id="btn-add-wl">Add to Whitelist</button>
+          </div>
+          <div id="whitelist-list" class="player-table-wrap">
+            <p class="dim">Loading...</p>
+          </div>
+        </div>
+
+        <!-- Bans -->
+        <div id="subtab-bans" class="subtab-content hidden">
+          <div class="add-row">
+            <input type="text" id="ban-name" placeholder="Player name" />
+            <input type="text" id="ban-reason" placeholder="Reason (optional)" />
+            <button class="btn btn-danger" id="btn-ban">Ban Player</button>
+          </div>
+          <div id="bans-list" class="player-table-wrap">
+            <p class="dim">Loading...</p>
+          </div>
+        </div>
+      </section>
+
+      <!-- Tab: Backups -->
+      <section id="tab-backups" class="tab-content hidden">
+        <div class="page-header">
+          <h2>Backups</h2>
+          <div class="header-actions">
+            <button class="btn btn-sm btn-ghost" id="btn-refresh-backups">Refresh</button>
+          </div>
+        </div>
+
+        <!-- Backup actions -->
+        <div class="control-section">
+          <h3>Create Backup</h3>
+          <p class="dim" style="margin-bottom: 0.75rem">
+            Creates a full snapshot: Minecraft server files, mods, app config, and database. The server does not need to
+            be stopped for backups.
+          </p>
           <div class="input-row">
-            <input type="text" name="backupPath" placeholder="/mnt/backups/minecraft" />
-            <button type="button" class="btn btn-ghost btn-sm" id="btn-browse-backup-path">Browse</button>
+            <input type="text" id="backup-note" placeholder="Optional note (e.g. 'Before adding new mods')" />
+            <button class="btn btn-primary" id="btn-create-backup">Create Backup Now</button>
           </div>
-          <span class="hint">Absolute path to the backup directory</span>
+          <p id="backup-create-msg" class="control-msg"></p>
         </div>
-        <div class="btn-row">
-          <button type="submit" class="btn btn-primary btn-sm">Save Schedule</button>
+
+        <!-- Schedule settings (inline-editable) -->
+        <div class="control-section" id="backup-schedule-section">
+          <h3>Scheduled Backups</h3>
+          <form id="backup-schedule-form" class="settings-form">
+            <div class="form-group">
+              <label class="checkbox-label">
+                <input type="checkbox" name="backupEnabled" id="sched-backup-enabled" />
+                <span>Enable scheduled backups</span>
+              </label>
+            </div>
+            <div class="form-group">
+              <label>Run Backups</label>
+              <div class="schedule-picker" id="schedule-picker">
+                <select id="sched-frequency">
+                  <option value="daily">Every day</option>
+                  <option value="weekly">Once a week</option>
+                  <option value="twice-daily">Twice a day</option>
+                  <option value="every-6h">Every 6 hours</option>
+                  <option value="custom">Custom (advanced)</option>
+                </select>
+                <span id="sched-on-label" class="schedule-label hidden">on</span>
+                <select id="sched-weekday" class="hidden">
+                  <option value="0">Sunday</option>
+                  <option value="1">Monday</option>
+                  <option value="2">Tuesday</option>
+                  <option value="3">Wednesday</option>
+                  <option value="4">Thursday</option>
+                  <option value="5">Friday</option>
+                  <option value="6">Saturday</option>
+                </select>
+                <span id="sched-at-label" class="schedule-label">at</span>
+                <select id="sched-hour"></select>
+                <span class="schedule-label">:</span>
+                <select id="sched-minute">
+                  <option value="0">00</option>
+                  <option value="15">15</option>
+                  <option value="30">30</option>
+                  <option value="45">45</option>
+                </select>
+              </div>
+              <p id="sched-summary" class="hint" style="margin-top: 0.35rem"></p>
+            </div>
+            <details id="sched-cron-details" class="cron-details">
+              <summary class="hint" style="cursor: pointer">Advanced: edit cron expression directly</summary>
+              <div class="form-group" style="margin-top: 0.5rem">
+                <input type="text" name="backupSchedule" placeholder="0 3 * * *" />
+                <span class="hint">Format: minute hour day-of-month month day-of-week</span>
+              </div>
+            </details>
+            <div class="form-group">
+              <label>Max Scheduled Backups</label>
+              <input type="number" name="maxBackups" placeholder="14" />
+              <span class="hint">0 = keep all. Oldest scheduled backups are pruned automatically.</span>
+            </div>
+            <div class="form-group">
+              <label>Storage Path</label>
+              <div class="input-row">
+                <input type="text" name="backupPath" placeholder="/mnt/backups/minecraft" />
+                <button type="button" class="btn btn-ghost btn-sm" id="btn-browse-backup-path">Browse</button>
+              </div>
+              <span class="hint">Absolute path to the backup directory</span>
+            </div>
+            <div class="btn-row">
+              <button type="submit" class="btn btn-primary btn-sm">Save Schedule</button>
+            </div>
+            <p id="backup-schedule-msg" class="control-msg"></p>
+          </form>
         </div>
-        <p id="backup-schedule-msg" class="control-msg"></p>
-      </form>
-    </div>
 
-    <!-- Backup list -->
-    <div class="control-section">
-      <h3>Saved Backups</h3>
-      <div id="backups-list">
-        <p class="dim">Loading...</p>
-      </div>
-    </div>
-  </section>
-
-  <!-- Backup restore confirmation modal -->
-  <div id="restore-modal" class="modal-overlay hidden">
-    <div class="modal">
-      <div class="modal-header">
-        <h3>Confirm Restore</h3>
-        <button class="btn btn-ghost btn-sm" id="restore-modal-close">&times;</button>
-      </div>
-      <div class="modal-body">
-        <p class="restore-warning">This will <strong>replace all server files, mods, config, and database</strong> with the contents of this backup. This action cannot be undone.</p>
-        <p class="restore-warning" style="margin-top:0.5rem">The Minecraft server <strong>must be stopped</strong> before restoring.</p>
-        <div id="restore-modal-details" style="margin-top:0.75rem"></div>
-        <div class="btn-row" style="margin-top:1rem">
-          <button class="btn btn-danger" id="btn-confirm-restore">Restore This Backup</button>
-          <button class="btn btn-ghost" id="btn-cancel-restore">Cancel</button>
-        </div>
-        <p id="restore-msg" class="control-msg"></p>
-      </div>
-    </div>
-  </div>
-
-  <!-- Directory browser modal -->
-  <div id="dir-browser-modal" class="modal-overlay hidden">
-    <div class="modal">
-      <div class="modal-header">
-        <h3>Browse Server Directories</h3>
-        <button class="btn btn-ghost btn-sm" id="dir-browser-close">&times;</button>
-      </div>
-      <div class="modal-body">
-        <nav id="dir-browser-crumbs" class="dir-crumbs"></nav>
-        <div id="dir-browser-list" class="dir-browser-list"></div>
-        <div class="btn-row" style="margin-top:0.75rem">
-          <button class="btn btn-primary btn-sm" id="dir-browser-select">Select This Folder</button>
-          <button class="btn btn-ghost btn-sm" id="dir-browser-new-folder">New Folder</button>
-          <button class="btn btn-ghost btn-sm" id="dir-browser-cancel">Cancel</button>
-        </div>
-      </div>
-    </div>
-  </div>
-
-  <!-- Tab: Settings -->
-  <section id="tab-settings" class="tab-content hidden">
-    <div class="page-header">
-      <h2>Settings</h2>
-    </div>
-    <div class="subtab-nav">
-      <button class="subtab-btn active" data-subtab="app-cfg">App Config</button>
-      <button class="subtab-btn" data-subtab="server-props">server.properties</button>
-    </div>
-
-    <!-- App config -->
-    <div id="subtab-app-cfg" class="subtab-content">
-      <form id="app-config-form" class="settings-form">
-        <div class="form-group">
-          <label>Minecraft Server Path</label>
-          <div class="input-row">
-            <input type="text" name="serverPath" placeholder="/home/minecraft/server" />
-            <button type="button" class="btn btn-ghost btn-sm" id="btn-browse-server-path">Browse</button>
-          </div>
-          <span class="hint">Absolute path to the folder containing server.jar / run.sh</span>
-        </div>
-        <div class="form-row">
-          <div class="form-group">
-            <label>RCON Host</label>
-            <input type="text" name="rconHost" placeholder="127.0.0.1" />
-          </div>
-          <div class="form-group">
-            <label>RCON Port</label>
-            <input type="number" name="rconPort" placeholder="25575" />
+        <!-- Backup list -->
+        <div class="control-section">
+          <h3>Saved Backups</h3>
+          <div id="backups-list">
+            <p class="dim">Loading...</p>
           </div>
         </div>
-        <div class="form-group">
-          <label>RCON Password</label>
-          <input type="password" name="rconPassword" placeholder="(from server.properties)" />
-          <span class="hint">Must match rcon.password in server.properties</span>
-        </div>
-        <div class="form-group">
-          <label>Server Start Command</label>
-          <input type="text" name="startCommand" placeholder="java -Xms6G -Xmx10G @user_jvm_args.txt ..." />
-          <span class="hint">Modern Forge: use the @arguments file method. Old Forge: java -Xmx10G -jar forge-*.jar nogui</span>
-        </div>
-        <div class="form-row">
-          <div class="form-group">
-            <label>Minecraft Version</label>
-            <input type="text" name="minecraftVersion" placeholder="1.20.1" />
+      </section>
+
+      <!-- Backup restore confirmation modal -->
+      <div id="restore-modal" class="modal-overlay hidden">
+        <div class="modal">
+          <div class="modal-header">
+            <h3>Confirm Restore</h3>
+            <button class="btn btn-ghost btn-sm" id="restore-modal-close">&times;</button>
           </div>
-          <div class="form-group">
-            <label>Web UI Port</label>
-            <input type="number" name="webPort" placeholder="3000" />
-            <span class="hint">Restart manager after changing</span>
-          </div>
-        </div>
-        <div class="form-row">
-          <div class="form-group">
-            <label>Mods Folder Name</label>
-            <input type="text" name="modsFolder" placeholder="mods" />
-          </div>
-          <div class="form-group">
-            <label>Disabled Mods Folder</label>
-            <input type="text" name="disabledModsFolder" placeholder="mods_disabled" />
+          <div class="modal-body">
+            <p class="restore-warning">
+              This will <strong>replace all server files, mods, config, and database</strong> with the contents of this
+              backup. This action cannot be undone.
+            </p>
+            <p class="restore-warning" style="margin-top: 0.5rem">
+              The Minecraft server <strong>must be stopped</strong> before restoring.
+            </p>
+            <div id="restore-modal-details" style="margin-top: 0.75rem"></div>
+            <div class="btn-row" style="margin-top: 1rem">
+              <button class="btn btn-danger" id="btn-confirm-restore">Restore This Backup</button>
+              <button class="btn btn-ghost" id="btn-cancel-restore">Cancel</button>
+            </div>
+            <p id="restore-msg" class="control-msg"></p>
           </div>
         </div>
-        <hr style="border-color:var(--border); margin:0.5rem 0" />
-        <div class="form-group">
-          <label class="checkbox-label">
-            <input type="checkbox" name="autoStart" id="cfg-auto-start" />
-            <span>Auto-start Minecraft on boot</span>
-          </label>
-          <span class="hint">Automatically launches the Minecraft server when the manager starts. Recommended when running as a systemd service.</span>
+      </div>
+
+      <!-- Directory browser modal -->
+      <div id="dir-browser-modal" class="modal-overlay hidden">
+        <div class="modal">
+          <div class="modal-header">
+            <h3>Browse Server Directories</h3>
+            <button class="btn btn-ghost btn-sm" id="dir-browser-close">&times;</button>
+          </div>
+          <div class="modal-body">
+            <nav id="dir-browser-crumbs" class="dir-crumbs"></nav>
+            <div id="dir-browser-list" class="dir-browser-list"></div>
+            <div class="btn-row" style="margin-top: 0.75rem">
+              <button class="btn btn-primary btn-sm" id="dir-browser-select">Select This Folder</button>
+              <button class="btn btn-ghost btn-sm" id="dir-browser-new-folder">New Folder</button>
+              <button class="btn btn-ghost btn-sm" id="dir-browser-cancel">Cancel</button>
+            </div>
+          </div>
         </div>
-        <div class="form-group">
-          <label class="checkbox-label">
-            <input type="checkbox" name="autoRestart" id="cfg-auto-restart" />
-            <span>Auto-restart on crash</span>
-          </label>
-          <span class="hint">Automatically restarts the Minecraft server if it crashes. Rate-limited to 3 restarts per 10 minutes to prevent loops.</span>
+      </div>
+
+      <!-- Tab: Settings -->
+      <section id="tab-settings" class="tab-content hidden">
+        <div class="page-header">
+          <h2>Settings</h2>
         </div>
-        <div class="form-group">
-          <label class="checkbox-label">
-            <input type="checkbox" name="demoMode" id="cfg-demo-mode" />
-            <span>Demo Mode</span>
-            <span class="badge-important">Shows seed data, no real server connection</span>
-          </label>
-          <span class="hint">Uncheck and save to connect to your real Minecraft server. Requires a restart of the manager app.</span>
+        <div class="subtab-nav">
+          <button class="subtab-btn active" data-subtab="app-cfg">App Config</button>
+          <button class="subtab-btn" data-subtab="server-props">server.properties</button>
         </div>
-        <div class="btn-row">
-          <button type="submit" class="btn btn-primary">Save App Config</button>
-          <button type="button" class="btn btn-ghost" id="btn-reconnect-rcon">Reconnect RCON</button>
+
+        <!-- App config -->
+        <div id="subtab-app-cfg" class="subtab-content">
+          <form id="app-config-form" class="settings-form">
+            <div class="form-group">
+              <label>Minecraft Server Path</label>
+              <div class="input-row">
+                <input type="text" name="serverPath" placeholder="/home/minecraft/server" />
+                <button type="button" class="btn btn-ghost btn-sm" id="btn-browse-server-path">Browse</button>
+              </div>
+              <span class="hint">Absolute path to the folder containing server.jar / run.sh</span>
+            </div>
+            <div class="form-row">
+              <div class="form-group">
+                <label>RCON Host</label>
+                <input type="text" name="rconHost" placeholder="127.0.0.1" />
+              </div>
+              <div class="form-group">
+                <label>RCON Port</label>
+                <input type="number" name="rconPort" placeholder="25575" />
+              </div>
+            </div>
+            <div class="form-group">
+              <label>RCON Password</label>
+              <input type="password" name="rconPassword" placeholder="(from server.properties)" />
+              <span class="hint">Must match rcon.password in server.properties</span>
+            </div>
+            <div class="form-group">
+              <label>Server Start Command</label>
+              <input type="text" name="startCommand" placeholder="java -Xms6G -Xmx10G @user_jvm_args.txt ..." />
+              <span class="hint"
+                >Modern Forge: use the @arguments file method. Old Forge: java -Xmx10G -jar forge-*.jar nogui</span
+              >
+            </div>
+            <div class="form-row">
+              <div class="form-group">
+                <label>Minecraft Version</label>
+                <input type="text" name="minecraftVersion" placeholder="1.20.1" />
+              </div>
+              <div class="form-group">
+                <label>Web UI Port</label>
+                <input type="number" name="webPort" placeholder="3000" />
+                <span class="hint">Restart manager after changing</span>
+              </div>
+            </div>
+            <div class="form-row">
+              <div class="form-group">
+                <label>Mods Folder Name</label>
+                <input type="text" name="modsFolder" placeholder="mods" />
+              </div>
+              <div class="form-group">
+                <label>Disabled Mods Folder</label>
+                <input type="text" name="disabledModsFolder" placeholder="mods_disabled" />
+              </div>
+            </div>
+            <hr style="border-color: var(--border); margin: 0.5rem 0" />
+            <div class="form-group">
+              <label class="checkbox-label">
+                <input type="checkbox" name="autoStart" id="cfg-auto-start" />
+                <span>Auto-start Minecraft on boot</span>
+              </label>
+              <span class="hint"
+                >Automatically launches the Minecraft server when the manager starts. Recommended when running as a
+                systemd service.</span
+              >
+            </div>
+            <div class="form-group">
+              <label class="checkbox-label">
+                <input type="checkbox" name="autoRestart" id="cfg-auto-restart" />
+                <span>Auto-restart on crash</span>
+              </label>
+              <span class="hint"
+                >Automatically restarts the Minecraft server if it crashes. Rate-limited to 3 restarts per 10 minutes to
+                prevent loops.</span
+              >
+            </div>
+            <div class="form-group">
+              <label class="checkbox-label">
+                <input type="checkbox" name="demoMode" id="cfg-demo-mode" />
+                <span>Demo Mode</span>
+                <span class="badge-important">Shows seed data, no real server connection</span>
+              </label>
+              <span class="hint"
+                >Uncheck and save to connect to your real Minecraft server. Requires a restart of the manager app.</span
+              >
+            </div>
+            <div class="btn-row">
+              <button type="submit" class="btn btn-primary">Save App Config</button>
+              <button type="button" class="btn btn-ghost" id="btn-reconnect-rcon">Reconnect RCON</button>
+            </div>
+            <p id="app-cfg-msg" class="control-msg"></p>
+          </form>
         </div>
-        <p id="app-cfg-msg" class="control-msg"></p>
-      </form>
+
+        <!-- server.properties -->
+        <div id="subtab-server-props" class="subtab-content hidden">
+          <p class="legend-box">
+            Key settings. Enable RCON here for the manager to send commands while the server is running.
+            <strong>Restart the Minecraft server</strong> after saving changes.
+          </p>
+          <form id="props-form" class="settings-form">
+            <div id="props-fields">
+              <p class="dim">Loading...</p>
+            </div>
+            <div class="btn-row">
+              <button type="submit" class="btn btn-primary">Save server.properties</button>
+            </div>
+            <p id="props-msg" class="control-msg"></p>
+          </form>
+        </div>
+      </section>
+
+      <!-- Modpack import modal -->
+      <div id="modpack-modal" class="modal-overlay hidden">
+        <div class="modal modpack-modal-wide">
+          <div class="modal-header">
+            <h3 id="modpack-modal-title">Import Modpack</h3>
+            <button class="btn btn-ghost btn-sm" id="modpack-modal-close">&times;</button>
+          </div>
+          <div id="modpack-modal-body" class="modal-body">
+            <p class="dim">Analyzing modpack...</p>
+          </div>
+        </div>
+      </div>
+
+      <!-- Command Reference help modal -->
+      <div id="cmd-help-modal" class="modal-overlay hidden">
+        <div class="modal cmd-help-modal-wide">
+          <div class="modal-header">
+            <h3>Command Reference</h3>
+            <button class="btn btn-ghost btn-sm" id="cmd-help-close">&times;</button>
+          </div>
+          <div class="cmd-help-search-bar">
+            <input
+              type="text"
+              id="cmd-help-search"
+              placeholder='Search commands... (e.g. "teleport", "weather", "ban")'
+            />
+          </div>
+          <div id="cmd-help-body" class="modal-body cmd-help-body"></div>
+        </div>
+      </div>
+
+      <!-- Version info modal for mod downloads -->
+      <div id="version-modal" class="modal-overlay hidden">
+        <div class="modal">
+          <div class="modal-header">
+            <h3 id="modal-title">Select Version to Download</h3>
+            <button class="btn btn-ghost btn-sm" id="modal-close">&times;</button>
+          </div>
+          <div id="modal-versions" class="modal-body">
+            <p class="dim">Loading versions...</p>
+          </div>
+        </div>
+      </div>
     </div>
 
-    <!-- server.properties -->
-    <div id="subtab-server-props" class="subtab-content hidden">
-      <p class="legend-box">
-        Key settings. Enable RCON here for the manager to send commands while the server is running.
-        <strong>Restart the Minecraft server</strong> after saving changes.
-      </p>
-      <form id="props-form" class="settings-form">
-        <div id="props-fields">
-          <p class="dim">Loading...</p>
-        </div>
-        <div class="btn-row">
-          <button type="submit" class="btn btn-primary">Save server.properties</button>
-        </div>
-        <p id="props-msg" class="control-msg"></p>
-      </form>
-    </div>
-  </section>
-
-  <!-- Modpack import modal -->
-  <div id="modpack-modal" class="modal-overlay hidden">
-    <div class="modal modpack-modal-wide">
-      <div class="modal-header">
-        <h3 id="modpack-modal-title">Import Modpack</h3>
-        <button class="btn btn-ghost btn-sm" id="modpack-modal-close">&times;</button>
-      </div>
-      <div id="modpack-modal-body" class="modal-body">
-        <p class="dim">Analyzing modpack...</p>
-      </div>
-    </div>
-  </div>
-
-  <!-- Command Reference help modal -->
-  <div id="cmd-help-modal" class="modal-overlay hidden">
-    <div class="modal cmd-help-modal-wide">
-      <div class="modal-header">
-        <h3>Command Reference</h3>
-        <button class="btn btn-ghost btn-sm" id="cmd-help-close">&times;</button>
-      </div>
-      <div class="cmd-help-search-bar">
-        <input type="text" id="cmd-help-search" placeholder="Search commands... (e.g. &quot;teleport&quot;, &quot;weather&quot;, &quot;ban&quot;)" />
-      </div>
-      <div id="cmd-help-body" class="modal-body cmd-help-body"></div>
-    </div>
-  </div>
-
-  <!-- Version info modal for mod downloads -->
-  <div id="version-modal" class="modal-overlay hidden">
-    <div class="modal">
-      <div class="modal-header">
-        <h3 id="modal-title">Select Version to Download</h3>
-        <button class="btn btn-ghost btn-sm" id="modal-close">&times;</button>
-      </div>
-      <div id="modal-versions" class="modal-body">
-        <p class="dim">Loading versions...</p>
-      </div>
-    </div>
-  </div>
-</div>
-
-<script src="app.js"></script>
-</body>
+    <script src="app.js"></script>
+  </body>
 </html>

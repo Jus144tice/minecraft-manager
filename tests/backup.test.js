@@ -73,10 +73,16 @@ test('listBackups: sorts by createdAt descending (newest first)', async () => {
   const dir = await makeTempBackupDir();
   try {
     await writeFile(path.join(dir, 'backup-old.tar.gz'), 'old');
-    await writeFile(path.join(dir, 'backup-old.json'), JSON.stringify({ createdAt: '2024-01-01T00:00:00Z', type: 'manual' }));
+    await writeFile(
+      path.join(dir, 'backup-old.json'),
+      JSON.stringify({ createdAt: '2024-01-01T00:00:00Z', type: 'manual' }),
+    );
 
     await writeFile(path.join(dir, 'backup-new.tar.gz'), 'new');
-    await writeFile(path.join(dir, 'backup-new.json'), JSON.stringify({ createdAt: '2024-06-01T00:00:00Z', type: 'manual' }));
+    await writeFile(
+      path.join(dir, 'backup-new.json'),
+      JSON.stringify({ createdAt: '2024-06-01T00:00:00Z', type: 'manual' }),
+    );
 
     const result = await listBackups({ backupPath: dir });
     assert.equal(result.length, 2);
@@ -95,7 +101,7 @@ test('listBackups: handles missing manifest gracefully', async () => {
     assert.equal(result.length, 1);
     assert.equal(result[0].filename, 'no-manifest.tar.gz');
     assert.equal(result[0].type, 'manual'); // default
-    assert.equal(result[0].note, '');        // default
+    assert.equal(result[0].note, ''); // default
   } finally {
     await cleanup(dir);
   }
@@ -131,10 +137,7 @@ test('deleteBackup: succeeds when manifest is missing', async () => {
 test('deleteBackup: throws for non-tar.gz filename', async () => {
   const dir = await makeTempBackupDir();
   try {
-    await assert.rejects(
-      () => deleteBackup({ backupPath: dir }, 'malicious.exe'),
-      { message: /invalid/i },
-    );
+    await assert.rejects(() => deleteBackup({ backupPath: dir }, 'malicious.exe'), { message: /invalid/i });
   } finally {
     await cleanup(dir);
   }
@@ -143,10 +146,9 @@ test('deleteBackup: throws for non-tar.gz filename', async () => {
 test('deleteBackup: throws for path traversal attempt', async () => {
   const dir = await makeTempBackupDir();
   try {
-    await assert.rejects(
-      () => deleteBackup({ backupPath: dir }, '../../../etc/passwd.tar.gz'),
-      { message: /invalid/i },
-    );
+    await assert.rejects(() => deleteBackup({ backupPath: dir }, '../../../etc/passwd.tar.gz'), {
+      message: /invalid/i,
+    });
   } finally {
     await cleanup(dir);
   }
@@ -155,10 +157,7 @@ test('deleteBackup: throws for path traversal attempt', async () => {
 test('deleteBackup: throws when archive does not exist', async () => {
   const dir = await makeTempBackupDir();
   try {
-    await assert.rejects(
-      () => deleteBackup({ backupPath: dir }, 'nonexistent.tar.gz'),
-      { message: /not found/i },
-    );
+    await assert.rejects(() => deleteBackup({ backupPath: dir }, 'nonexistent.tar.gz'), { message: /not found/i });
   } finally {
     await cleanup(dir);
   }

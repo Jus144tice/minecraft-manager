@@ -29,7 +29,12 @@ export function isSafeCommand(cmd) {
 // Ban/kick reason: free text — strip null bytes and cap length.
 export function sanitizeReason(reason) {
   if (typeof reason !== 'string') return 'Banned by admin';
-  return reason.replace(/\0/g, '').replace(/[\r\n]/g, ' ').slice(0, 200) || 'Banned by admin';
+  return (
+    reason
+      .replace(/\0/g, '')
+      .replace(/[\r\n]/g, ' ')
+      .slice(0, 200) || 'Banned by admin'
+  );
 }
 
 // Startup config validation — returns an array of error strings (empty = valid).
@@ -47,12 +52,18 @@ export function validateConfig(config) {
   }
 
   const rconPort = config.rconPort;
-  if (rconPort !== undefined && (typeof rconPort !== 'number' || !Number.isInteger(rconPort) || rconPort < 1 || rconPort > 65535)) {
+  if (
+    rconPort !== undefined &&
+    (typeof rconPort !== 'number' || !Number.isInteger(rconPort) || rconPort < 1 || rconPort > 65535)
+  ) {
     errors.push(`rconPort must be an integer between 1 and 65535 (got ${JSON.stringify(rconPort)}).`);
   }
 
   const webPort = config.webPort;
-  if (webPort !== undefined && (typeof webPort !== 'number' || !Number.isInteger(webPort) || webPort < 1 || webPort > 65535)) {
+  if (
+    webPort !== undefined &&
+    (typeof webPort !== 'number' || !Number.isInteger(webPort) || webPort < 1 || webPort > 65535)
+  ) {
     errors.push(`webPort must be an integer between 1 and 65535 (got ${JSON.stringify(webPort)}).`);
   }
 

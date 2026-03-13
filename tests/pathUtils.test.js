@@ -23,32 +23,20 @@ test('safeJoin: allows the base directory itself', () => {
 });
 
 test('safeJoin: blocks classic .. traversal', () => {
-  assert.throws(
-    () => safeJoin(BASE, '../server.js'),
-    /traversal/i,
-  );
+  assert.throws(() => safeJoin(BASE, '../server.js'), /traversal/i);
 });
 
 test('safeJoin: blocks deep .. traversal', () => {
-  assert.throws(
-    () => safeJoin(BASE, '../../etc/passwd'),
-    /traversal/i,
-  );
+  assert.throws(() => safeJoin(BASE, '../../etc/passwd'), /traversal/i);
 });
 
 test('safeJoin: blocks absolute path injection', () => {
   // path.resolve ignores earlier parts once it sees an absolute component —
   // safeJoin must catch this.
-  assert.throws(
-    () => safeJoin(BASE, '/etc/passwd'),
-    /traversal/i,
-  );
+  assert.throws(() => safeJoin(BASE, '/etc/passwd'), /traversal/i);
 });
 
 test('safeJoin: blocks prefix-confusion attack (base name as prefix)', () => {
   // e.g. /srv/minecraft/mods-evil is NOT inside /srv/minecraft/mods
-  assert.throws(
-    () => safeJoin(BASE, '../mods-evil/bad.jar'),
-    /traversal/i,
-  );
+  assert.throws(() => safeJoin(BASE, '../mods-evil/bad.jar'), /traversal/i);
 });

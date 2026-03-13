@@ -2,7 +2,7 @@
 // Creates tar.gz snapshots of the Minecraft server, app config, and PostgreSQL database.
 // Backups are stored in a configurable directory with timestamp-based naming.
 
-import { execFile, spawn } from 'child_process';
+import { execFile } from 'child_process';
 import { mkdir, readdir, stat, unlink, readFile, writeFile, rm } from 'fs/promises';
 import { existsSync } from 'fs';
 import path from 'path';
@@ -45,7 +45,11 @@ export async function listBackups(config) {
     const manifestPath = path.join(dir, manifestName);
 
     let manifest = {};
-    try { manifest = JSON.parse(await readFile(manifestPath, 'utf8')); } catch { /* no manifest */ }
+    try {
+      manifest = JSON.parse(await readFile(manifestPath, 'utf8'));
+    } catch {
+      /* no manifest */
+    }
 
     const s = await stat(archivePath);
     backups.push({
@@ -105,9 +109,14 @@ export async function createBackup(config, { type = 'manual', note = '', user = 
     // Build tar arguments
     // Archive the minecraft server and the staging dir (app config + db dump)
     const tarArgs = [
-      '-czf', archivePath,
-      '-C', path.dirname(serverPath), path.basename(serverPath),
-      '-C', dir, `_staging_${name}`,
+      '-czf',
+      archivePath,
+      '-C',
+      path.dirname(serverPath),
+      path.basename(serverPath),
+      '-C',
+      dir,
+      `_staging_${name}`,
     ];
 
     await execFileAsync('tar', tarArgs, { maxBuffer: 10 * 1024 * 1024, timeout: 600000 });
@@ -131,7 +140,13 @@ export async function createBackup(config, { type = 'manual', note = '', user = 
     info('Backup created', { name, size: archiveStat.size, type, includesDatabase });
     audit('BACKUP_CREATE', { user: user || 'system', type, name, size: archiveStat.size });
 
-    return { filename: `${name}.tar.gz`, size: archiveStat.size, createdAt: manifest.createdAt, type, includesDatabase };
+    return {
+      filename: `${name}.tar.gz`,
+      size: archiveStat.size,
+      createdAt: manifest.createdAt,
+      type,
+      includesDatabase,
+    };
   } finally {
     // Clean up staging directory
     await rm(stagingDir, { recursive: true, force: true }).catch(() => {});
@@ -148,10 +163,12 @@ async function dumpDatabaseSql(pool, outDir) {
       // Get column names
       const colResult = await client.query(
         `SELECT column_name, data_type FROM information_schema.columns
-         WHERE table_name = $1 ORDER BY ordinal_position`, [table]);
+         WHERE table_name = $1 ORDER BY ordinal_position`,
+        [table],
+      );
       if (colResult.rows.length === 0) continue;
 
-      const columns = colResult.rows.map(r => r.column_name);
+      const columns = colResult.rows.map((r) => r.column_name);
       const dataResult = await client.query(`SELECT * FROM ${table}`);
 
       const statements = [];
@@ -162,7 +179,7 @@ async function dumpDatabaseSql(pool, outDir) {
 
       // Generate INSERT statements
       for (const row of dataResult.rows) {
-        const values = columns.map(col => {
+        const values = columns.map((col) => {
           const val = row[col];
           if (val === null || val === undefined) return 'NULL';
           if (typeof val === 'number') return String(val);
@@ -202,11 +219,14 @@ export async function restoreBackup(config, filename, mc) {
   // Read manifest
   const manifestPath = archivePath.replace('.tar.gz', '.json');
   let manifest = {};
-  try { manifest = JSON.parse(await readFile(manifestPath, 'utf8')); } catch { /* ok */ }
+  try {
+    manifest = JSON.parse(await readFile(manifestPath, 'utf8'));
+  } catch {
+    /* ok */
+  }
 
   const serverPath = config.serverPath;
   const serverBasename = path.basename(serverPath);
-  const serverParent = path.dirname(serverPath);
   const backupName = filename.replace('.tar.gz', '');
 
   // 1. Extract archive to a temp directory
@@ -214,7 +234,10 @@ export async function restoreBackup(config, filename, mc) {
   await mkdir(extractDir, { recursive: true });
 
   try {
-    await execFileAsync('tar', ['-xzf', archivePath, '-C', extractDir], { maxBuffer: 10 * 1024 * 1024, timeout: 600000 });
+    await execFileAsync('tar', ['-xzf', archivePath, '-C', extractDir], {
+      maxBuffer: 10 * 1024 * 1024,
+      timeout: 600000,
+    });
 
     // 2. Restore the Minecraft server directory
     const extractedServerDir = path.join(extractDir, serverBasename);
@@ -265,7 +288,10 @@ async function restoreDatabaseSql(pool, dbDir) {
       if (!file.endsWith('.sql')) continue;
       const sql = await readFile(path.join(dbDir, file), 'utf8');
       // Execute each statement individually
-      const statements = sql.split(';').map(s => s.trim()).filter(s => s && !s.startsWith('--'));
+      const statements = sql
+        .split(';')
+        .map((s) => s.trim())
+        .filter((s) => s && !s.startsWith('--'));
       for (const stmt of statements) {
         try {
           await client.query(stmt);
@@ -303,7 +329,7 @@ export async function deleteBackup(config, filename) {
 
 // ---- Scheduled backups (cron) ----
 
-export function setupBackupSchedule(config, mc) {
+export function setupBackupSchedule(config, _mc) {
   stopBackupSchedule();
 
   if (!config.backupEnabled) {
@@ -318,20 +344,24 @@ export function setupBackupSchedule(config, mc) {
   }
 
   const cronExpr = config.backupSchedule || '0 3 * * *';
-  scheduledTask = cron.schedule(cronExpr, async () => {
-    info('Scheduled backup starting...');
-    try {
-      const result = await createBackup(config, { type: 'scheduled' });
-      info('Scheduled backup complete', { filename: result.filename, size: result.size });
+  scheduledTask = cron.schedule(
+    cronExpr,
+    async () => {
+      info('Scheduled backup starting...');
+      try {
+        const result = await createBackup(config, { type: 'scheduled' });
+        info('Scheduled backup complete', { filename: result.filename, size: result.size });
 
-      // Prune old backups if maxBackups is set
-      if (config.maxBackups && config.maxBackups > 0) {
-        await pruneOldBackups(config);
+        // Prune old backups if maxBackups is set
+        if (config.maxBackups && config.maxBackups > 0) {
+          await pruneOldBackups(config);
+        }
+      } catch (err) {
+        warn('Scheduled backup failed', { error: err.message });
       }
-    } catch (err) {
-      warn('Scheduled backup failed', { error: err.message });
-    }
-  }, { timezone: config.backupTimezone || undefined });
+    },
+    { timezone: config.backupTimezone || undefined },
+  );
 
   info('Backup schedule active', { schedule: cronExpr });
 }
@@ -349,7 +379,7 @@ async function pruneOldBackups(config) {
 
   const all = await listBackups(config);
   // Only prune scheduled backups — leave manual backups untouched
-  const scheduled = all.filter(b => b.type === 'scheduled');
+  const scheduled = all.filter((b) => b.type === 'scheduled');
   if (scheduled.length <= max) return;
 
   const toDelete = scheduled.slice(max);

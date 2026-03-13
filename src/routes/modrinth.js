@@ -35,7 +35,9 @@ export default function modrinthRoutes(ctx) {
         index: 'downloads',
       });
       res.json(results);
-    } catch (err) { res.status(500).json({ error: err.message }); }
+    } catch (err) {
+      res.status(500).json({ error: err.message });
+    }
   });
 
   router.get('/modrinth/search', async (req, res) => {
@@ -52,7 +54,9 @@ export default function modrinthRoutes(ctx) {
         offset,
       });
       res.json(results);
-    } catch (err) { res.status(500).json({ error: err.message }); }
+    } catch (err) {
+      res.status(500).json({ error: err.message });
+    }
   });
 
   router.get('/modrinth/project/:id', async (req, res) => {
@@ -60,11 +64,14 @@ export default function modrinthRoutes(ctx) {
     if (!/^[a-zA-Z0-9_-]{1,64}$/.test(id)) return res.status(400).json({ error: 'Invalid project ID' });
     try {
       const project = await Modrinth.getProject(id);
-      const bodyHtml = marked.parse(project.body || '', { breaks: true })
+      const bodyHtml = marked
+        .parse(project.body || '', { breaks: true })
         .replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, '')
         .replace(/javascript:/gi, 'blocked:');
       res.json({ ...project, bodyHtml });
-    } catch (err) { res.status(500).json({ error: err.message }); }
+    } catch (err) {
+      res.status(500).json({ error: err.message });
+    }
   });
 
   router.get('/modrinth/versions/batch', async (req, res) => {
@@ -72,9 +79,11 @@ export default function modrinthRoutes(ctx) {
     try {
       const ids = JSON.parse(req.query.ids || '[]');
       if (!Array.isArray(ids) || ids.length === 0) return res.json([]);
-      const clean = ids.filter(id => /^[a-zA-Z0-9_-]{1,64}$/.test(id)).slice(0, 50);
+      const clean = ids.filter((id) => /^[a-zA-Z0-9_-]{1,64}$/.test(id)).slice(0, 50);
       res.json(await Modrinth.getVersionsBatch(clean));
-    } catch (err) { res.status(500).json({ error: err.message }); }
+    } catch (err) {
+      res.status(500).json({ error: err.message });
+    }
   });
 
   router.get('/modrinth/versions/:projectId', async (req, res) => {
@@ -86,7 +95,9 @@ export default function modrinthRoutes(ctx) {
         loader: 'forge',
       });
       res.json(versions);
-    } catch (err) { res.status(500).json({ error: err.message }); }
+    } catch (err) {
+      res.status(500).json({ error: err.message });
+    }
   });
 
   router.post('/modrinth/download', async (req, res) => {
@@ -96,20 +107,28 @@ export default function modrinthRoutes(ctx) {
 
     if (ctx.config.demoMode) {
       const version = await Modrinth.getVersion(versionId).catch(() => null);
-      const file = version?.files?.find(f => f.primary) || version?.files?.[0];
+      const file = version?.files?.find((f) => f.primary) || version?.files?.[0];
       const name = file?.filename || `${versionId}.jar`;
       if (!isSafeModFilename(name)) return res.status(400).json({ error: 'Invalid filename from Modrinth' });
       const fakeSize = file?.size || 1024 * 1024;
       Demo.DEMO_MODS.push({
-        filename: name, size: fakeSize, enabled: true,
-        modrinthData: { projectTitle: name.replace(/\.jar$/i, ''), clientSide: 'required', serverSide: 'required', versionNumber: 'downloaded', iconUrl: null },
+        filename: name,
+        size: fakeSize,
+        enabled: true,
+        modrinthData: {
+          projectTitle: name.replace(/\.jar$/i, ''),
+          clientSide: 'required',
+          serverSide: 'required',
+          versionNumber: 'downloaded',
+          iconUrl: null,
+        },
       });
       return res.json({ ok: true, filename: name, size: fakeSize, demo: true });
     }
 
     try {
       const version = await Modrinth.getVersion(versionId);
-      const file = version.files.find(f => f.primary) || version.files[0];
+      const file = version.files.find((f) => f.primary) || version.files[0];
       if (!file) throw new Error('No downloadable file found for this version');
       const name = file.filename;
       if (!isSafeModFilename(name)) throw new Error(`Unsafe filename from Modrinth: ${name}`);
@@ -117,7 +136,9 @@ export default function modrinthRoutes(ctx) {
       await SF.saveMod(ctx.config.serverPath, name, buffer, ctx.config.modsFolder);
       audit('MOD_INSTALL', { user: req.session.user.email, filename: name, versionId, ip: req.ip });
       res.json({ ok: true, filename: name, size: buffer.length });
-    } catch (err) { res.status(500).json({ error: err.message }); }
+    } catch (err) {
+      res.status(500).json({ error: err.message });
+    }
   });
 
   return router;

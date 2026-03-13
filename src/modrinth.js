@@ -5,7 +5,7 @@ import crypto from 'crypto';
 const BASE = 'https://api.modrinth.com/v2';
 const HEADERS = {
   'User-Agent': 'minecraft-manager/1.0 (home-server-panel)',
-  'Accept': 'application/json',
+  Accept: 'application/json',
 };
 
 async function modrinthFetch(path, options = {}) {
@@ -29,7 +29,10 @@ async function modrinthFetch(path, options = {}) {
  * @param {number} opts.offset
  * @param {string} opts.index - "relevance" | "downloads" | "follows" | "newest" | "updated"
  */
-export async function searchMods(query, { mcVersion, loader = 'forge', side = 'all', limit = 20, offset = 0, index = 'relevance' } = {}) {
+export async function searchMods(
+  query,
+  { mcVersion, loader = 'forge', side = 'all', limit = 20, offset = 0, index = 'relevance' } = {},
+) {
   const facets = [['project_type:mod']];
 
   if (loader) facets.push([`categories:${loader}`]);
@@ -91,7 +94,7 @@ export async function lookupByHashes(hashes) {
 
   // versions is { [sha1]: versionObject }
   // Fetch project metadata for each unique project_id to get client_side/server_side
-  const projectIds = [...new Set(Object.values(versions).map(v => v.project_id))];
+  const projectIds = [...new Set(Object.values(versions).map((v) => v.project_id))];
   let projects = {};
 
   if (projectIds.length > 0) {
@@ -157,7 +160,7 @@ export async function resolveBestVersion(projectId, { mcVersion, loader = 'forge
     // Prefer release > beta > alpha
     const order = ['release', 'beta', 'alpha'];
     for (const type of order) {
-      const v = versions.find(v => v.version_type === type);
+      const v = versions.find((v) => v.version_type === type);
       if (v) return v;
     }
     return versions[0];
@@ -181,7 +184,7 @@ export async function downloadModFile(downloadUrl, filename, expectedSha1) {
     if (actual !== expectedSha1) {
       throw new Error(
         `Hash mismatch for ${filename}: expected ${expectedSha1}, got ${actual}. ` +
-        'File may be corrupted or tampered with. Download aborted.',
+          'File may be corrupted or tampered with. Download aborted.',
       );
     }
   }

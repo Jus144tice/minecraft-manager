@@ -18,7 +18,10 @@ export default function serverRoutes(ctx) {
       Demo.DEMO_STARTUP_LOGS.forEach((line, i) => {
         setTimeout(() => {
           ctx.broadcast({ type: 'log', time: Date.now(), line });
-          if (i === Demo.DEMO_STARTUP_LOGS.length - 1) { ctx.broadcastStatus(); ctx.startDemoActivityTimer(); }
+          if (i === Demo.DEMO_STARTUP_LOGS.length - 1) {
+            ctx.broadcastStatus();
+            ctx.startDemoActivityTimer();
+          }
         }, i * 120);
       });
       return res.json({ ok: true, message: '[DEMO] Server starting...' });
@@ -37,8 +40,16 @@ export default function serverRoutes(ctx) {
   router.post('/server/stop', async (req, res) => {
     if (ctx.config.demoMode) {
       if (!ctx.demoState.running) return res.status(400).json({ error: 'Demo server is not running' });
-      ctx.broadcast({ type: 'log', time: Date.now(), line: '[Server thread/INFO] [minecraft/MinecraftServer]: Stopping server' });
-      ctx.broadcast({ type: 'log', time: Date.now(), line: '[Server thread/INFO] [minecraft/MinecraftServer]: Saving worlds' });
+      ctx.broadcast({
+        type: 'log',
+        time: Date.now(),
+        line: '[Server thread/INFO] [minecraft/MinecraftServer]: Stopping server',
+      });
+      ctx.broadcast({
+        type: 'log',
+        time: Date.now(),
+        line: '[Server thread/INFO] [minecraft/MinecraftServer]: Saving worlds',
+      });
       ctx.broadcast({ type: 'log', time: Date.now(), line: '[Manager] [DEMO] Server stopped.' });
       ctx.demoState.running = false;
       ctx.demoState.startTime = null;
@@ -48,10 +59,16 @@ export default function serverRoutes(ctx) {
     }
     try {
       ctx.markIntentionalStop();
-      if (ctx.rconConnected) { await ctx.rconCmd('stop'); } else { ctx.mc.stop(); }
+      if (ctx.rconConnected) {
+        await ctx.rconCmd('stop');
+      } else {
+        ctx.mc.stop();
+      }
       audit('SERVER_STOP', { user: req.session.user.email, ip: req.ip });
       res.json({ ok: true, message: 'Stop signal sent' });
-    } catch (err) { res.status(400).json({ error: err.message }); }
+    } catch (err) {
+      res.status(400).json({ error: err.message });
+    }
   });
 
   router.post('/server/kill', async (req, res) => {
@@ -82,7 +99,10 @@ export default function serverRoutes(ctx) {
         Demo.DEMO_STARTUP_LOGS.forEach((line, i) => {
           setTimeout(() => {
             ctx.broadcast({ type: 'log', time: Date.now(), line });
-            if (i === Demo.DEMO_STARTUP_LOGS.length - 1) { ctx.broadcastStatus(); ctx.startDemoActivityTimer(); }
+            if (i === Demo.DEMO_STARTUP_LOGS.length - 1) {
+              ctx.broadcastStatus();
+              ctx.startDemoActivityTimer();
+            }
           }, i * 120);
         });
       }, 1500);
@@ -90,15 +110,21 @@ export default function serverRoutes(ctx) {
     }
     try {
       ctx.markIntentionalStop();
-      const stopped = new Promise(resolve => ctx.mc.once('stopped', resolve));
-      if (ctx.rconConnected) { await ctx.rconCmd('stop'); } else { ctx.mc.stop(); }
-      await Promise.race([stopped, new Promise(r => setTimeout(r, 30000))]);
+      const stopped = new Promise((resolve) => ctx.mc.once('stopped', resolve));
+      if (ctx.rconConnected) {
+        await ctx.rconCmd('stop');
+      } else {
+        ctx.mc.stop();
+      }
+      await Promise.race([stopped, new Promise((r) => setTimeout(r, 30000))]);
       ctx.mc.start(ctx.config.serverPath, ctx.config.startCommand);
       ctx.scheduleRconConnect(15000);
       ctx.broadcastStatus();
       audit('SERVER_RESTART', { user: req.session.user.email, ip: req.ip });
       res.json({ ok: true, message: 'Restarting...' });
-    } catch (err) { res.status(400).json({ error: err.message }); }
+    } catch (err) {
+      res.status(400).json({ error: err.message });
+    }
   });
 
   router.post('/server/command', async (req, res) => {
@@ -114,7 +140,9 @@ export default function serverRoutes(ctx) {
       const result = await ctx.rconCmd(command);
       audit('CONSOLE_CMD', { user: req.session.user.email, command, ip: req.ip });
       res.json({ ok: true, result });
-    } catch (err) { res.status(503).json({ error: err.message }); }
+    } catch (err) {
+      res.status(503).json({ error: err.message });
+    }
   });
 
   router.post('/server/stdin', async (req, res) => {
@@ -125,8 +153,12 @@ export default function serverRoutes(ctx) {
       ctx.broadcast({ type: 'log', time: Date.now(), line: `> ${command}` });
       return res.json({ ok: true });
     }
-    try { ctx.mc.sendConsoleCommand(command); res.json({ ok: true }); }
-    catch (err) { res.status(400).json({ error: err.message }); }
+    try {
+      ctx.mc.sendConsoleCommand(command);
+      res.json({ ok: true });
+    } catch (err) {
+      res.status(400).json({ error: err.message });
+    }
   });
 
   return router;

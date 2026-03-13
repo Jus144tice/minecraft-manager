@@ -38,11 +38,17 @@ export class MinecraftProcess extends EventEmitter {
     this.proc.stderr.setEncoding('utf8');
 
     this.proc.stdout.on('data', (data) => {
-      data.split('\n').filter(l => l.trim()).forEach(l => this._log(l));
+      data
+        .split('\n')
+        .filter((l) => l.trim())
+        .forEach((l) => this._log(l));
     });
 
     this.proc.stderr.on('data', (data) => {
-      data.split('\n').filter(l => l.trim()).forEach(l => this._log('[STDERR] ' + l));
+      data
+        .split('\n')
+        .filter((l) => l.trim())
+        .forEach((l) => this._log('[STDERR] ' + l));
     });
 
     this.proc.on('close', (code) => {

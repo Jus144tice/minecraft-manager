@@ -62,10 +62,24 @@ test('Config redaction: preserves all other fields', () => {
 
 // --- Config POST allowlist ---
 
-const ALLOWED_KEYS = ['serverPath', 'rconHost', 'rconPort', 'rconPassword',
-  'startCommand', 'minecraftVersion', 'modsFolder', 'disabledModsFolder', 'demoMode',
-  'backupPath', 'backupSchedule', 'backupEnabled', 'maxBackups', 'backupTimezone',
-  'bindHost', 'autoStart'];
+const ALLOWED_KEYS = [
+  'serverPath',
+  'rconHost',
+  'rconPort',
+  'rconPassword',
+  'startCommand',
+  'minecraftVersion',
+  'modsFolder',
+  'disabledModsFolder',
+  'demoMode',
+  'backupPath',
+  'backupSchedule',
+  'backupEnabled',
+  'maxBackups',
+  'backupTimezone',
+  'bindHost',
+  'autoStart',
+];
 
 function filterConfigUpdate(body) {
   const updates = {};
@@ -84,9 +98,9 @@ test('Config POST allowlist: accepts known config keys', () => {
 test('Config POST allowlist: rejects unknown/dangerous keys', () => {
   const body = {
     serverPath: '/srv/mc',
-    sessionSecret: 'INJECTED',       // not allowed
-    adminLevel: 99,                   // not allowed
-    __proto__: { polluted: true },    // not allowed
+    sessionSecret: 'INJECTED', // not allowed
+    adminLevel: 99, // not allowed
+    __proto__: { polluted: true }, // not allowed
   };
   const updates = filterConfigUpdate(body);
   assert.equal(updates.serverPath, '/srv/mc');
@@ -111,15 +125,15 @@ test('Config POST allowlist: allows bindHost changes', () => {
 import cron from 'node-cron';
 
 test('Cron validation: accepts standard cron expressions', () => {
-  assert.ok(cron.validate('0 3 * * *'));      // daily at 3 AM
-  assert.ok(cron.validate('*/15 * * * *'));    // every 15 minutes
-  assert.ok(cron.validate('0 0 * * 0'));       // weekly on Sunday
-  assert.ok(cron.validate('30 2 1 * *'));      // monthly on the 1st at 2:30 AM
+  assert.ok(cron.validate('0 3 * * *')); // daily at 3 AM
+  assert.ok(cron.validate('*/15 * * * *')); // every 15 minutes
+  assert.ok(cron.validate('0 0 * * 0')); // weekly on Sunday
+  assert.ok(cron.validate('30 2 1 * *')); // monthly on the 1st at 2:30 AM
 });
 
 test('Cron validation: rejects invalid expressions', () => {
   assert.equal(cron.validate('not a cron'), false);
   assert.equal(cron.validate(''), false);
-  assert.equal(cron.validate('* * *'), false);       // too few fields
-  assert.equal(cron.validate('60 * * * *'), false);   // minute > 59
+  assert.equal(cron.validate('* * *'), false); // too few fields
+  assert.equal(cron.validate('60 * * * *'), false); // minute > 59
 });

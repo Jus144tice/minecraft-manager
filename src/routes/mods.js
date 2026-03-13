@@ -15,7 +15,9 @@ export default function modRoutes(ctx) {
     try {
       const mods = await SF.listMods(ctx.config.serverPath, ctx.config.modsFolder, ctx.config.disabledModsFolder);
       res.json({ mods });
-    } catch (err) { res.status(500).json({ error: err.message }); }
+    } catch (err) {
+      res.status(500).json({ error: err.message });
+    }
   });
 
   router.get('/mods/lookup', async (req, res) => {
@@ -28,14 +30,16 @@ export default function modRoutes(ctx) {
     }
     try {
       const hashMap = await SF.hashMods(ctx.config.serverPath, ctx.config.modsFolder, ctx.config.disabledModsFolder);
-      const hashes = Object.values(hashMap).map(v => v.hash);
+      const hashes = Object.values(hashMap).map((v) => v.hash);
       const modrinthData = await Modrinth.lookupByHashes(hashes);
       const result = {};
       for (const [filename, { hash, enabled }] of Object.entries(hashMap)) {
         result[filename] = { hash, enabled, modrinth: modrinthData[hash] || null };
       }
       res.json(result);
-    } catch (err) { res.status(500).json({ error: err.message }); }
+    } catch (err) {
+      res.status(500).json({ error: err.message });
+    }
   });
 
   router.post('/mods/toggle', async (req, res) => {
@@ -43,7 +47,7 @@ export default function modRoutes(ctx) {
     if (!filename) return res.status(400).json({ error: 'filename required' });
     if (!isSafeModFilename(filename)) return res.status(400).json({ error: 'Invalid filename' });
     if (ctx.config.demoMode) {
-      const mod = Demo.DEMO_MODS.find(m => m.filename === filename);
+      const mod = Demo.DEMO_MODS.find((m) => m.filename === filename);
       if (mod) mod.enabled = enable;
       return res.json({ ok: true });
     }
@@ -51,14 +55,16 @@ export default function modRoutes(ctx) {
       await SF.toggleMod(ctx.config.serverPath, filename, enable, ctx.config.modsFolder, ctx.config.disabledModsFolder);
       audit('MOD_TOGGLE', { user: req.session.user.email, filename, enable, ip: req.ip });
       res.json({ ok: true });
-    } catch (err) { res.status(500).json({ error: err.message }); }
+    } catch (err) {
+      res.status(500).json({ error: err.message });
+    }
   });
 
   router.delete('/mods/:filename', async (req, res) => {
     const { filename } = req.params;
     if (!isSafeModFilename(filename)) return res.status(400).json({ error: 'Invalid filename' });
     if (ctx.config.demoMode) {
-      const i = Demo.DEMO_MODS.findIndex(m => m.filename === filename);
+      const i = Demo.DEMO_MODS.findIndex((m) => m.filename === filename);
       if (i !== -1) Demo.DEMO_MODS.splice(i, 1);
       return res.json({ ok: true });
     }
@@ -66,7 +72,9 @@ export default function modRoutes(ctx) {
       await SF.deleteMod(ctx.config.serverPath, filename, ctx.config.modsFolder, ctx.config.disabledModsFolder);
       audit('MOD_DELETE', { user: req.session.user.email, filename, ip: req.ip });
       res.json({ ok: true });
-    } catch (err) { res.status(500).json({ error: err.message }); }
+    } catch (err) {
+      res.status(500).json({ error: err.message });
+    }
   });
 
   return router;

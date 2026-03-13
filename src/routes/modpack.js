@@ -14,7 +14,11 @@ export default function modpackRoutes(ctx) {
   router.get('/modpack/export', async (req, res) => {
     try {
       const hashMap = ctx.config.demoMode
-        ? (() => { const m = {}; for (const mod of Demo.DEMO_MODS) m[mod.filename] = { hash: 'demo-' + mod.filename, enabled: mod.enabled }; return m; })()
+        ? (() => {
+            const m = {};
+            for (const mod of Demo.DEMO_MODS) m[mod.filename] = { hash: 'demo-' + mod.filename, enabled: mod.enabled };
+            return m;
+          })()
         : await SF.hashMods(ctx.config.serverPath, ctx.config.modsFolder, ctx.config.disabledModsFolder);
 
       let modrinthLookup = {};
@@ -32,7 +36,7 @@ export default function modpackRoutes(ctx) {
           }
         }
       } else {
-        const hashes = Object.values(hashMap).map(v => v.hash);
+        const hashes = Object.values(hashMap).map((v) => v.hash);
         modrinthLookup = await Modrinth.lookupByHashes(hashes);
       }
 
@@ -40,8 +44,14 @@ export default function modpackRoutes(ctx) {
       const skipped = { clientOnly: 0, unidentified: 0 };
       for (const [filename, { hash }] of Object.entries(hashMap)) {
         const mr = modrinthLookup[hash];
-        if (!mr) { skipped.unidentified++; continue; }
-        if (mr.serverSide === 'unsupported') { skipped.clientOnly++; continue; }
+        if (!mr) {
+          skipped.unidentified++;
+          continue;
+        }
+        if (mr.serverSide === 'unsupported') {
+          skipped.clientOnly++;
+          continue;
+        }
         mods.push({
           projectId: mr.projectId,
           projectSlug: mr.projectSlug || null,
@@ -65,7 +75,9 @@ export default function modpackRoutes(ctx) {
 
       audit('MODPACK_EXPORT', { user: req.session.user.email, modCount: mods.length, skipped, ip: req.ip });
       res.json({ modpack, skipped });
-    } catch (err) { res.status(500).json({ error: err.message }); }
+    } catch (err) {
+      res.status(500).json({ error: err.message });
+    }
   });
 
   router.post('/modpack/analyze', async (req, res) => {
@@ -88,7 +100,7 @@ export default function modpackRoutes(ctx) {
         }
       } else {
         const hashMap = await SF.hashMods(ctx.config.serverPath, ctx.config.modsFolder, ctx.config.disabledModsFolder);
-        const hashes = Object.values(hashMap).map(v => v.hash);
+        const hashes = Object.values(hashMap).map((v) => v.hash);
         const modrinthLookup = await Modrinth.lookupByHashes(hashes);
         for (const [filename, { hash }] of Object.entries(hashMap)) {
           const mr = modrinthLookup[hash];
@@ -117,7 +129,11 @@ export default function modpackRoutes(ctx) {
         const installed = installedByProject[mod.projectId];
         if (installed) {
           if (installed.versionId === mod.versionId) {
-            results.skip.push({ ...mod, reason: 'Same version already installed', installedVersion: installed.versionNumber });
+            results.skip.push({
+              ...mod,
+              reason: 'Same version already installed',
+              installedVersion: installed.versionNumber,
+            });
           } else {
             results.conflict.push({
               ...mod,
@@ -133,7 +149,9 @@ export default function modpackRoutes(ctx) {
       }
 
       res.json(results);
-    } catch (err) { res.status(500).json({ error: err.message }); }
+    } catch (err) {
+      res.status(500).json({ error: err.message });
+    }
   });
 
   router.post('/modpack/import', async (req, res) => {
@@ -153,11 +171,20 @@ export default function modpackRoutes(ctx) {
       try {
         if (ctx.config.demoMode) {
           const version = await Modrinth.getVersion(mod.versionId).catch(() => null);
-          const file = version?.files?.find(f => f.primary) || version?.files?.[0];
+          const file = version?.files?.find((f) => f.primary) || version?.files?.[0];
           const name = file?.filename || `${mod.versionId}.jar`;
           Demo.DEMO_MODS.push({
-            filename: name, size: file?.size || 1024 * 1024, enabled: true,
-            modrinthData: { projectId: mod.projectId, projectTitle: mod.projectTitle, clientSide: mod.clientSide || 'required', serverSide: mod.serverSide || 'required', versionNumber: mod.versionNumber || 'imported', iconUrl: null },
+            filename: name,
+            size: file?.size || 1024 * 1024,
+            enabled: true,
+            modrinthData: {
+              projectId: mod.projectId,
+              projectTitle: mod.projectTitle,
+              clientSide: mod.clientSide || 'required',
+              serverSide: mod.serverSide || 'required',
+              versionNumber: mod.versionNumber || 'imported',
+              iconUrl: null,
+            },
           });
           report.installed.push({ title: mod.projectTitle, filename: name, versionNumber: mod.versionNumber });
           continue;
@@ -165,24 +192,47 @@ export default function modpackRoutes(ctx) {
 
         if (mod.replaceFilename) {
           try {
-            await SF.deleteMod(ctx.config.serverPath, mod.replaceFilename, ctx.config.modsFolder, ctx.config.disabledModsFolder);
-          } catch { /* old file may already be gone */ }
+            await SF.deleteMod(
+              ctx.config.serverPath,
+              mod.replaceFilename,
+              ctx.config.modsFolder,
+              ctx.config.disabledModsFolder,
+            );
+          } catch {
+            /* old file may already be gone */
+          }
         }
 
         const version = await Modrinth.getVersion(mod.versionId);
-        const file = version.files.find(f => f.primary) || version.files[0];
-        if (!file) { report.failed.push({ title: mod.projectTitle, error: 'No downloadable file' }); continue; }
-        if (!isSafeModFilename(file.filename)) { report.failed.push({ title: mod.projectTitle, error: 'Unsafe filename' }); continue; }
+        const file = version.files.find((f) => f.primary) || version.files[0];
+        if (!file) {
+          report.failed.push({ title: mod.projectTitle, error: 'No downloadable file' });
+          continue;
+        }
+        if (!isSafeModFilename(file.filename)) {
+          report.failed.push({ title: mod.projectTitle, error: 'Unsafe filename' });
+          continue;
+        }
 
         const { buffer } = await Modrinth.downloadModFile(file.url, file.filename, file.hashes?.sha1);
         await SF.saveMod(ctx.config.serverPath, file.filename, buffer, ctx.config.modsFolder);
-        report.installed.push({ title: mod.projectTitle, filename: file.filename, versionNumber: mod.versionNumber, size: buffer.length });
+        report.installed.push({
+          title: mod.projectTitle,
+          filename: file.filename,
+          versionNumber: mod.versionNumber,
+          size: buffer.length,
+        });
       } catch (err) {
         report.failed.push({ title: mod.projectTitle || mod.versionId, error: err.message });
       }
     }
 
-    audit('MODPACK_IMPORT', { user: req.session.user.email, installed: report.installed.length, failed: report.failed.length, ip: req.ip });
+    audit('MODPACK_IMPORT', {
+      user: req.session.user.email,
+      installed: report.installed.length,
+      failed: report.failed.length,
+      ip: req.ip,
+    });
     res.json(report);
   });
 

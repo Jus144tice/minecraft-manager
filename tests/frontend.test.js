@@ -1,7 +1,7 @@
 // Frontend DOM tests using jsdom.
 // Tests the SPA's UI behavior: tab switching, login UI, utility functions,
 // responsive classes, and delegated action handlers.
-import { test, before } from 'node:test';
+import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'fs';
 import path from 'path';
@@ -11,12 +11,8 @@ import { JSDOM } from 'jsdom';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const htmlPath = path.join(__dirname, '..', 'public', 'index.html');
 const cssPath = path.join(__dirname, '..', 'public', 'styles.css');
-const jsPath = path.join(__dirname, '..', 'public', 'app.js');
-
 const htmlSource = fs.readFileSync(htmlPath, 'utf8');
 const cssSource = fs.readFileSync(cssPath, 'utf8');
-const jsSource = fs.readFileSync(jsPath, 'utf8');
-
 // --- Helper: create a fresh DOM with the app's HTML ---
 function createDOM() {
   const dom = new JSDOM(htmlSource, {
@@ -108,8 +104,8 @@ test('Tab: clicking a tab button shows the correct content', () => {
 
   // Simulate tab switch logic (mirrors app.js tab click handler)
   function switchTab(tabName) {
-    doc.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
-    doc.querySelectorAll('.tab-content').forEach(t => {
+    doc.querySelectorAll('.tab-btn').forEach((b) => b.classList.remove('active'));
+    doc.querySelectorAll('.tab-content').forEach((t) => {
       t.classList.add('hidden');
       t.classList.remove('active');
     });
@@ -313,16 +309,22 @@ test('HTML: all data-action elements reference valid actions', () => {
   const doc = dom.window.document;
   // Known actions from app.js delegated handler
   const knownActions = new Set([
-    'mod-detail', 'toggle-mod', 'delete-mod', 'install-mod', 'download-mod',
-    'remove-op', 'remove-wl', 'unban-player', 'restore-backup', 'delete-backup',
-    'server-cmd', 'server-cmd-prompt',
+    'mod-detail',
+    'toggle-mod',
+    'delete-mod',
+    'install-mod',
+    'download-mod',
+    'remove-op',
+    'remove-wl',
+    'unban-player',
+    'restore-backup',
+    'delete-backup',
+    'server-cmd',
+    'server-cmd-prompt',
   ]);
   const actionEls = doc.querySelectorAll('[data-action]');
   for (const el of actionEls) {
-    assert.ok(
-      knownActions.has(el.dataset.action),
-      `data-action="${el.dataset.action}" is not in known actions list`,
-    );
+    assert.ok(knownActions.has(el.dataset.action), `data-action="${el.dataset.action}" is not in known actions list`);
   }
   dom.window.close();
 });

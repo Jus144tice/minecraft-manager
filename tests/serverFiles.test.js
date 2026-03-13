@@ -5,9 +5,18 @@ import fs from 'fs/promises';
 import path from 'path';
 import os from 'os';
 import {
-  listMods, toggleMod, deleteMod, saveMod, hashFile, hashMods,
-  getOps, setOps, getWhitelist, setWhitelist,
-  getServerProperties, setServerProperties,
+  listMods,
+  toggleMod,
+  deleteMod,
+  saveMod,
+  hashFile,
+  hashMods,
+  getOps,
+  setOps,
+  getWhitelist,
+  setWhitelist,
+  getServerProperties,
+  setServerProperties,
 } from '../src/serverFiles.js';
 
 // --- Temp directory helpers ---
@@ -170,10 +179,7 @@ test('deleteMod: deletes from disabled folder', async () => {
 test('deleteMod: throws when mod does not exist', async () => {
   const dir = await makeTempServer();
   try {
-    await assert.rejects(
-      () => deleteMod(dir, 'nonexistent.jar'),
-      { message: /not found/i },
-    );
+    await assert.rejects(() => deleteMod(dir, 'nonexistent.jar'), { message: /not found/i });
   } finally {
     await cleanup(dir);
   }
@@ -292,8 +298,10 @@ test('getWhitelist/setWhitelist: round-trips whitelist data', async () => {
 test('getServerProperties: parses key=value pairs', async () => {
   const dir = await makeTempServer();
   try {
-    await fs.writeFile(path.join(dir, 'server.properties'),
-      '# Minecraft server properties\nserver-port=25565\nmotd=A Minecraft Server\ndifficulty=hard\n');
+    await fs.writeFile(
+      path.join(dir, 'server.properties'),
+      '# Minecraft server properties\nserver-port=25565\nmotd=A Minecraft Server\ndifficulty=hard\n',
+    );
     const props = await getServerProperties(dir);
     assert.equal(props['server-port'], '25565');
     assert.equal(props['motd'], 'A Minecraft Server');
@@ -306,8 +314,7 @@ test('getServerProperties: parses key=value pairs', async () => {
 test('getServerProperties: skips comments and blank lines', async () => {
   const dir = await makeTempServer();
   try {
-    await fs.writeFile(path.join(dir, 'server.properties'),
-      '# comment\n\nkey=value\n# another comment\n');
+    await fs.writeFile(path.join(dir, 'server.properties'), '# comment\n\nkey=value\n# another comment\n');
     const props = await getServerProperties(dir);
     assert.deepEqual(Object.keys(props), ['key']);
   } finally {
@@ -328,14 +335,13 @@ test('getServerProperties: returns empty object when file is missing', async () 
 test('setServerProperties: updates existing keys and adds new ones', async () => {
   const dir = await makeTempServer();
   try {
-    await fs.writeFile(path.join(dir, 'server.properties'),
-      '# header\nserver-port=25565\nmotd=Old MOTD\n');
+    await fs.writeFile(path.join(dir, 'server.properties'), '# header\nserver-port=25565\nmotd=Old MOTD\n');
 
     await setServerProperties(dir, { motd: 'New MOTD', 'max-players': '20' });
     const props = await getServerProperties(dir);
-    assert.equal(props['server-port'], '25565');  // unchanged
-    assert.equal(props['motd'], 'New MOTD');       // updated
-    assert.equal(props['max-players'], '20');       // added
+    assert.equal(props['server-port'], '25565'); // unchanged
+    assert.equal(props['motd'], 'New MOTD'); // updated
+    assert.equal(props['max-players'], '20'); // added
   } finally {
     await cleanup(dir);
   }
@@ -344,8 +350,7 @@ test('setServerProperties: updates existing keys and adds new ones', async () =>
 test('setServerProperties: preserves comments', async () => {
   const dir = await makeTempServer();
   try {
-    await fs.writeFile(path.join(dir, 'server.properties'),
-      '# My server\nkey=old\n');
+    await fs.writeFile(path.join(dir, 'server.properties'), '# My server\nkey=old\n');
     await setServerProperties(dir, { key: 'new' });
     const raw = await fs.readFile(path.join(dir, 'server.properties'), 'utf8');
     assert.ok(raw.includes('# My server'));
@@ -368,8 +373,7 @@ test('setServerProperties: creates file if missing', async () => {
 test('getServerProperties: handles value with equals sign', async () => {
   const dir = await makeTempServer();
   try {
-    await fs.writeFile(path.join(dir, 'server.properties'),
-      'motd=Hello = World\n');
+    await fs.writeFile(path.join(dir, 'server.properties'), 'motd=Hello = World\n');
     const props = await getServerProperties(dir);
     assert.equal(props['motd'], 'Hello = World');
   } finally {

@@ -21,7 +21,7 @@ import connectPgSimple from 'connect-pg-simple';
 import { Issuer, generators } from 'openid-client';
 import crypto from 'crypto';
 import { audit } from './audit.js';
-import { getPool, upsertUser, getUser, countAdmins, setAdminLevel } from './db.js';
+import { getPool, upsertUser, countAdmins, setAdminLevel } from './db.js';
 
 const SESSION_MAX_AGE = 24 * 60 * 60 * 1000; // 24 hours
 
@@ -30,7 +30,12 @@ const SESSION_MAX_AGE = 24 * 60 * 60 * 1000; // 24 hours
 function parseAllowlist() {
   const raw = process.env.ALLOWED_EMAILS || '';
   if (!raw.trim()) return null; // null = no allowlist; all successfully authenticated users allowed
-  return new Set(raw.split(',').map(e => e.trim().toLowerCase()).filter(Boolean));
+  return new Set(
+    raw
+      .split(',')
+      .map((e) => e.trim().toLowerCase())
+      .filter(Boolean),
+  );
 }
 
 function isEmailAllowed(email, allowlist) {
@@ -47,8 +52,8 @@ export function buildSessionMiddleware(config) {
     if (!config.demoMode) {
       console.error(
         'FATAL: SESSION_SECRET environment variable is required in production mode.\n' +
-        'Generate one with: node -e "console.log(require(\'crypto\').randomBytes(48).toString(\'hex\'))"\n' +
-        'Then add SESSION_SECRET=<value> to your .env or systemd service file.',
+          "Generate one with: node -e \"console.log(require('crypto').randomBytes(48).toString('hex'))\"\n" +
+          'Then add SESSION_SECRET=<value> to your .env or systemd service file.',
       );
       process.exit(1);
     }
@@ -56,19 +61,19 @@ export function buildSessionMiddleware(config) {
     secret = crypto.randomBytes(48).toString('hex');
     console.warn(
       '[Auth] SESSION_SECRET not set — using a temporary secret. ' +
-      'Sessions will not survive restarts. Set SESSION_SECRET in .env for persistence.',
+        'Sessions will not survive restarts. Set SESSION_SECRET in .env for persistence.',
     );
   }
 
   const sessionOpts = {
     secret,
-    name: 'mcm.sid',           // custom name avoids fingerprinting as express-session
+    name: 'mcm.sid', // custom name avoids fingerprinting as express-session
     resave: false,
     saveUninitialized: false,
     cookie: {
       httpOnly: true,
-      secure: process.env.TRUST_PROXY === '1',  // true = only sent over HTTPS
-      sameSite: 'lax',          // lax (not strict) allows OIDC redirect-back to include cookie
+      secure: process.env.TRUST_PROXY === '1', // true = only sent over HTTPS
+      sameSite: 'lax', // lax (not strict) allows OIDC redirect-back to include cookie
       maxAge: SESSION_MAX_AGE,
     },
   };
@@ -124,9 +129,7 @@ export async function buildAuthRouter(config) {
     } else {
       try {
         const tenant = process.env.MICROSOFT_TENANT || 'common';
-        const issuer = await Issuer.discover(
-          `https://login.microsoftonline.com/${tenant}/v2.0`,
-        );
+        const issuer = await Issuer.discover(`https://login.microsoftonline.com/${tenant}/v2.0`);
         oidcClients.microsoft = new issuer.Client({
           client_id: process.env.MICROSOFT_CLIENT_ID,
           client_secret: process.env.MICROSOFT_CLIENT_SECRET,
@@ -149,17 +152,17 @@ export async function buildAuthRouter(config) {
   if (config.webPassword) {
     console.warn(
       '[Auth] WARNING: config.json contains "webPassword" which is no longer used. ' +
-      'If you need local password auth, set LOCAL_PASSWORD=<password> as an environment variable. ' +
-      'Remove "webPassword" from config.json.',
+        'If you need local password auth, set LOCAL_PASSWORD=<password> as an environment variable. ' +
+        'Remove "webPassword" from config.json.',
     );
   }
 
   if (!isDemo && !hasOidc && !hasLocalPassword) {
     console.error(
       'FATAL: No authentication method configured.\n' +
-      'Set GOOGLE_CLIENT_ID/MICROSOFT_CLIENT_ID with their secrets,\n' +
-      'or set LOCAL_PASSWORD,\n' +
-      'or enable demoMode in config.json.',
+        'Set GOOGLE_CLIENT_ID/MICROSOFT_CLIENT_ID with their secrets,\n' +
+        'or set LOCAL_PASSWORD,\n' +
+        'or enable demoMode in config.json.',
     );
     process.exit(1);
   }
@@ -236,41 +239,41 @@ export async function buildAuthRouter(config) {
 
       const oidc = req.session.oidc;
       if (!oidc || oidc.provider !== providerKey) {
-        return res.status(400).send(
-          'Invalid or expired login session. Please return to the login page and try again.',
-        );
+        return res.status(400).send('Invalid or expired login session. Please return to the login page and try again.');
       }
 
       try {
         const params = client.callbackParams(req);
-        const tokenSet = await client.callback(
-          `${appUrl}/auth/callback/${providerKey}`,
-          params,
-          { code_verifier: oidc.codeVerifier, state: oidc.state },
-        );
+        const tokenSet = await client.callback(`${appUrl}/auth/callback/${providerKey}`, params, {
+          code_verifier: oidc.codeVerifier,
+          state: oidc.state,
+        });
         const claims = tokenSet.claims();
         // Microsoft may put the email in preferred_username for some account types
         const email = claims.email || claims.preferred_username;
 
         if (!email) {
           audit('LOGIN_DENIED', { provider: providerKey, reason: 'no_email_claim', ip: req.ip });
-          return res.status(403).send(
-            'No email address in token. Ensure your account has a verified email.',
-          );
+          return res.status(403).send('No email address in token. Ensure your account has a verified email.');
         }
 
         if (!isEmailAllowed(email, allowlist)) {
           audit('LOGIN_DENIED', { email, provider: providerKey, reason: 'not_in_allowlist', ip: req.ip });
-          return res.status(403).send(
-            `Access denied: ${email} is not in the allowed email list. Contact the server administrator.`,
-          );
+          return res
+            .status(403)
+            .send(`Access denied: ${email} is not in the allowed email list. Contact the server administrator.`);
         }
 
         delete req.session.oidc;
-        loginUser(req, { email, name: claims.name || email, provider: providerKey }, (err) => {
-          if (err) return res.status(500).send('Session error during login. Please try again.');
-          res.redirect('/');
-        }, { autoPromote: true });
+        loginUser(
+          req,
+          { email, name: claims.name || email, provider: providerKey },
+          (err) => {
+            if (err) return res.status(500).send('Session error during login. Please try again.');
+            res.redirect('/');
+          },
+          { autoPromote: true },
+        );
       } catch (err) {
         audit('LOGIN_ERROR', { provider: providerKey, error: err.message, ip: req.ip });
         res.status(500).send(`Authentication failed: ${err.message}`);
@@ -289,10 +292,15 @@ export async function buildAuthRouter(config) {
     // Demo mode with no other auth configured: accept any non-empty password
     if (isDemo && !hasOidc && !hasLocalPassword) {
       if (!password) return res.status(401).json({ error: 'Enter any password to enter demo mode.' });
-      loginUser(req, { email: 'demo@local', name: 'Demo User', provider: 'local' }, (err) => {
-        if (err) return res.status(500).json({ error: 'Session error.' });
-        res.json({ ok: true });
-      }, { forceAdmin: true });
+      loginUser(
+        req,
+        { email: 'demo@local', name: 'Demo User', provider: 'local' },
+        (err) => {
+          if (err) return res.status(500).json({ error: 'Session error.' });
+          res.json({ ok: true });
+        },
+        { forceAdmin: true },
+      );
       return;
     }
 
@@ -306,10 +314,15 @@ export async function buildAuthRouter(config) {
       return res.status(401).json({ error: 'Incorrect password.' });
     }
 
-    loginUser(req, { email: 'admin@local', name: 'Admin', provider: 'local' }, (err) => {
-      if (err) return res.status(500).json({ error: 'Session error.' });
-      res.json({ ok: true });
-    }, { forceAdmin: true });
+    loginUser(
+      req,
+      { email: 'admin@local', name: 'Admin', provider: 'local' },
+      (err) => {
+        if (err) return res.status(500).json({ error: 'Session error.' });
+        res.json({ ok: true });
+      },
+      { forceAdmin: true },
+    );
   });
 
   // --- Logout ---

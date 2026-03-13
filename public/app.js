@@ -1,3 +1,4 @@
+/* global openModDetail, toggleMod, deleteMod, openVersionModal, downloadMod, removeOp, removeWl, unbanPlayer */
 // Minecraft Manager - Frontend Application
 'use strict';
 
@@ -5,37 +6,66 @@
 // Replaces broken <img class="mod-icon"> with a placeholder div.
 // Using a delegated listener (capture phase) instead of inline onerror= because
 // CSP 'unsafe-inline' may not cover event handlers injected via innerHTML in all browsers.
-document.addEventListener('error', (e) => {
-  const el = e.target;
-  if (el.tagName === 'IMG' && el.classList.contains('mod-icon')) {
-    const placeholder = document.createElement('div');
-    placeholder.className = 'mod-icon-placeholder';
-    el.replaceWith(placeholder);
-  }
-}, true); // capture=true so it fires even if the element has no bubbling listener
+document.addEventListener(
+  'error',
+  (e) => {
+    const el = e.target;
+    if (el.tagName === 'IMG' && el.classList.contains('mod-icon')) {
+      const placeholder = document.createElement('div');
+      placeholder.className = 'mod-icon-placeholder';
+      el.replaceWith(placeholder);
+    }
+  },
+  true,
+); // capture=true so it fires even if the element has no bubbling listener
 
 // --- Delegated action handler ---
 // Replaces all inline onclick= handlers in dynamic HTML (blocked by CSP script-src-attr 'none').
 // Add data-action="..." to any element; its data-* attributes serve as arguments.
-document.addEventListener('click', async e => {
+document.addEventListener('click', async (e) => {
   const el = e.target.closest('[data-action]');
   if (!el) return;
   switch (el.dataset.action) {
     case 'mod-detail':
-      openModDetail(el.dataset.id, el.dataset.source,
-        { filename: el.dataset.filename || undefined, author: el.dataset.author || '' });
+      openModDetail(el.dataset.id, el.dataset.source, {
+        filename: el.dataset.filename || undefined,
+        author: el.dataset.author || '',
+      });
       break;
-    case 'toggle-mod':   await toggleMod(el); break;
-    case 'delete-mod':   await deleteMod(el); if (el.dataset.closeDetail) closeModDetail(); break;
-    case 'install-mod':  openVersionModal(el); break;
-    case 'download-mod': downloadMod(el); break;
-    case 'remove-op':    removeOp(el); break;
-    case 'remove-wl':    removeWl(el); break;
-    case 'unban-player': unbanPlayer(el); break;
-    case 'restore-backup': openRestoreModal(el.dataset.filename); break;
-    case 'delete-backup':  await deleteBackup(el.dataset.filename); break;
-    case 'server-cmd':       await runServerAction(el); break;
-    case 'server-cmd-prompt': await runServerActionPrompt(el); break;
+    case 'toggle-mod':
+      await toggleMod(el);
+      break;
+    case 'delete-mod':
+      await deleteMod(el);
+      if (el.dataset.closeDetail) closeModDetail();
+      break;
+    case 'install-mod':
+      openVersionModal(el);
+      break;
+    case 'download-mod':
+      downloadMod(el);
+      break;
+    case 'remove-op':
+      removeOp(el);
+      break;
+    case 'remove-wl':
+      removeWl(el);
+      break;
+    case 'unban-player':
+      unbanPlayer(el);
+      break;
+    case 'restore-backup':
+      openRestoreModal(el.dataset.filename);
+      break;
+    case 'delete-backup':
+      await deleteBackup(el.dataset.filename);
+      break;
+    case 'server-cmd':
+      await runServerAction(el);
+      break;
+    case 'server-cmd-prompt':
+      await runServerActionPrompt(el);
+      break;
   }
 });
 
@@ -46,8 +76,8 @@ let currentModData = {}; // filename -> modrinth data from lookup
 let browseOffset = 0;
 let browseTotal = 0;
 const BROWSE_FETCH_LIMIT = 20; // items fetched per API call
-const BROWSE_PAGE_SIZE = 10;   // items shown per display page
-let browsePage = 0;            // current client display page (0-indexed) within lastBrowseHits
+const BROWSE_PAGE_SIZE = 10; // items shown per display page
+let browsePage = 0; // current client display page (0-indexed) within lastBrowseHits
 let lastBrowseHits = []; // cached so the "show installed" toggle re-renders without a new fetch
 const browseVersionCache = new Map(); // versionId -> { versionNumber, fileSize }
 let modDetailState = null; // { source: 'installed'|'browse', filename?, author? }
@@ -63,18 +93,28 @@ let statusInterval = null; // guard against duplicate setInterval on re-login
 function createPagination({ prevId, nextId, infoId, containerId }) {
   return {
     update(page, totalPages, totalCount, label = 'items') {
-      if (totalPages < 1) { hide(containerId); return; }
+      if (totalPages < 1) {
+        hide(containerId);
+        return;
+      }
       show(containerId);
       $(infoId).textContent = `Page ${page} of ${totalPages} (${totalCount.toLocaleString()} ${label})`;
       $(prevId).disabled = page <= 1;
       $(nextId).disabled = page >= totalPages;
     },
-    hide() { hide(containerId); },
+    hide() {
+      hide(containerId);
+    },
   };
 }
 
 // Both subtabs share one pagination bar — only one subtab is ever visible at a time.
-const modsPager  = createPagination({ prevId: 'tab-page-prev', nextId: 'tab-page-next', infoId: 'tab-page-info', containerId: 'mods-tab-pagination' });
+const modsPager = createPagination({
+  prevId: 'tab-page-prev',
+  nextId: 'tab-page-next',
+  infoId: 'tab-page-info',
+  containerId: 'mods-tab-pagination',
+});
 const browsePager = modsPager; // same object; alias makes call-sites self-documenting
 let csrfToken = ''; // fetched after login; sent as X-CSRF-Token on all mutating requests
 
@@ -99,23 +139,35 @@ async function api(method, path, body) {
 }
 const GET = (path) => api('GET', path);
 const POST = (path, body) => api('POST', path, body);
+// eslint-disable-next-line no-unused-vars -- reserved for future routes
 const PUT = (path, body) => api('PUT', path, body);
 const DEL = (path) => api('DELETE', path);
 
 // --- Utilities ---
-function $(id) { return document.getElementById(id); }
-function show(el) { (typeof el === 'string' ? $(el) : el).classList.remove('hidden'); }
-function hide(el) { (typeof el === 'string' ? $(el) : el).classList.add('hidden'); }
+function $(id) {
+  return document.getElementById(id);
+}
+function show(el) {
+  (typeof el === 'string' ? $(el) : el).classList.remove('hidden');
+}
+function hide(el) {
+  (typeof el === 'string' ? $(el) : el).classList.add('hidden');
+}
 function flash(id, msg, isError = false) {
   const el = $(id);
   if (!el) return;
   el.textContent = msg;
   el.className = isError ? 'control-msg error-msg' : 'control-msg ok-msg';
-  setTimeout(() => { el.textContent = ''; el.className = 'control-msg'; }, 4000);
+  setTimeout(() => {
+    el.textContent = '';
+    el.className = 'control-msg';
+  }, 4000);
 }
 function formatUptime(secs) {
   if (!secs) return '-';
-  const h = Math.floor(secs / 3600), m = Math.floor((secs % 3600) / 60), s = secs % 60;
+  const h = Math.floor(secs / 3600),
+    m = Math.floor((secs % 3600) / 60),
+    s = secs % 60;
   return h > 0 ? `${h}h ${m}m` : m > 0 ? `${m}m ${s}s` : `${s}s`;
 }
 function formatSize(bytes) {
@@ -125,14 +177,15 @@ function formatSize(bytes) {
   return `${(bytes / 1073741824).toFixed(1)} GB`;
 }
 function sideLabel(clientSide, serverSide) {
-  const c = clientSide, s = serverSide;
+  const c = clientSide,
+    s = serverSide;
   if (c === 'unsupported' && s !== 'unsupported') return { text: 'Server-only', cls: 'side-server' };
   if (s === 'unsupported' && c !== 'unsupported') return { text: 'Client-only', cls: 'side-client' };
   if (c !== 'unsupported' && s !== 'unsupported') return { text: 'Both', cls: 'side-both' };
   return { text: 'Unknown', cls: 'side-unknown' };
 }
 function esc(str) {
-  return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  return String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 }
 
 // --- Login screen setup ---
@@ -158,11 +211,14 @@ function setupLoginUI(providers) {
 }
 
 function showLoginScreen() {
-  if (ws) { ws.close(); ws = null; }
+  if (ws) {
+    ws.close();
+    ws = null;
+  }
   hide('app');
   // Load providers fresh so login buttons are correct
   fetch('/api/auth/providers')
-    .then(r => r.json())
+    .then((r) => r.json())
     .then(setupLoginUI)
     .catch(() => {});
   show('login-screen');
@@ -170,7 +226,9 @@ function showLoginScreen() {
 
 // --- Local password login ---
 $('login-btn').addEventListener('click', login);
-$('login-password').addEventListener('keydown', e => { if (e.key === 'Enter') login(); });
+$('login-password').addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') login();
+});
 
 async function login() {
   const pw = $('login-password').value;
@@ -181,7 +239,7 @@ async function login() {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ password: pw }),
-    }).then(async res => {
+    }).then(async (res) => {
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data.error || 'Login failed');
     });
@@ -196,7 +254,10 @@ async function login() {
 
 // --- Logout ---
 $('logout-btn').addEventListener('click', async () => {
-  if (ws) { ws.close(); ws = null; }
+  if (ws) {
+    ws.close();
+    ws = null;
+  }
   await fetch('/auth/logout', { method: 'POST' }).catch(() => {});
   window.location.reload(); // cleanest way to reset all state and re-check session
 });
@@ -204,17 +265,21 @@ $('logout-btn').addEventListener('click', async () => {
 // --- Startup: check existing session ---
 (async () => {
   try {
-    const session = await fetch('/api/session').then(r => r.json());
+    const session = await fetch('/api/session').then((r) => r.json());
     if (session.loggedIn) {
       hide('login-screen');
       show('app');
       initApp();
       return;
     }
-  } catch { /* network error — fall through to login */ }
+  } catch {
+    /* network error — fall through to login */
+  }
 
   // Not logged in — configure login UI based on available providers
-  const providers = await fetch('/api/auth/providers').then(r => r.json()).catch(() => ({}));
+  const providers = await fetch('/api/auth/providers')
+    .then((r) => r.json())
+    .catch(() => ({}));
   setupLoginUI(providers);
   show('login-screen');
 })();
@@ -223,10 +288,10 @@ $('logout-btn').addEventListener('click', async () => {
 $('demo-banner-close').addEventListener('click', () => hide('demo-banner'));
 
 // --- Tab navigation ---
-document.querySelectorAll('.tab-btn').forEach(btn => {
+document.querySelectorAll('.tab-btn').forEach((btn) => {
   btn.addEventListener('click', () => {
-    document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
-    document.querySelectorAll('.tab-content').forEach(t => t.classList.add('hidden'));
+    document.querySelectorAll('.tab-btn').forEach((b) => b.classList.remove('active'));
+    document.querySelectorAll('.tab-content').forEach((t) => t.classList.add('hidden'));
     btn.classList.add('active');
     const tab = $('tab-' + btn.dataset.tab);
     if (tab) tab.classList.remove('hidden');
@@ -234,11 +299,11 @@ document.querySelectorAll('.tab-btn').forEach(btn => {
   });
 });
 
-document.querySelectorAll('.subtab-btn').forEach(btn => {
+document.querySelectorAll('.subtab-btn').forEach((btn) => {
   btn.addEventListener('click', () => {
     const parent = btn.closest('.tab-content');
-    parent.querySelectorAll('.subtab-btn').forEach(b => b.classList.remove('active'));
-    parent.querySelectorAll('.subtab-content').forEach(t => t.classList.add('hidden'));
+    parent.querySelectorAll('.subtab-btn').forEach((b) => b.classList.remove('active'));
+    parent.querySelectorAll('.subtab-content').forEach((t) => t.classList.add('hidden'));
     btn.classList.add('active');
     const el = parent.querySelector(`#subtab-${btn.dataset.subtab}`);
     if (el) el.classList.remove('hidden');
@@ -248,9 +313,19 @@ document.querySelectorAll('.subtab-btn').forEach(btn => {
 
 function onTabActivate(tab) {
   if (tab === 'mods') loadMods();
-  if (tab === 'players') { loadOps(); loadWhitelist(); loadBans(); }
-  if (tab === 'backups') { loadBackups(); loadBackupSchedule(); }
-  if (tab === 'settings') { loadAppConfig(); loadServerProps(); }
+  if (tab === 'players') {
+    loadOps();
+    loadWhitelist();
+    loadBans();
+  }
+  if (tab === 'backups') {
+    loadBackups();
+    loadBackupSchedule();
+  }
+  if (tab === 'settings') {
+    loadAppConfig();
+    loadServerProps();
+  }
 }
 
 let activeModsSubtab = 'installed';
@@ -261,8 +336,14 @@ function onSubtabActivate(subtab) {
   if (subtab === 'bans') loadBans();
   if (subtab === 'server-props') loadServerProps();
   if (subtab === 'app-cfg') loadAppConfig();
-  if (subtab === 'installed') { activeModsSubtab = 'installed'; renderMods(); }
-  if (subtab === 'browse')    { activeModsSubtab = 'browse';    browseLoad(); }
+  if (subtab === 'installed') {
+    activeModsSubtab = 'installed';
+    renderMods();
+  }
+  if (subtab === 'browse') {
+    activeModsSubtab = 'browse';
+    browseLoad();
+  }
 }
 
 // --- App init ---
@@ -271,7 +352,9 @@ async function initApp() {
   try {
     const { token } = await GET('/csrf-token');
     csrfToken = token;
-  } catch { /* non-fatal — CSRF check will reject mutating requests until resolved */ }
+  } catch {
+    /* non-fatal — CSRF check will reject mutating requests until resolved */
+  }
 
   connectWs();
   loadStatus(); // initial load; WebSocket takes over for live updates
@@ -288,7 +371,9 @@ async function initApp() {
     } else {
       window._demoMode = false;
     }
-  } catch { /* ignore */ }
+  } catch {
+    /* ignore */
+  }
 }
 
 // --- WebSocket (live console) ---
@@ -298,7 +383,10 @@ function connectWs() {
   const protocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
   ws = new WebSocket(`${protocol}//${location.host}/ws`);
 
-  ws.onopen = () => { clearTimeout(wsReconnectTimer); appendConsole('[Manager] Connected to server', 'info'); };
+  ws.onopen = () => {
+    clearTimeout(wsReconnectTimer);
+    appendConsole('[Manager] Connected to server', 'info');
+  };
 
   ws.onmessage = (ev) => {
     try {
@@ -306,17 +394,24 @@ function connectWs() {
       if (msg.type === 'log') appendConsole(msg.line);
       if (msg.type === 'status') updateDashboard(msg);
       if (msg.type === 'crash') showCrashAlert(msg);
-    } catch { /* ignore */ }
+    } catch {
+      /* ignore */
+    }
   };
 
   ws.onclose = (ev) => {
     ws = null;
     // Code 4001 = unauthorized (session expired) — don't reconnect
-    if (ev.code === 4001) { showLoginScreen(); return; }
+    if (ev.code === 4001) {
+      showLoginScreen();
+      return;
+    }
     wsReconnectTimer = setTimeout(connectWs, 5000);
   };
 
-  ws.onerror = () => { ws.close(); };
+  ws.onerror = () => {
+    ws.close();
+  };
 }
 
 // --- Console ---
@@ -334,10 +429,14 @@ function appendConsole(line, type = '') {
   while (consoleOutput.children.length > 3000) consoleOutput.removeChild(consoleOutput.firstChild);
 }
 
-$('btn-clear-console').addEventListener('click', () => { consoleOutput.innerHTML = ''; });
+$('btn-clear-console').addEventListener('click', () => {
+  consoleOutput.innerHTML = '';
+});
 
 $('btn-send-cmd').addEventListener('click', sendConsoleCmd);
-$('console-cmd').addEventListener('keydown', e => { if (e.key === 'Enter') sendConsoleCmd(); });
+$('console-cmd').addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') sendConsoleCmd();
+});
 
 async function sendConsoleCmd() {
   const input = $('console-cmd');
@@ -348,7 +447,9 @@ async function sendConsoleCmd() {
     await POST('/server/command', { command: cmd });
   } catch {
     // Fall back to stdin
-    try { await POST('/server/stdin', { command: cmd }); } catch (err) {
+    try {
+      await POST('/server/stdin', { command: cmd });
+    } catch (err) {
       appendConsole(`[Error] ${err.message}`, 'error');
     }
   }
@@ -363,8 +464,12 @@ async function runServerAction(el) {
     const r = await POST('/server/command', { command: cmd });
     flash('quick-action-msg', `${label}: ${r.result || 'OK'}`);
   } catch {
-    try { await POST('/server/stdin', { command: cmd }); flash('quick-action-msg', `${label}: sent via stdin`); }
-    catch (err) { flash('quick-action-msg', err.message, true); }
+    try {
+      await POST('/server/stdin', { command: cmd });
+      flash('quick-action-msg', `${label}: sent via stdin`);
+    } catch (err) {
+      flash('quick-action-msg', err.message, true);
+    }
   }
 }
 
@@ -373,18 +478,25 @@ async function runServerActionPrompt(el) {
   const label = el.dataset.label || template;
   // Parse prompt definitions: "player:Player name,reason:Reason (optional)"
   // If a prompt value contains pipes it's a select: "mode:Gamemode|survival|creative|adventure|spectator"
-  const promptDefs = (el.dataset.prompts || '').split(',').map(p => {
+  const promptDefs = (el.dataset.prompts || '').split(',').map((p) => {
     const [key, ...rest] = p.split(':');
     const desc = rest.join(':');
     const parts = desc.split('|');
-    return { key: key.trim(), label: parts[0].trim(), options: parts.length > 1 ? parts.slice(1) : null, optional: desc.toLowerCase().includes('optional') };
+    return {
+      key: key.trim(),
+      label: parts[0].trim(),
+      options: parts.length > 1 ? parts.slice(1) : null,
+      optional: desc.toLowerCase().includes('optional'),
+    };
   });
 
   const values = {};
   for (const def of promptDefs) {
     let val;
     if (def.options) {
-      val = prompt(`${label}\n\nChoose ${def.label}:\n${def.options.map((o, i) => `  ${i + 1}. ${o}`).join('\n')}\n\nType your choice:`);
+      val = prompt(
+        `${label}\n\nChoose ${def.label}:\n${def.options.map((o, i) => `  ${i + 1}. ${o}`).join('\n')}\n\nType your choice:`,
+      );
       if (val === null) return; // cancelled
       val = val.trim();
       // Accept both the number and the text
@@ -393,7 +505,7 @@ async function runServerActionPrompt(el) {
       // Validate against options
       if (val && !def.options.includes(val.toLowerCase())) {
         const lower = val.toLowerCase();
-        const match = def.options.find(o => o.toLowerCase() === lower);
+        const match = def.options.find((o) => o.toLowerCase() === lower);
         if (match) val = match;
       }
     } else {
@@ -422,8 +534,12 @@ async function runServerActionPrompt(el) {
     const r = await POST('/server/command', { command: cmd });
     flash('quick-action-msg', `${label}: ${r.result || 'OK'}`);
   } catch {
-    try { await POST('/server/stdin', { command: cmd }); flash('quick-action-msg', `${label}: sent via stdin`); }
-    catch (err) { flash('quick-action-msg', err.message, true); }
+    try {
+      await POST('/server/stdin', { command: cmd });
+      flash('quick-action-msg', `${label}: sent via stdin`);
+    } catch (err) {
+      flash('quick-action-msg', err.message, true);
+    }
   }
 }
 
@@ -459,8 +575,8 @@ function updateDashboard(s) {
     tpsEl.className = 'stat-value';
   }
 
-  $('stat-cpu').textContent = s.cpuPercent != null ? s.cpuPercent.toFixed(1) + '%' : (s.running ? 'N/A' : '-');
-  $('stat-ram').textContent = s.memBytes != null ? formatSize(s.memBytes) : (s.running ? 'N/A' : '-');
+  $('stat-cpu').textContent = s.cpuPercent != null ? s.cpuPercent.toFixed(1) + '%' : s.running ? 'N/A' : '-';
+  $('stat-ram').textContent = s.memBytes != null ? formatSize(s.memBytes) : s.running ? 'N/A' : '-';
   $('stat-disk').textContent = s.diskBytes != null ? formatSize(s.diskBytes) : '-';
 
   // Lag spike alert
@@ -509,16 +625,22 @@ function renderOnlinePlayers(players) {
     el.innerHTML = '<span class="dim">No players online</span>';
     return;
   }
-  el.innerHTML = players.map(name =>
-    `<span class="chip">${esc(name)}
+  el.innerHTML = players
+    .map(
+      (name) =>
+        `<span class="chip">${esc(name)}
       <button class="chip-kick" data-name="${esc(name)}" title="Kick">&#10005;</button>
-    </span>`
-  ).join('');
-  el.querySelectorAll('.chip-kick').forEach(btn => {
+    </span>`,
+    )
+    .join('');
+  el.querySelectorAll('.chip-kick').forEach((btn) => {
     btn.addEventListener('click', async () => {
       if (!confirm(`Kick ${btn.dataset.name}?`)) return;
-      try { await POST('/players/kick', { name: btn.dataset.name }); }
-      catch (err) { alert(err.message); }
+      try {
+        await POST('/players/kick', { name: btn.dataset.name });
+      } catch (err) {
+        alert(err.message);
+      }
     });
   });
 }
@@ -528,35 +650,58 @@ async function loadStatus() {
   try {
     const s = await GET('/status');
     updateDashboard(s);
-  } catch { /* ignore */ }
+  } catch {
+    /* ignore */
+  }
 }
 
 // Server control
 $('btn-start').addEventListener('click', async () => {
-  try { const r = await POST('/server/start'); flash('control-msg', r.message || 'Starting...'); }
-  catch (err) { flash('control-msg', err.message, true); }
+  try {
+    const r = await POST('/server/start');
+    flash('control-msg', r.message || 'Starting...');
+  } catch (err) {
+    flash('control-msg', err.message, true);
+  }
 });
 $('btn-stop').addEventListener('click', async () => {
   if (!confirm('Stop the Minecraft server?')) return;
-  try { const r = await POST('/server/stop'); flash('control-msg', r.message || 'Stopping...'); }
-  catch (err) { flash('control-msg', err.message, true); }
+  try {
+    const r = await POST('/server/stop');
+    flash('control-msg', r.message || 'Stopping...');
+  } catch (err) {
+    flash('control-msg', err.message, true);
+  }
 });
 $('btn-restart').addEventListener('click', async () => {
   if (!confirm('Restart the Minecraft server?')) return;
-  try { const r = await POST('/server/restart'); flash('control-msg', r.message || 'Restarting...'); }
-  catch (err) { flash('control-msg', err.message, true); }
+  try {
+    const r = await POST('/server/restart');
+    flash('control-msg', r.message || 'Restarting...');
+  } catch (err) {
+    flash('control-msg', err.message, true);
+  }
 });
 $('btn-kill').addEventListener('click', async () => {
   if (!confirm('FORCE KILL the server process? Unsaved world data may be lost!')) return;
-  try { await POST('/server/kill'); flash('control-msg', 'Process killed.'); }
-  catch (err) { flash('control-msg', err.message, true); }
+  try {
+    await POST('/server/kill');
+    flash('control-msg', 'Process killed.');
+  } catch (err) {
+    flash('control-msg', err.message, true);
+  }
 });
 
 $('btn-say').addEventListener('click', async () => {
   const msg = $('say-input').value.trim();
   if (!msg) return;
-  try { await POST('/players/say', { message: msg }); $('say-input').value = ''; flash('control-msg', 'Message sent!'); }
-  catch (err) { flash('control-msg', err.message, true); }
+  try {
+    await POST('/players/say', { message: msg });
+    $('say-input').value = '';
+    flash('control-msg', 'Message sent!');
+  } catch (err) {
+    flash('control-msg', err.message, true);
+  }
 });
 
 // --- Mods ---
@@ -583,7 +728,7 @@ function renderMods() {
   const showDisabled = $('mod-show-disabled').checked;
   const sortOrder = $('mod-sort').value;
 
-  let mods = allMods.filter(m => {
+  let mods = allMods.filter((m) => {
     if (!showDisabled && !m.enabled) return false;
     if (filterText) {
       const md = currentModData[m.filename]?.modrinth;
@@ -608,12 +753,18 @@ function renderMods() {
     const nameA = (mdA?.projectTitle || a.filename).toLowerCase();
     const nameB = (mdB?.projectTitle || b.filename).toLowerCase();
     switch (sortOrder) {
-      case 'name-asc':  return nameA.localeCompare(nameB);
-      case 'name-desc': return nameB.localeCompare(nameA);
-      case 'size-desc': return b.size - a.size;
-      case 'size-asc':  return a.size - b.size;
-      case 'enabled':   return (b.enabled ? 1 : 0) - (a.enabled ? 1 : 0);
-      default:          return 0;
+      case 'name-asc':
+        return nameA.localeCompare(nameB);
+      case 'name-desc':
+        return nameB.localeCompare(nameA);
+      case 'size-desc':
+        return b.size - a.size;
+      case 'size-asc':
+        return a.size - b.size;
+      case 'enabled':
+        return (b.enabled ? 1 : 0) - (a.enabled ? 1 : 0);
+      default:
+        return 0;
     }
   });
 
@@ -629,20 +780,23 @@ function renderMods() {
   const pageMods = mods.slice(modsPage * MODS_PAGE_SIZE, (modsPage + 1) * MODS_PAGE_SIZE);
   modsPager.update(modsPage + 1, totalPages, mods.length, 'mods');
 
-  $('mods-list').innerHTML = pageMods.map(mod => {
-    const md = currentModData[mod.filename]?.modrinth;
-    const side = md ? sideLabel(md.clientSide, md.serverSide) : { text: 'Unknown', cls: 'side-unknown' };
-    const title = md?.projectTitle || mod.filename.replace(/\.jar$/i, '');
-    const desc = md?.projectDescription || '';
-    const ver = md?.versionNumber || '';
+  $('mods-list').innerHTML = pageMods
+    .map((mod) => {
+      const md = currentModData[mod.filename]?.modrinth;
+      const side = md ? sideLabel(md.clientSide, md.serverSide) : { text: 'Unknown', cls: 'side-unknown' };
+      const title = md?.projectTitle || mod.filename.replace(/\.jar$/i, '');
+      const desc = md?.projectDescription || '';
+      const ver = md?.versionNumber || '';
 
-    return `<div class="mod-card ${mod.enabled ? '' : 'mod-disabled'}">
+      return `<div class="mod-card ${mod.enabled ? '' : 'mod-disabled'}">
       ${md?.iconUrl ? `<img class="mod-icon" src="${esc(md.iconUrl)}" alt="" loading="lazy" />` : '<div class="mod-icon-placeholder"></div>'}
       <div class="mod-info">
         <div class="mod-title">
-          ${md?.projectSlug || md?.projectId
-            ? `<span class="mod-title-link" data-action="mod-detail" data-id="${esc(md.projectSlug || md.projectId)}" data-source="installed" data-filename="${esc(mod.filename)}" data-author="${esc(md.author||'')}">${esc(title)}</span>`
-            : `<span>${esc(title)}</span>`}
+          ${
+            md?.projectSlug || md?.projectId
+              ? `<span class="mod-title-link" data-action="mod-detail" data-id="${esc(md.projectSlug || md.projectId)}" data-source="installed" data-filename="${esc(mod.filename)}" data-author="${esc(md.author || '')}">${esc(title)}</span>`
+              : `<span>${esc(title)}</span>`
+          }
           <span class="side-badge ${side.cls}">${side.text}</span>
           ${!mod.enabled ? '<span class="side-badge mod-off-badge">Disabled</span>' : ''}
         </div>
@@ -666,31 +820,48 @@ function renderMods() {
         </button>
       </div>
     </div>`;
-  }).join('');
+    })
+    .join('');
 }
 
-window.toggleMod = async function(btn) {
+window.toggleMod = async function (btn) {
   const { filename } = btn.dataset;
   const enable = btn.dataset.enable === 'true';
   try {
     await POST('/mods/toggle', { filename, enable });
     await loadMods();
-  } catch (err) { alert(err.message); }
+  } catch (err) {
+    alert(err.message);
+  }
 };
 
-window.deleteMod = async function(btn) {
+window.deleteMod = async function (btn) {
   const { filename } = btn.dataset;
   if (!confirm(`Delete ${filename}? This cannot be undone.`)) return;
   try {
     await DEL(`/mods/${encodeURIComponent(filename)}`);
     await loadMods();
-  } catch (err) { alert(err.message); }
+  } catch (err) {
+    alert(err.message);
+  }
 };
 
-$('mod-filter').addEventListener('input', () => { modsPage = 0; renderMods(); });
-$('mod-side-filter').addEventListener('change', () => { modsPage = 0; renderMods(); });
-$('mod-sort').addEventListener('change', () => { modsPage = 0; renderMods(); });
-$('mod-show-disabled').addEventListener('change', () => { modsPage = 0; renderMods(); });
+$('mod-filter').addEventListener('input', () => {
+  modsPage = 0;
+  renderMods();
+});
+$('mod-side-filter').addEventListener('change', () => {
+  modsPage = 0;
+  renderMods();
+});
+$('mod-sort').addEventListener('change', () => {
+  modsPage = 0;
+  renderMods();
+});
+$('mod-show-disabled').addEventListener('change', () => {
+  modsPage = 0;
+  renderMods();
+});
 $('btn-refresh-mods').addEventListener('click', loadMods);
 
 $('btn-lookup-mods').addEventListener('click', async () => {
@@ -711,11 +882,25 @@ $('btn-lookup-mods').addEventListener('click', async () => {
 // --- Browse Modrinth ---
 let browseLoaded = false;
 
-$('btn-browse-search').addEventListener('click', () => { browseOffset = 0; browsePage = 0; browseSearch(); });
-$('browse-query').addEventListener('keydown', e => { if (e.key === 'Enter') { browseOffset = 0; browsePage = 0; browseSearch(); } });
+$('btn-browse-search').addEventListener('click', () => {
+  browseOffset = 0;
+  browsePage = 0;
+  browseSearch();
+});
+$('browse-query').addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') {
+    browseOffset = 0;
+    browsePage = 0;
+    browseSearch();
+  }
+});
 
 $('tab-page-prev').addEventListener('click', () => {
-  if (activeModsSubtab === 'installed') { modsPage--; renderMods(); return; }
+  if (activeModsSubtab === 'installed') {
+    modsPage--;
+    renderMods();
+    return;
+  }
   if (browsePage > 0) {
     browsePage--;
     renderBrowseResults(lastBrowseHits);
@@ -726,10 +911,14 @@ $('tab-page-prev').addEventListener('click', () => {
   }
 });
 $('tab-page-next').addEventListener('click', () => {
-  if (activeModsSubtab === 'installed') { modsPage++; renderMods(); return; }
+  if (activeModsSubtab === 'installed') {
+    modsPage++;
+    renderMods();
+    return;
+  }
   const installed = getInstalledSlugs();
   const showInstalled = $('browse-show-installed').checked;
-  const filtered = showInstalled ? lastBrowseHits : lastBrowseHits.filter(h => !installed.has(h.slug));
+  const filtered = showInstalled ? lastBrowseHits : lastBrowseHits.filter((h) => !installed.has(h.slug));
   const maxClientPage = Math.ceil(filtered.length / BROWSE_PAGE_SIZE) - 1;
   if (browsePage < maxClientPage) {
     browsePage++;
@@ -763,7 +952,11 @@ async function browseLoad() {
 
 async function browseSearch() {
   const q = $('browse-query').value.trim();
-  if (!q) { browseOffset = 0; browsePage = 0; return browseLoad(); }
+  if (!q) {
+    browseOffset = 0;
+    browsePage = 0;
+    return browseLoad();
+  }
   const side = $('browse-side').value;
   $('browse-heading').textContent = `Search results for "${q}"`;
   $('browse-results').innerHTML = '<p class="dim">Searching Modrinth...</p>';
@@ -806,35 +999,37 @@ function getInstalledSlugs() {
 function renderBrowseResults(hits) {
   const installed = getInstalledSlugs();
   const showInstalled = $('browse-show-installed').checked;
-  const filteredHits = showInstalled ? hits : hits.filter(h => !installed.has(h.slug));
+  const filteredHits = showInstalled ? hits : hits.filter((h) => !installed.has(h.slug));
   const pageHits = filteredHits.slice(browsePage * BROWSE_PAGE_SIZE, (browsePage + 1) * BROWSE_PAGE_SIZE);
 
   updateBrowsePagination(filteredHits.length);
 
   if (pageHits.length === 0) {
     if (hits.length > 0 && !showInstalled) {
-      $('browse-results').innerHTML = '<p class="dim">All mods on this page are already installed. Check "Show installed" to see them.</p>';
+      $('browse-results').innerHTML =
+        '<p class="dim">All mods on this page are already installed. Check "Show installed" to see them.</p>';
     } else {
       $('browse-results').innerHTML = '<p class="dim">No results found.</p>';
     }
     return;
   }
-  $('browse-results').innerHTML = pageHits.map(hit => {
-    const isInstalled = installed.has(hit.slug);
-    const side = sideLabel(hit.client_side, hit.server_side);
-    const downloads = Number(hit.downloads || 0).toLocaleString();
-    const follows = Number(hit.follows || 0).toLocaleString();
-    const cats = (hit.categories || []).filter(c => c !== 'forge').slice(0, 3);
-    // Populate from cache immediately if already fetched
-    const cached = hit.latest_version ? browseVersionCache.get(hit.latest_version) : null;
-    return `<div class="mod-card browse-card${isInstalled ? ' mod-disabled' : ''}" id="browse-card-${esc(hit.project_id)}">
+  $('browse-results').innerHTML = pageHits
+    .map((hit) => {
+      const isInstalled = installed.has(hit.slug);
+      const side = sideLabel(hit.client_side, hit.server_side);
+      const downloads = Number(hit.downloads || 0).toLocaleString();
+      const follows = Number(hit.follows || 0).toLocaleString();
+      const cats = (hit.categories || []).filter((c) => c !== 'forge').slice(0, 3);
+      // Populate from cache immediately if already fetched
+      const cached = hit.latest_version ? browseVersionCache.get(hit.latest_version) : null;
+      return `<div class="mod-card browse-card${isInstalled ? ' mod-disabled' : ''}" id="browse-card-${esc(hit.project_id)}">
       ${hit.icon_url ? `<img class="mod-icon" src="${esc(hit.icon_url)}" alt="" loading="lazy" />` : '<div class="mod-icon-placeholder"></div>'}
       <div class="mod-info">
         <div class="mod-title">
-          <span class="mod-title-link" data-action="mod-detail" data-id="${esc(hit.project_id)}" data-source="browse" data-author="${esc(hit.author||'')}">${esc(hit.title)}</span>
+          <span class="mod-title-link" data-action="mod-detail" data-id="${esc(hit.project_id)}" data-source="browse" data-author="${esc(hit.author || '')}">${esc(hit.title)}</span>
           <span class="side-badge ${side.cls}">${side.text}</span>
           ${isInstalled ? '<span class="installed-badge">Installed</span>' : ''}
-          ${cats.map(c => `<span class="cat-badge">${esc(c)}</span>`).join('')}
+          ${cats.map((c) => `<span class="cat-badge">${esc(c)}</span>`).join('')}
         </div>
         <div class="mod-desc">${esc((hit.description || '').slice(0, 160))}</div>
         <div class="mod-meta">
@@ -846,12 +1041,15 @@ function renderBrowseResults(hits) {
         </div>
       </div>
       <div class="mod-actions">
-        ${isInstalled
-          ? '<button class="btn btn-sm" disabled>Installed</button>'
-          : `<button class="btn btn-sm btn-primary" data-action="install-mod" data-projectid="${esc(hit.project_id)}" data-title="${esc(hit.title)}">Install</button>`}
+        ${
+          isInstalled
+            ? '<button class="btn btn-sm" disabled>Installed</button>'
+            : `<button class="btn btn-sm btn-primary" data-action="install-mod" data-projectid="${esc(hit.project_id)}" data-title="${esc(hit.title)}">Install</button>`
+        }
       </div>
     </div>`;
-  }).join('');
+    })
+    .join('');
 
   // Async-enrich version number and file size for hits not yet cached
   enrichBrowseVersions(pageHits);
@@ -859,18 +1057,20 @@ function renderBrowseResults(hits) {
 
 async function enrichBrowseVersions(hits) {
   const toFetch = hits
-    .filter(h => h.latest_version && !browseVersionCache.has(h.latest_version))
-    .map(h => h.latest_version);
+    .filter((h) => h.latest_version && !browseVersionCache.has(h.latest_version))
+    .map((h) => h.latest_version);
 
   if (toFetch.length > 0) {
     try {
       const params = new URLSearchParams({ ids: JSON.stringify(toFetch) });
       const versions = await GET(`/modrinth/versions/batch?${params}`);
       for (const v of versions) {
-        const primary = v.files?.find(f => f.primary) ?? v.files?.[0];
+        const primary = v.files?.find((f) => f.primary) ?? v.files?.[0];
         browseVersionCache.set(v.id, { versionNumber: v.version_number, fileSize: primary?.size ?? null });
       }
-    } catch { /* best-effort — silently skip if batch fetch fails */ }
+    } catch {
+      /* best-effort — silently skip if batch fetch fails */
+    }
   }
 
   // Update DOM for each hit that now has cached data
@@ -882,11 +1082,17 @@ async function enrichBrowseVersions(hits) {
     if (!card) continue;
     if (cached.versionNumber) {
       const el = card.querySelector('.browse-ver');
-      if (el) { el.textContent = `v${cached.versionNumber}`; el.removeAttribute('hidden'); }
+      if (el) {
+        el.textContent = `v${cached.versionNumber}`;
+        el.removeAttribute('hidden');
+      }
     }
     if (cached.fileSize != null) {
       const el = card.querySelector('.browse-size');
-      if (el) { el.textContent = formatSize(cached.fileSize); el.removeAttribute('hidden'); }
+      if (el) {
+        el.textContent = formatSize(cached.fileSize);
+        el.removeAttribute('hidden');
+      }
     }
   }
 }
@@ -908,7 +1114,7 @@ function closeModDetail() {
 }
 window.closeModDetail = closeModDetail;
 
-window.openModDetail = async function(idOrSlug, source, context = {}) {
+window.openModDetail = async function (idOrSlug, source, context = {}) {
   modDetailState = { source, ...context };
 
   // Hide subtab content and pagination; show detail panel
@@ -943,21 +1149,32 @@ function renderModDetail(project, context = {}) {
   const side = sideLabel(project.client_side, project.server_side);
   const downloads = Number(project.downloads || 0).toLocaleString();
   const follows = Number(project.follows || 0).toLocaleString();
-  const cats = (project.categories || []).filter(c => c !== 'forge').slice(0, 6);
+  const cats = (project.categories || []).filter((c) => c !== 'forge').slice(0, 6);
   const author = context.author || '';
 
   // External links
   const links = [
     `<a href="https://modrinth.com/mod/${encodeURIComponent(project.slug)}" target="_blank" rel="noopener" class="btn btn-sm btn-ghost">Modrinth ↗</a>`,
-    project.issues_url  ? `<a href="${esc(project.issues_url)}"  target="_blank" rel="noopener" class="btn btn-sm btn-ghost">Issues ↗</a>`  : '',
-    project.source_url  ? `<a href="${esc(project.source_url)}"  target="_blank" rel="noopener" class="btn btn-sm btn-ghost">Source ↗</a>`  : '',
-    project.wiki_url    ? `<a href="${esc(project.wiki_url)}"    target="_blank" rel="noopener" class="btn btn-sm btn-ghost">Wiki ↗</a>`    : '',
-    project.discord_url ? `<a href="${esc(project.discord_url)}" target="_blank" rel="noopener" class="btn btn-sm btn-ghost">Discord ↗</a>` : '',
-  ].filter(Boolean).join('');
+    project.issues_url
+      ? `<a href="${esc(project.issues_url)}"  target="_blank" rel="noopener" class="btn btn-sm btn-ghost">Issues ↗</a>`
+      : '',
+    project.source_url
+      ? `<a href="${esc(project.source_url)}"  target="_blank" rel="noopener" class="btn btn-sm btn-ghost">Source ↗</a>`
+      : '',
+    project.wiki_url
+      ? `<a href="${esc(project.wiki_url)}"    target="_blank" rel="noopener" class="btn btn-sm btn-ghost">Wiki ↗</a>`
+      : '',
+    project.discord_url
+      ? `<a href="${esc(project.discord_url)}" target="_blank" rel="noopener" class="btn btn-sm btn-ghost">Discord ↗</a>`
+      : '',
+  ]
+    .filter(Boolean)
+    .join('');
 
   // Gallery: sort by ordering, prefer featured first
-  const gallery = (project.gallery || [])
-    .sort((a, b) => (b.featured ? 1 : 0) - (a.featured ? 1 : 0) || (a.ordering || 0) - (b.ordering || 0));
+  const gallery = (project.gallery || []).sort(
+    (a, b) => (b.featured ? 1 : 0) - (a.featured ? 1 : 0) || (a.ordering || 0) - (b.ordering || 0),
+  );
 
   // Action buttons
   const actionBtns = isInstalled
@@ -973,9 +1190,11 @@ function renderModDetail(project, context = {}) {
   $('mod-detail-content').innerHTML = `
     <div class="mod-detail-header">
       <div class="mod-detail-hero">
-        ${project.icon_url
-          ? `<img class="mod-detail-icon" src="${esc(project.icon_url)}" alt="" />`
-          : '<div class="mod-detail-icon mod-icon-placeholder"></div>'}
+        ${
+          project.icon_url
+            ? `<img class="mod-detail-icon" src="${esc(project.icon_url)}" alt="" />`
+            : '<div class="mod-detail-icon mod-icon-placeholder"></div>'
+        }
         <div class="mod-detail-info">
           <h2 class="mod-detail-title">${esc(project.title)}</h2>
           <div class="mod-meta">
@@ -986,7 +1205,7 @@ function renderModDetail(project, context = {}) {
           <div class="mod-badges">
             <span class="side-badge ${side.cls}">${side.text}</span>
             ${isInstalled ? '<span class="installed-badge mod-detail-installed-badge">Installed</span>' : ''}
-            ${cats.map(c => `<span class="cat-badge">${esc(c)}</span>`).join('')}
+            ${cats.map((c) => `<span class="cat-badge">${esc(c)}</span>`).join('')}
           </div>
           <div class="mod-detail-links">${links}</div>
         </div>
@@ -994,24 +1213,36 @@ function renderModDetail(project, context = {}) {
       </div>
       ${project.description ? `<p class="mod-detail-summary dim">${esc(project.description)}</p>` : ''}
     </div>
-    ${gallery.length > 0 ? `
+    ${
+      gallery.length > 0
+        ? `
       <section class="mod-detail-section">
         <h3>Gallery</h3>
         <div class="mod-gallery">
-          ${gallery.map(img => `
+          ${gallery
+            .map(
+              (img) => `
             <img class="gallery-img" src="${esc(img.url)}" alt="${esc(img.title || '')}"
-                 title="${esc(img.description || img.title || '')}" loading="lazy" />`).join('')}
+                 title="${esc(img.description || img.title || '')}" loading="lazy" />`,
+            )
+            .join('')}
         </div>
-      </section>` : ''}
-    ${project.bodyHtml ? `
+      </section>`
+        : ''
+    }
+    ${
+      project.bodyHtml
+        ? `
       <section class="mod-detail-section">
         <h3>About</h3>
         <div class="mod-detail-body">${project.bodyHtml}</div>
-      </section>` : ''}
+      </section>`
+        : ''
+    }
   `;
 }
 
-window.openVersionModal = async function(btn) {
+window.openVersionModal = async function (btn) {
   const { projectid, title } = btn.dataset;
   $('modal-title').textContent = `Install: ${title}`;
   show('version-modal');
@@ -1019,12 +1250,15 @@ window.openVersionModal = async function(btn) {
   try {
     const versions = await GET(`/modrinth/versions/${projectid}`);
     if (!versions.length) {
-      $('modal-versions').innerHTML = '<p class="dim">No compatible versions found for your Minecraft version / Forge.</p>';
+      $('modal-versions').innerHTML =
+        '<p class="dim">No compatible versions found for your Minecraft version / Forge.</p>';
       return;
     }
-    $('modal-versions').innerHTML = versions.slice(0, 15).map(v => {
-      const file = v.files.find(f => f.primary) || v.files[0];
-      return `<div class="version-row">
+    $('modal-versions').innerHTML = versions
+      .slice(0, 15)
+      .map((v) => {
+        const file = v.files.find((f) => f.primary) || v.files[0];
+        return `<div class="version-row">
         <div>
           <strong>${esc(v.name)}</strong>
           <span class="dim"> — ${esc(v.version_type)} — ${(v.game_versions || []).join(', ')}</span>
@@ -1035,16 +1269,19 @@ window.openVersionModal = async function(btn) {
           Download
         </button>
       </div>`;
-    }).join('');
+      })
+      .join('');
   } catch (err) {
     $('modal-versions').innerHTML = `<p class="error-msg">${esc(err.message)}</p>`;
   }
 };
 
 $('modal-close').addEventListener('click', () => hide('version-modal'));
-$('version-modal').addEventListener('click', e => { if (e.target === $('version-modal')) hide('version-modal'); });
+$('version-modal').addEventListener('click', (e) => {
+  if (e.target === $('version-modal')) hide('version-modal');
+});
 
-window.downloadMod = async function(btn) {
+window.downloadMod = async function (btn) {
   const { versionid } = btn.dataset;
   btn.disabled = true;
   btn.textContent = 'Downloading...';
@@ -1067,10 +1304,15 @@ async function loadOps() {
   try {
     const ops = await GET('/players/ops');
     const el = $('ops-list');
-    if (!ops.length) { el.innerHTML = '<p class="dim">No operators set.</p>'; return; }
+    if (!ops.length) {
+      el.innerHTML = '<p class="dim">No operators set.</p>';
+      return;
+    }
     el.innerHTML = `<table class="player-table">
       <thead><tr><th>Name</th><th>Level</th><th>UUID</th><th>Actions</th></tr></thead>
-      <tbody>${ops.map(op => `
+      <tbody>${ops
+        .map(
+          (op) => `
         <tr>
           <td><strong>${esc(op.name)}</strong></td>
           <td><span class="level-badge level-${op.level}">Level ${op.level}</span></td>
@@ -1078,24 +1320,37 @@ async function loadOps() {
           <td>
             <button class="btn btn-sm btn-danger" data-action="remove-op" data-name="${esc(op.name)}">Remove</button>
           </td>
-        </tr>`).join('')}
+        </tr>`,
+        )
+        .join('')}
       </tbody>
     </table>`;
-  } catch (err) { $('ops-list').innerHTML = `<p class="error-msg">${esc(err.message)}</p>`; }
+  } catch (err) {
+    $('ops-list').innerHTML = `<p class="error-msg">${esc(err.message)}</p>`;
+  }
 }
 
 $('btn-add-op').addEventListener('click', async () => {
   const name = $('op-name').value.trim();
   const level = parseInt($('op-level').value);
   if (!name) return alert('Enter a player name.');
-  try { await POST('/players/op', { name, level }); $('op-name').value = ''; loadOps(); }
-  catch (err) { alert(err.message); }
+  try {
+    await POST('/players/op', { name, level });
+    $('op-name').value = '';
+    loadOps();
+  } catch (err) {
+    alert(err.message);
+  }
 });
 
-window.removeOp = async function(btn) {
+window.removeOp = async function (btn) {
   if (!confirm(`Remove operator status from ${btn.dataset.name}?`)) return;
-  try { await DEL(`/players/op/${encodeURIComponent(btn.dataset.name)}`); loadOps(); }
-  catch (err) { alert(err.message); }
+  try {
+    await DEL(`/players/op/${encodeURIComponent(btn.dataset.name)}`);
+    loadOps();
+  } catch (err) {
+    alert(err.message);
+  }
 };
 
 // --- Players: Whitelist ---
@@ -1103,33 +1358,51 @@ async function loadWhitelist() {
   try {
     const list = await GET('/players/whitelist');
     const el = $('whitelist-list');
-    if (!list.length) { el.innerHTML = '<p class="dim">Whitelist is empty.</p>'; return; }
+    if (!list.length) {
+      el.innerHTML = '<p class="dim">Whitelist is empty.</p>';
+      return;
+    }
     el.innerHTML = `<table class="player-table">
       <thead><tr><th>Name</th><th>UUID</th><th>Actions</th></tr></thead>
-      <tbody>${list.map(e => `
+      <tbody>${list
+        .map(
+          (e) => `
         <tr>
           <td><strong>${esc(e.name)}</strong></td>
           <td class="dim small">${esc(e.uuid || '-')}</td>
           <td>
             <button class="btn btn-sm btn-danger" data-action="remove-wl" data-name="${esc(e.name)}">Remove</button>
           </td>
-        </tr>`).join('')}
+        </tr>`,
+        )
+        .join('')}
       </tbody>
     </table>`;
-  } catch (err) { $('whitelist-list').innerHTML = `<p class="error-msg">${esc(err.message)}</p>`; }
+  } catch (err) {
+    $('whitelist-list').innerHTML = `<p class="error-msg">${esc(err.message)}</p>`;
+  }
 }
 
 $('btn-add-wl').addEventListener('click', async () => {
   const name = $('wl-name').value.trim();
   if (!name) return alert('Enter a player name.');
-  try { await POST('/players/whitelist', { name }); $('wl-name').value = ''; loadWhitelist(); }
-  catch (err) { alert(err.message); }
+  try {
+    await POST('/players/whitelist', { name });
+    $('wl-name').value = '';
+    loadWhitelist();
+  } catch (err) {
+    alert(err.message);
+  }
 });
 
-window.removeWl = async function(btn) {
+window.removeWl = async function (btn) {
   if (!confirm(`Remove ${btn.dataset.name} from whitelist?`)) return;
-  try { await DEL(`/players/whitelist/${encodeURIComponent(btn.dataset.name)}`); loadWhitelist(); }
-  catch (err) { alert(err.message); }
+  try {
+    await DEL(`/players/whitelist/${encodeURIComponent(btn.dataset.name)}`);
+    loadWhitelist();
+  } catch (err) {
+    alert(err.message);
+  }
 };
 
 // --- Players: Bans ---
@@ -1138,20 +1411,29 @@ async function loadBans() {
     const data = await GET('/players/banned');
     const el = $('bans-list');
     const banned = data.players || [];
-    if (!banned.length) { el.innerHTML = '<p class="dim">No banned players.</p>'; return; }
+    if (!banned.length) {
+      el.innerHTML = '<p class="dim">No banned players.</p>';
+      return;
+    }
     el.innerHTML = `<table class="player-table">
       <thead><tr><th>Name</th><th>Reason</th><th>Actions</th></tr></thead>
-      <tbody>${banned.map(e => `
+      <tbody>${banned
+        .map(
+          (e) => `
         <tr>
           <td><strong>${esc(e.name)}</strong></td>
           <td class="dim">${esc(e.reason || '-')}</td>
           <td>
             <button class="btn btn-sm btn-success" data-action="unban-player" data-name="${esc(e.name)}">Unban</button>
           </td>
-        </tr>`).join('')}
+        </tr>`,
+        )
+        .join('')}
       </tbody>
     </table>`;
-  } catch (err) { $('bans-list').innerHTML = `<p class="error-msg">${esc(err.message)}</p>`; }
+  } catch (err) {
+    $('bans-list').innerHTML = `<p class="error-msg">${esc(err.message)}</p>`;
+  }
 }
 
 $('btn-ban').addEventListener('click', async () => {
@@ -1159,14 +1441,24 @@ $('btn-ban').addEventListener('click', async () => {
   const reason = $('ban-reason').value.trim() || 'Banned by admin';
   if (!name) return alert('Enter a player name.');
   if (!confirm(`Ban ${name} for: "${reason}"?`)) return;
-  try { await POST('/players/ban', { name, reason }); $('ban-name').value = ''; $('ban-reason').value = ''; loadBans(); }
-  catch (err) { alert(err.message); }
+  try {
+    await POST('/players/ban', { name, reason });
+    $('ban-name').value = '';
+    $('ban-reason').value = '';
+    loadBans();
+  } catch (err) {
+    alert(err.message);
+  }
 });
 
-window.unbanPlayer = async function(btn) {
+window.unbanPlayer = async function (btn) {
   if (!confirm(`Unban ${btn.dataset.name}?`)) return;
-  try { await DEL(`/players/ban/${encodeURIComponent(btn.dataset.name)}`); loadBans(); }
-  catch (err) { alert(err.message); }
+  try {
+    await DEL(`/players/ban/${encodeURIComponent(btn.dataset.name)}`);
+    loadBans();
+  } catch (err) {
+    alert(err.message);
+  }
 };
 
 // --- Settings: App config ---
@@ -1177,10 +1469,15 @@ async function loadAppConfig() {
     for (const [k, v] of Object.entries(cfg)) {
       const el = form.elements[k];
       if (!el || el.type === 'password') continue;
-      if (el.type === 'checkbox') { el.checked = !!v; }
-      else { el.value = v; }
+      if (el.type === 'checkbox') {
+        el.checked = !!v;
+      } else {
+        el.value = v;
+      }
     }
-  } catch (err) { console.error('Config load failed', err); }
+  } catch (err) {
+    console.error('Config load failed', err);
+  }
 }
 
 $('app-config-form').addEventListener('submit', async (e) => {
@@ -1189,37 +1486,61 @@ $('app-config-form').addEventListener('submit', async (e) => {
   const data = {};
   for (const el of form.elements) {
     if (!el.name) continue;
-    if (el.type === 'checkbox') { data[el.name] = el.checked; }
-    else if (el.type === 'number' && el.value !== '') { data[el.name] = Number(el.value); }
-    else if (el.value !== '') { data[el.name] = el.value; }
+    if (el.type === 'checkbox') {
+      data[el.name] = el.checked;
+    } else if (el.type === 'number' && el.value !== '') {
+      data[el.name] = Number(el.value);
+    } else if (el.value !== '') {
+      data[el.name] = el.value;
+    }
   }
   try {
     await POST('/config', data);
     if (data.demoMode === false) {
       hide('demo-banner');
-      flash('app-cfg-msg', 'Demo mode disabled. Restart the manager app (node server.js) to connect to your real server.');
+      flash(
+        'app-cfg-msg',
+        'Demo mode disabled. Restart the manager app (node server.js) to connect to your real server.',
+      );
     } else if (data.demoMode === true) {
       show('demo-banner');
       flash('app-cfg-msg', 'Demo mode enabled. Restart the manager app to return to seed data.');
     } else {
       flash('app-cfg-msg', 'Config saved! Restart the manager for port/path changes to take effect.');
     }
-  } catch (err) { flash('app-cfg-msg', err.message, true); }
+  } catch (err) {
+    flash('app-cfg-msg', err.message, true);
+  }
 });
 
 $('btn-reconnect-rcon').addEventListener('click', async () => {
   try {
     const r = await POST('/rcon/connect');
-    flash('app-cfg-msg', r.connected ? 'RCON connected!' : 'RCON connection failed. Check password and server.properties.');
-  } catch (err) { flash('app-cfg-msg', err.message, true); }
+    flash(
+      'app-cfg-msg',
+      r.connected ? 'RCON connected!' : 'RCON connection failed. Check password and server.properties.',
+    );
+  } catch (err) {
+    flash('app-cfg-msg', err.message, true);
+  }
 });
 
 // --- Settings: server.properties ---
 const IMPORTANT_PROPS = [
-  'enable-rcon', 'rcon.port', 'rcon.password',
-  'white-list', 'online-mode', 'max-players', 'server-port',
-  'motd', 'gamemode', 'difficulty', 'level-name',
-  'pvp', 'spawn-protection', 'op-permission-level',
+  'enable-rcon',
+  'rcon.port',
+  'rcon.password',
+  'white-list',
+  'online-mode',
+  'max-players',
+  'server-port',
+  'motd',
+  'gamemode',
+  'difficulty',
+  'level-name',
+  'pvp',
+  'spawn-protection',
+  'op-permission-level',
 ];
 
 async function loadServerProps() {
@@ -1227,34 +1548,42 @@ async function loadServerProps() {
   try {
     const props = await GET('/settings/properties');
     const entries = Object.entries(props);
-    if (!entries.length) { el.innerHTML = '<p class="dim">Could not read server.properties.</p>'; return; }
+    if (!entries.length) {
+      el.innerHTML = '<p class="dim">Could not read server.properties.</p>';
+      return;
+    }
 
     entries.sort(([a], [b]) => {
-      const ai = IMPORTANT_PROPS.indexOf(a), bi = IMPORTANT_PROPS.indexOf(b);
+      const ai = IMPORTANT_PROPS.indexOf(a),
+        bi = IMPORTANT_PROPS.indexOf(b);
       if (ai !== -1 && bi !== -1) return ai - bi;
       if (ai !== -1) return -1;
       if (bi !== -1) return 1;
       return a.localeCompare(b);
     });
 
-    el.innerHTML = entries.map(([k, v]) => {
-      const important = IMPORTANT_PROPS.includes(k);
-      const inputType = v === 'true' || v === 'false' ? 'checkbox' : 'text';
-      if (inputType === 'checkbox') {
-        return `<div class="form-group ${important ? 'prop-important' : ''}">
+    el.innerHTML = entries
+      .map(([k, v]) => {
+        const important = IMPORTANT_PROPS.includes(k);
+        const inputType = v === 'true' || v === 'false' ? 'checkbox' : 'text';
+        if (inputType === 'checkbox') {
+          return `<div class="form-group ${important ? 'prop-important' : ''}">
           <label class="checkbox-label">
             <input type="checkbox" name="prop__${esc(k)}" ${v === 'true' ? 'checked' : ''} />
             <span>${esc(k)}</span>
             ${important ? '<span class="badge-important">Key Setting</span>' : ''}
           </label>
         </div>`;
-      }
-      return `<div class="form-group ${important ? 'prop-important' : ''}">
+        }
+        return `<div class="form-group ${important ? 'prop-important' : ''}">
         <label>${esc(k)} ${important ? '<span class="badge-important">Key Setting</span>' : ''}</label>
         <input type="text" name="prop__${esc(k)}" value="${esc(v)}" />
       </div>`;
-    }).join('');
-  } catch (err) { el.innerHTML = `<p class="error-msg">${esc(err.message)}</p>`; }
+      })
+      .join('');
+  } catch (err) {
+    el.innerHTML = `<p class="error-msg">${esc(err.message)}</p>`;
+  }
 }
 
 $('props-form').addEventListener('submit', async (e) => {
@@ -1269,7 +1598,9 @@ $('props-form').addEventListener('submit', async (e) => {
   try {
     await POST('/settings/properties', props);
     flash('props-msg', 'server.properties saved! Restart the Minecraft server to apply changes.');
-  } catch (err) { flash('props-msg', err.message, true); }
+  } catch (err) {
+    flash('props-msg', err.message, true);
+  }
 });
 
 // ============================================================
@@ -1284,16 +1615,17 @@ async function loadBackups() {
       el.innerHTML = '<p class="dim">No backups yet. Create one above.</p>';
       return;
     }
-    el.innerHTML = backups.map(b => {
-      const date = new Date(b.createdAt);
-      const dateStr = date.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' });
-      const timeStr = date.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
-      const typeBadge = b.type === 'scheduled'
-        ? '<span class="backup-badge backup-scheduled">Scheduled</span>'
-        : '<span class="backup-badge backup-manual">Manual</span>';
-      const dbBadge = b.includesDatabase
-        ? '<span class="backup-badge backup-db">DB</span>' : '';
-      return `<div class="backup-card">
+    el.innerHTML = backups
+      .map((b) => {
+        const date = new Date(b.createdAt);
+        const dateStr = date.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' });
+        const timeStr = date.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
+        const typeBadge =
+          b.type === 'scheduled'
+            ? '<span class="backup-badge backup-scheduled">Scheduled</span>'
+            : '<span class="backup-badge backup-manual">Manual</span>';
+        const dbBadge = b.includesDatabase ? '<span class="backup-badge backup-db">DB</span>' : '';
+        return `<div class="backup-card">
         <div class="backup-info">
           <div class="backup-title">
             ${typeBadge}${dbBadge}
@@ -1311,7 +1643,8 @@ async function loadBackups() {
           <button class="btn btn-sm btn-danger" data-action="delete-backup" data-filename="${esc(b.filename)}">Delete</button>
         </div>
       </div>`;
-    }).join('');
+      })
+      .join('');
   } catch (err) {
     el.innerHTML = `<p class="error-msg">${esc(err.message)}</p>`;
   }
@@ -1332,11 +1665,6 @@ const WEEKDAY_NAMES = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', '
     sel.appendChild(opt);
   }
 })();
-
-function formatHour(h) {
-  const h12 = h === 0 ? 12 : h > 12 ? h - 12 : h;
-  return `${h12}:${$('sched-minute').value.padStart(2, '0')} ${h < 12 ? 'AM' : 'PM'}`;
-}
 
 // Update picker visibility based on frequency
 function updatePickerVisibility() {
@@ -1367,11 +1695,20 @@ function pickerToCron() {
   const day = $('sched-weekday').value;
   let expr;
   switch (freq) {
-    case 'daily':      expr = `${min} ${hr} * * *`; break;
-    case 'weekly':     expr = `${min} ${hr} * * ${day}`; break;
-    case 'twice-daily': expr = `${min} ${hr},${(+hr + 12) % 24} * * *`; break;
-    case 'every-6h':   expr = `${min} */6 * * *`; break;
-    default:           expr = `${min} ${hr} * * *`;
+    case 'daily':
+      expr = `${min} ${hr} * * *`;
+      break;
+    case 'weekly':
+      expr = `${min} ${hr} * * ${day}`;
+      break;
+    case 'twice-daily':
+      expr = `${min} ${hr},${(+hr + 12) % 24} * * *`;
+      break;
+    case 'every-6h':
+      expr = `${min} */6 * * *`;
+      break;
+    default:
+      expr = `${min} ${hr} * * *`;
   }
   $('backup-schedule-form').elements.backupSchedule.value = expr;
   updateSummary();
@@ -1415,16 +1752,19 @@ function cronToPicker(expr) {
 
 function nearestQuarter(min) {
   const quarters = [0, 15, 30, 45];
-  return quarters.reduce((a, b) => Math.abs(b - min) < Math.abs(a - min) ? b : a);
+  return quarters.reduce((a, b) => (Math.abs(b - min) < Math.abs(a - min) ? b : a));
 }
 
 // Human-readable summary
 function updateSummary() {
   const cronVal = $('backup-schedule-form').elements.backupSchedule.value || '0 3 * * *';
   const parts = cronVal.trim().split(/\s+/);
-  if (parts.length < 5) { $('sched-summary').textContent = ''; return; }
+  if (parts.length < 5) {
+    $('sched-summary').textContent = '';
+    return;
+  }
   const [min, hr, dom, mon, dow] = parts;
-  let text = '';
+  let text;
 
   if (dom === '*' && mon === '*' && dow === '*' && !hr.includes('/') && !hr.includes(',')) {
     text = `Runs every day at ${fmtTime(+hr, +min)}`;
@@ -1432,7 +1772,7 @@ function updateSummary() {
     text = `Runs every ${WEEKDAY_NAMES[+dow]} at ${fmtTime(+hr, +min)}`;
   } else if (hr.includes(',')) {
     const hours = hr.split(',').map(Number);
-    text = `Runs daily at ${hours.map(h => fmtTime(h, +min)).join(' and ')}`;
+    text = `Runs daily at ${hours.map((h) => fmtTime(h, +min)).join(' and ')}`;
   } else if (hr === '*/6') {
     text = `Runs every 6 hours at :${String(min).padStart(2, '0')}`;
   } else {
@@ -1447,7 +1787,10 @@ function fmtTime(h, m) {
 }
 
 // Wire up picker change events
-$('sched-frequency').addEventListener('change', () => { updatePickerVisibility(); pickerToCron(); });
+$('sched-frequency').addEventListener('change', () => {
+  updatePickerVisibility();
+  pickerToCron();
+});
 $('sched-hour').addEventListener('change', pickerToCron);
 $('sched-minute').addEventListener('change', pickerToCron);
 $('sched-weekday').addEventListener('change', pickerToCron);
@@ -1532,9 +1875,12 @@ async function dirBrowserNavigate(dirPath) {
     dirBrowserCurrent = result.current || '';
     renderCrumbs(result.crumbs || []);
 
-    list.innerHTML = result.dirs.map(d =>
-      `<div class="dir-entry" data-path="${esc(d.path)}"><span class="dir-entry-icon">&#128193;</span> ${esc(d.name)}</div>`
-    ).join('');
+    list.innerHTML = result.dirs
+      .map(
+        (d) =>
+          `<div class="dir-entry" data-path="${esc(d.path)}"><span class="dir-entry-icon">&#128193;</span> ${esc(d.name)}</div>`,
+      )
+      .join('');
     for (const entry of list.querySelectorAll('.dir-entry')) {
       entry.addEventListener('click', () => dirBrowserNavigate(entry.dataset.path));
     }
@@ -1549,7 +1895,9 @@ function openDirBrowser(startPath, callback) {
   dirBrowserNavigate(startPath || '');
 }
 
-function closeDirBrowser() { hide('dir-browser-modal'); }
+function closeDirBrowser() {
+  hide('dir-browser-modal');
+}
 
 $('dir-browser-select').addEventListener('click', () => {
   if (dirBrowserCallback && dirBrowserCurrent) {
@@ -1565,7 +1913,7 @@ $('dir-browser-new-folder').addEventListener('click', () => {
   const newPath = dirBrowserCurrent + sep + name.trim();
   POST('/mkdir', { path: newPath })
     .then(() => dirBrowserNavigate(newPath))
-    .catch(err => alert('Failed to create folder: ' + err.message));
+    .catch((err) => alert('Failed to create folder: ' + err.message));
 });
 
 $('dir-browser-cancel').addEventListener('click', closeDirBrowser);
@@ -1604,7 +1952,10 @@ $('btn-create-backup').addEventListener('click', async () => {
   }
 });
 
-$('btn-refresh-backups').addEventListener('click', () => { loadBackups(); loadBackupSchedule(); });
+$('btn-refresh-backups').addEventListener('click', () => {
+  loadBackups();
+  loadBackupSchedule();
+});
 
 // --- Restore modal ---
 let restoreFilename = null;
@@ -1701,7 +2052,8 @@ $('modpack-file-input').addEventListener('change', async (e) => {
 async function analyzeModpack(modpack) {
   show('modpack-modal');
   $('modpack-modal-title').textContent = `Import: ${esc(modpack.name || 'Modpack')}`;
-  $('modpack-modal-body').innerHTML = `<p class="dim">Analyzing ${modpack.mods.length} mods against installed mods...</p>`;
+  $('modpack-modal-body').innerHTML =
+    `<p class="dim">Analyzing ${modpack.mods.length} mods against installed mods...</p>`;
 
   try {
     const analysis = await POST('/modpack/analyze', { modpack });
@@ -1734,13 +2086,17 @@ function renderModpackAnalysis(modpack, analysis) {
         <input type="checkbox" id="modpack-conflict-all" />
         <span>Select all conflicts</span>
       </label>
-      ${conflict.map((mod, i) => `<div class="modpack-conflict-row">
+      ${conflict
+        .map(
+          (mod, i) => `<div class="modpack-conflict-row">
         <label class="toggle-label">
           <input type="checkbox" class="modpack-conflict-cb" data-idx="${i}" />
           <span><strong>${esc(mod.projectTitle)}</strong></span>
         </label>
         <span class="dim small">Installed: v${esc(mod.installedVersion || '?')} → Pack: v${esc(mod.versionNumber || '?')}</span>
-      </div>`).join('')}
+      </div>`,
+        )
+        .join('')}
     </div>`;
   }
 
@@ -1749,7 +2105,7 @@ function renderModpackAnalysis(modpack, analysis) {
     html += `<div class="modpack-section">
       <h4>New Mods to Install (${install.length})</h4>
       <div class="modpack-mod-list">
-        ${install.map(mod => `<span class="modpack-mod-chip">${esc(mod.projectTitle)} <span class="dim">v${esc(mod.versionNumber || '?')}</span></span>`).join('')}
+        ${install.map((mod) => `<span class="modpack-mod-chip">${esc(mod.projectTitle)} <span class="dim">v${esc(mod.versionNumber || '?')}</span></span>`).join('')}
       </div>
     </div>`;
   }
@@ -1759,7 +2115,7 @@ function renderModpackAnalysis(modpack, analysis) {
     html += `<div class="modpack-section">
       <h4>Already Installed (${skip.length})</h4>
       <div class="modpack-mod-list">
-        ${skip.map(mod => `<span class="modpack-mod-chip modpack-chip-skip">${esc(mod.projectTitle)} <span class="dim">v${esc(mod.versionNumber || '?')}</span></span>`).join('')}
+        ${skip.map((mod) => `<span class="modpack-mod-chip modpack-chip-skip">${esc(mod.projectTitle)} <span class="dim">v${esc(mod.versionNumber || '?')}</span></span>`).join('')}
       </div>
     </div>`;
   }
@@ -1769,7 +2125,7 @@ function renderModpackAnalysis(modpack, analysis) {
     html += `<div class="modpack-section">
       <h4>Client-Only — Ignored (${clientOnly.length})</h4>
       <div class="modpack-mod-list">
-        ${clientOnly.map(mod => `<span class="modpack-mod-chip modpack-chip-client">${esc(mod.projectTitle)}</span>`).join('')}
+        ${clientOnly.map((mod) => `<span class="modpack-mod-chip modpack-chip-client">${esc(mod.projectTitle)}</span>`).join('')}
       </div>
     </div>`;
   }
@@ -1794,7 +2150,9 @@ function renderModpackAnalysis(modpack, analysis) {
   const selectAllCb = $('modpack-conflict-all');
   if (selectAllCb) {
     selectAllCb.addEventListener('change', () => {
-      document.querySelectorAll('.modpack-conflict-cb').forEach(cb => { cb.checked = selectAllCb.checked; });
+      document.querySelectorAll('.modpack-conflict-cb').forEach((cb) => {
+        cb.checked = selectAllCb.checked;
+      });
     });
   }
 
@@ -1808,7 +2166,7 @@ function renderModpackAnalysis(modpack, analysis) {
     installBtn.addEventListener('click', () => {
       // Gather selected conflict mods
       const selectedConflicts = [];
-      document.querySelectorAll('.modpack-conflict-cb:checked').forEach(cb => {
+      document.querySelectorAll('.modpack-conflict-cb:checked').forEach((cb) => {
         const mod = conflict[parseInt(cb.dataset.idx)];
         selectedConflicts.push({ ...mod, replaceFilename: mod.installedFilename });
       });
@@ -1825,7 +2183,10 @@ function renderModpackAnalysis(modpack, analysis) {
 
 async function executeModpackImport(modsToInstall, analysis) {
   const btn = $('btn-modpack-install');
-  if (btn) { btn.disabled = true; btn.textContent = `Installing ${modsToInstall.length} mods...`; }
+  if (btn) {
+    btn.disabled = true;
+    btn.textContent = `Installing ${modsToInstall.length} mods...`;
+  }
 
   try {
     const report = await POST('/modpack/import', { mods: modsToInstall });
@@ -1833,7 +2194,10 @@ async function executeModpackImport(modsToInstall, analysis) {
     await loadMods(); // refresh the mods list
   } catch (err) {
     flash('modpack-install-msg', 'Import failed: ' + err.message, true);
-    if (btn) { btn.disabled = false; btn.textContent = 'Install Selected Mods'; }
+    if (btn) {
+      btn.disabled = false;
+      btn.textContent = 'Install Selected Mods';
+    }
   }
 }
 
@@ -1844,7 +2208,7 @@ function renderModpackReport(report, analysis) {
     html += `<div class="modpack-section">
       <p class="modpack-stat modpack-stat-new">${report.installed.length} mods installed successfully</p>
       <div class="modpack-mod-list">
-        ${report.installed.map(m => `<span class="modpack-mod-chip">${esc(m.title)} <span class="dim">v${esc(m.versionNumber || '?')}${m.size ? ` — ${formatSize(m.size)}` : ''}</span></span>`).join('')}
+        ${report.installed.map((m) => `<span class="modpack-mod-chip">${esc(m.title)} <span class="dim">v${esc(m.versionNumber || '?')}${m.size ? ` — ${formatSize(m.size)}` : ''}</span></span>`).join('')}
       </div>
     </div>`;
   }
@@ -1853,7 +2217,7 @@ function renderModpackReport(report, analysis) {
     html += `<div class="modpack-section">
       <p class="modpack-stat modpack-stat-conflict">${report.failed.length} mods failed</p>
       <div class="modpack-mod-list">
-        ${report.failed.map(m => `<span class="modpack-mod-chip modpack-chip-fail">${esc(m.title)} <span class="dim">— ${esc(m.error)}</span></span>`).join('')}
+        ${report.failed.map((m) => `<span class="modpack-mod-chip modpack-chip-fail">${esc(m.title)} <span class="dim">— ${esc(m.error)}</span></span>`).join('')}
       </div>
     </div>`;
   }
@@ -1879,197 +2243,506 @@ function renderModpackReport(report, analysis) {
 }
 
 $('modpack-modal-close').addEventListener('click', () => hide('modpack-modal'));
-$('modpack-modal').addEventListener('click', e => { if (e.target === $('modpack-modal')) hide('modpack-modal'); });
+$('modpack-modal').addEventListener('click', (e) => {
+  if (e.target === $('modpack-modal')) hide('modpack-modal');
+});
 
 // ============================================================
 // Command Reference (Help Modal)
 // ============================================================
 
 const CMD_HELP_DATA = [
-  { category: 'Getting Started', entries: [
-    { cmd: 'help', syntax: 'help [command]', desc: 'Shows a list of all available commands, or details about a specific command.',
-      detail: 'This is your best friend when you are not sure what a command does. Try <code>help gamemode</code> to see how to use that command.',
-      tip: 'You can type any command name after "help" to learn about it.' },
-    { cmd: 'list', syntax: 'list', desc: 'Shows all players currently online.',
-      detail: 'Displays the names of everyone connected to the server right now.' },
-    { cmd: 'say', syntax: 'say <message>', desc: 'Broadcasts a message to all players on the server.',
-      detail: 'The message appears in chat as <code>[Server] your message</code>. Great for announcements.',
-      example: 'say Server restarting in 5 minutes!' },
-    { cmd: 'tell / msg', syntax: 'tell <player> <message>', desc: 'Sends a private message to a specific player.',
-      example: 'tell Steve Hey, come check out the new base!' },
-  ]},
-  { category: 'World & Saving', entries: [
-    { cmd: 'save-all', syntax: 'save-all', desc: 'Saves the entire world to disk immediately.',
-      detail: 'Forces the server to write all world data to files. Use this before stopping the server or making a backup.',
-      tip: 'The server auto-saves periodically, but running this ensures nothing is lost.' },
-    { cmd: 'save-off', syntax: 'save-off', desc: 'Disables automatic world saving.',
-      detail: 'Useful during backups to prevent file corruption. <strong>Remember to turn it back on!</strong>',
-      tip: 'Always run save-on after your backup is done.' },
-    { cmd: 'save-on', syntax: 'save-on', desc: 'Re-enables automatic world saving.',
-      detail: 'Turns auto-save back on after you disabled it.' },
-    { cmd: 'seed', syntax: 'seed', desc: 'Shows the world seed number.',
-      detail: 'The seed is the number that generated your world. You can use it to create an identical world elsewhere.' },
-    { cmd: 'locate', syntax: 'locate structure <structure>', desc: 'Finds the nearest structure (village, fortress, etc.).',
-      example: 'locate structure minecraft:village_plains',
-      tip: 'Common structures: village_plains, fortress, monument, stronghold, mansion, bastion_remnant' },
-  ]},
-  { category: 'Time & Weather', entries: [
-    { cmd: 'time set', syntax: 'time set <value>', desc: 'Sets the world time.',
-      detail: 'Use named values like <code>day</code>, <code>night</code>, <code>noon</code>, or <code>midnight</code>. You can also use exact tick values (0-24000). Day starts at 1000, sunset at 12000, night at 13000.',
-      example: 'time set day' },
-    { cmd: 'time add', syntax: 'time add <ticks>', desc: 'Advances the clock forward by a number of ticks.',
-      detail: 'There are 24,000 ticks in one Minecraft day. Adding 6000 ticks skips about a quarter of the day.',
-      example: 'time add 6000' },
-    { cmd: 'weather clear', syntax: 'weather clear [seconds]', desc: 'Clears the weather (makes it sunny).',
-      detail: 'Optionally set how many seconds the clear weather lasts. Without a number, it picks a random duration.',
-      example: 'weather clear 999999' },
-    { cmd: 'weather rain', syntax: 'weather rain [seconds]', desc: 'Makes it rain (or snow in cold biomes).', example: 'weather rain' },
-    { cmd: 'weather thunder', syntax: 'weather thunder [seconds]', desc: 'Starts a thunderstorm.', example: 'weather thunder' },
-  ]},
-  { category: 'Players & Permissions', entries: [
-    { cmd: 'gamemode', syntax: 'gamemode <mode> <player>', desc: 'Changes a player\'s game mode.',
-      detail: 'Modes: <code>survival</code> (normal gameplay), <code>creative</code> (fly + unlimited blocks), <code>adventure</code> (can\'t break/place blocks), <code>spectator</code> (invisible, fly through walls).',
-      example: 'gamemode creative Steve' },
-    { cmd: 'kick', syntax: 'kick <player> [reason]', desc: 'Disconnects a player from the server.',
-      detail: 'They can rejoin unless they are banned. Good for players misbehaving.',
-      example: 'kick Steve Please stop griefing' },
-    { cmd: 'ban', syntax: 'ban <player> [reason]', desc: 'Permanently bans a player from the server.',
-      detail: 'The player is immediately kicked and cannot rejoin. Use <code>pardon</code> to unban them.',
-      example: 'ban Griefer123 Destroying other players\' builds' },
-    { cmd: 'pardon', syntax: 'pardon <player>', desc: 'Unbans a previously banned player.', example: 'pardon Steve' },
-    { cmd: 'ban-ip', syntax: 'ban-ip <ip>', desc: 'Bans an IP address from the server.', detail: 'Blocks all accounts from that IP. Use carefully.' },
-    { cmd: 'op', syntax: 'op <player>', desc: 'Gives a player operator (admin) privileges.',
-      detail: 'Operators can use all server commands. Be careful who you op!',
-      tip: 'Use the Players tab for more control over op levels (1-4).' },
-    { cmd: 'deop', syntax: 'deop <player>', desc: 'Removes operator privileges from a player.', example: 'deop Steve' },
-    { cmd: 'whitelist', syntax: 'whitelist <add|remove|list|on|off|reload>', desc: 'Manages the server whitelist.',
-      detail: 'When the whitelist is on, only listed players can join. <code>whitelist add Steve</code> adds a player. <code>whitelist on</code> enables it.',
-      example: 'whitelist add Steve' },
-  ]},
-  { category: 'Teleporting & Movement', entries: [
-    { cmd: 'tp / teleport', syntax: 'tp <player> <x> <y> <z>', desc: 'Teleports a player to specific coordinates.',
-      detail: 'Use exact numbers or <code>~</code> for relative positions. <code>~ ~ ~</code> means "right here".',
-      example: 'tp Steve 100 64 -200',
-      tip: 'tp Steve ~ ~50 ~ will teleport Steve 50 blocks up from their current position.' },
-    { cmd: 'tp (to player)', syntax: 'tp <player> <target>', desc: 'Teleports one player to another player.',
-      example: 'tp Steve Alex' },
-    { cmd: 'spawnpoint', syntax: 'spawnpoint <player> <x> <y> <z>', desc: 'Sets where a player respawns after dying.',
-      example: 'spawnpoint Steve 100 64 -200' },
-    { cmd: 'setworldspawn', syntax: 'setworldspawn <x> <y> <z>', desc: 'Sets the world\'s default spawn point for all new players.',
-      example: 'setworldspawn 0 64 0' },
-    { cmd: 'spreadplayers', syntax: 'spreadplayers <x> <z> <minDist> <maxRange> <player...>', desc: 'Randomly spreads players across an area.',
-      detail: 'Useful for minigames or spreading players out at the start of a challenge.',
-      example: 'spreadplayers 0 0 100 500 @a' },
-  ]},
-  { category: 'Giving Items & Effects', entries: [
-    { cmd: 'give', syntax: 'give <player> <item> [amount]', desc: 'Gives items to a player.',
-      detail: 'Item IDs look like <code>minecraft:diamond</code> or just <code>diamond</code>. Amount defaults to 1.',
-      example: 'give Steve diamond 64',
-      tip: 'Common items: diamond, iron_ingot, golden_apple, netherite_ingot, elytra, ender_pearl' },
-    { cmd: 'clear', syntax: 'clear <player> [item] [amount]', desc: 'Removes items from a player\'s inventory.',
-      detail: 'Without specifying an item, clears their entire inventory!',
-      example: 'clear Steve dirt' },
-    { cmd: 'effect give', syntax: 'effect give <player> <effect> [seconds] [level]', desc: 'Applies a status effect to a player.',
-      detail: 'Effects include speed, strength, regeneration, invisibility, etc. Level 0 = level I, level 1 = level II.',
-      example: 'effect give Steve speed 60 1',
-      tip: 'Useful effects: speed, strength, regeneration, night_vision, invisibility, jump_boost, resistance, fire_resistance, slow_falling' },
-    { cmd: 'effect clear', syntax: 'effect clear <player> [effect]', desc: 'Removes status effects from a player.',
-      detail: 'Without specifying an effect, removes ALL effects.',
-      example: 'effect clear Steve' },
-    { cmd: 'enchant', syntax: 'enchant <player> <enchantment> [level]', desc: 'Enchants the item a player is holding.',
-      example: 'enchant Steve sharpness 5',
-      tip: 'Common enchantments: sharpness, protection, efficiency, unbreaking, fortune, looting, mending' },
-    { cmd: 'xp', syntax: 'xp add <player> <amount> [levels|points]', desc: 'Gives or removes XP from a player.',
-      example: 'xp add Steve 30 levels' },
-  ]},
-  { category: 'Game Rules', entries: [
-    { cmd: 'difficulty', syntax: 'difficulty <level>', desc: 'Changes the server difficulty.',
-      detail: 'Options: <code>peaceful</code> (no mobs), <code>easy</code>, <code>normal</code>, <code>hard</code>.',
-      example: 'difficulty hard' },
-    { cmd: 'gamerule keepInventory', syntax: 'gamerule keepInventory true/false', desc: 'Whether players keep items when they die.',
-      detail: 'When true, dying won\'t drop your items. Great for younger players or when building.',
-      tip: 'This is one of the most popular gamerules to change.' },
-    { cmd: 'gamerule doDaylightCycle', syntax: 'gamerule doDaylightCycle true/false', desc: 'Whether time passes naturally.',
-      detail: 'Set to false to freeze the sun in place. Combine with <code>time set day</code> for permanent daytime.' },
-    { cmd: 'gamerule doMobSpawning', syntax: 'gamerule doMobSpawning true/false', desc: 'Whether mobs spawn naturally.',
-      detail: 'Disabling this stops all natural mob spawning (both hostile and friendly). Spawners still work.' },
-    { cmd: 'gamerule doWeatherCycle', syntax: 'gamerule doWeatherCycle true/false', desc: 'Whether weather changes naturally.',
-      detail: 'Set to false and use <code>weather clear</code> for permanent sunshine.' },
-    { cmd: 'gamerule mobGriefing', syntax: 'gamerule mobGriefing true/false', desc: 'Whether mobs can destroy blocks.',
-      detail: 'When false, creepers won\'t blow up blocks and endermen won\'t pick them up. Mobs still do damage to players.',
-      tip: 'This also prevents villagers from farming, which may not be what you want.' },
-    { cmd: 'gamerule pvp', syntax: 'gamerule pvp true/false', desc: 'Whether players can damage each other.',
-      detail: 'Set to false to prevent PvP combat. Note: this is actually set in server.properties, not as a gamerule. Use the server.properties editor in Settings.' },
-    { cmd: 'gamerule doFireTick', syntax: 'gamerule doFireTick true/false', desc: 'Whether fire spreads and burns things.',
-      detail: 'Set to false to prevent accidental fire damage to builds.' },
-    { cmd: 'gamerule announceAdvancements', syntax: 'gamerule announceAdvancements true/false', desc: 'Whether advancement messages show in chat.',
-      detail: 'Set to false to stop the "[Player] has made the advancement..." messages.' },
-    { cmd: 'gamerule commandBlockOutput', syntax: 'gamerule commandBlockOutput true/false', desc: 'Whether command blocks show output in chat.',
-      detail: 'Set to false to reduce chat spam from command blocks.' },
-    { cmd: 'gamerule showDeathMessages', syntax: 'gamerule showDeathMessages true/false', desc: 'Whether death messages appear in chat.' },
-    { cmd: 'gamerule naturalRegeneration', syntax: 'gamerule naturalRegeneration true/false', desc: 'Whether players regenerate health from being full.',
-      detail: 'When false, players must use potions or golden apples to heal. Makes the game much harder.' },
-    { cmd: 'gamerule randomTickSpeed', syntax: 'gamerule randomTickSpeed <number>', desc: 'Controls how fast crops grow and leaves decay.',
-      detail: 'Default is 3. Higher = faster crop growth. Setting to 0 freezes crop growth entirely.',
-      example: 'gamerule randomTickSpeed 10' },
-  ]},
-  { category: 'World Borders & Spawn', entries: [
-    { cmd: 'worldborder set', syntax: 'worldborder set <size> [seconds]', desc: 'Sets the world border size.',
-      detail: 'Size is the total width/height in blocks. If you add seconds, it gradually shrinks or grows to that size.',
-      example: 'worldborder set 5000',
-      tip: 'Shrinking borders are great for minigames! Try: worldborder set 100 600' },
-    { cmd: 'worldborder center', syntax: 'worldborder center <x> <z>', desc: 'Moves the center of the world border.',
-      example: 'worldborder center 0 0' },
-    { cmd: 'worldborder get', syntax: 'worldborder get', desc: 'Shows the current world border size.' },
-  ]},
-  { category: 'Performance & Advanced', entries: [
-    { cmd: 'tick rate', syntax: 'tick rate <rate>', desc: 'Changes the server tick speed.',
-      detail: 'Default is 20 ticks/second. Lower = slower game. Higher = faster. <strong>Changing this can cause lag.</strong>',
-      example: 'tick rate 20' },
-    { cmd: 'tick freeze', syntax: 'tick freeze', desc: 'Freezes all game ticks.',
-      detail: 'The world stops: mobs freeze, items stop, nothing moves. Players can still walk around. Use <code>tick unfreeze</code> to resume.' },
-    { cmd: 'forceload', syntax: 'forceload add <x> <z>', desc: 'Keeps a chunk loaded even when no players are nearby.',
-      detail: 'Useful for farms or machines that need to run 24/7. Use <code>forceload query</code> to see which chunks are forceloaded.',
-      tip: 'Forceloading too many chunks can cause lag.' },
-    { cmd: 'kill', syntax: 'kill <target>', desc: 'Instantly kills entities.',
-      detail: 'Use <code>@e[type=zombie]</code> to kill all zombies, or <code>@e[type=item]</code> to clean up item drops.',
-      example: 'kill @e[type=zombie]',
-      tip: 'Be very careful with @e (all entities) — it will kill players too! Use @e[type=!player] to exclude players.' },
-    { cmd: 'fill', syntax: 'fill <x1> <y1> <z1> <x2> <y2> <z2> <block> [mode]', desc: 'Fills a region with a specific block.',
-      detail: 'Modes: <code>replace</code> (default), <code>hollow</code> (only edges), <code>outline</code> (only outer shell), <code>destroy</code> (drops items).',
-      example: 'fill 0 60 0 20 64 20 stone' },
-    { cmd: 'setblock', syntax: 'setblock <x> <y> <z> <block>', desc: 'Places a single block at the given coordinates.',
-      example: 'setblock 0 64 0 diamond_block' },
-    { cmd: 'summon', syntax: 'summon <entity> [x] [y] [z]', desc: 'Spawns an entity at the given location.',
-      example: 'summon minecraft:pig ~ ~ ~',
-      tip: 'Fun entities to summon: pig, cow, villager, iron_golem, ender_dragon, lightning_bolt' },
-  ]},
-  { category: 'Recipes', entries: [
-    { cmd: 'recipe give', syntax: 'recipe give <player> <recipe|*>', desc: 'Unlocks recipes in a player\'s recipe book.',
-      detail: 'Use <code>*</code> to unlock all recipes at once. Only affects the recipe book UI — players can still craft anything at a crafting table.',
-      example: 'recipe give Steve *' },
-    { cmd: 'recipe take', syntax: 'recipe take <player> <recipe|*>', desc: 'Removes recipes from a player\'s recipe book.',
-      detail: 'Hides recipes from the recipe book. Use <code>*</code> to hide all. Players can still craft items manually if they know the pattern.',
-      example: 'recipe take Steve minecraft:diamond_sword',
-      tip: 'To truly disable crafting recipes, you need a datapack or mod like CraftTweaker.' },
-  ]},
-  { category: 'Selectors & Shortcuts', entries: [
-    { cmd: '@a', syntax: '@a', desc: 'Targets ALL players on the server.',
-      detail: 'Use in place of a player name to affect everyone. Example: <code>effect give @a speed 60</code> gives everyone speed.',
-      tip: 'You can filter: @a[distance=..10] = players within 10 blocks of the command source.' },
-    { cmd: '@p', syntax: '@p', desc: 'Targets the NEAREST player.',
-      detail: 'Useful when running commands from command blocks.' },
-    { cmd: '@r', syntax: '@r', desc: 'Targets a RANDOM player.',
-      detail: 'Fun for minigames! Example: <code>tp @r 0 64 0</code> teleports a random player to spawn.' },
-    { cmd: '@e', syntax: '@e', desc: 'Targets ALL entities (mobs, items, everything).',
-      detail: 'Very powerful but dangerous. <code>@e</code> includes players! Use <code>@e[type=!player]</code> to exclude them.',
-      tip: 'Filter by type: @e[type=zombie], @e[type=item], @e[type=!player]' },
-    { cmd: '@s', syntax: '@s', desc: 'Targets the entity running the command (yourself).',
-      detail: 'Rarely used from the server console, more useful in-game or from command blocks.' },
-    { cmd: '~ (tilde)', syntax: '~ or ~5 or ~-3', desc: 'Relative coordinates — offset from current position.',
-      detail: '<code>~</code> = exact current position. <code>~5</code> = 5 blocks forward. <code>~-3</code> = 3 blocks backward. Used in place of X, Y, or Z values.',
-      example: 'tp Steve ~ ~10 ~ (teleport 10 blocks up)' },
-  ]},
+  {
+    category: 'Getting Started',
+    entries: [
+      {
+        cmd: 'help',
+        syntax: 'help [command]',
+        desc: 'Shows a list of all available commands, or details about a specific command.',
+        detail:
+          'This is your best friend when you are not sure what a command does. Try <code>help gamemode</code> to see how to use that command.',
+        tip: 'You can type any command name after "help" to learn about it.',
+      },
+      {
+        cmd: 'list',
+        syntax: 'list',
+        desc: 'Shows all players currently online.',
+        detail: 'Displays the names of everyone connected to the server right now.',
+      },
+      {
+        cmd: 'say',
+        syntax: 'say <message>',
+        desc: 'Broadcasts a message to all players on the server.',
+        detail: 'The message appears in chat as <code>[Server] your message</code>. Great for announcements.',
+        example: 'say Server restarting in 5 minutes!',
+      },
+      {
+        cmd: 'tell / msg',
+        syntax: 'tell <player> <message>',
+        desc: 'Sends a private message to a specific player.',
+        example: 'tell Steve Hey, come check out the new base!',
+      },
+    ],
+  },
+  {
+    category: 'World & Saving',
+    entries: [
+      {
+        cmd: 'save-all',
+        syntax: 'save-all',
+        desc: 'Saves the entire world to disk immediately.',
+        detail:
+          'Forces the server to write all world data to files. Use this before stopping the server or making a backup.',
+        tip: 'The server auto-saves periodically, but running this ensures nothing is lost.',
+      },
+      {
+        cmd: 'save-off',
+        syntax: 'save-off',
+        desc: 'Disables automatic world saving.',
+        detail: 'Useful during backups to prevent file corruption. <strong>Remember to turn it back on!</strong>',
+        tip: 'Always run save-on after your backup is done.',
+      },
+      {
+        cmd: 'save-on',
+        syntax: 'save-on',
+        desc: 'Re-enables automatic world saving.',
+        detail: 'Turns auto-save back on after you disabled it.',
+      },
+      {
+        cmd: 'seed',
+        syntax: 'seed',
+        desc: 'Shows the world seed number.',
+        detail:
+          'The seed is the number that generated your world. You can use it to create an identical world elsewhere.',
+      },
+      {
+        cmd: 'locate',
+        syntax: 'locate structure <structure>',
+        desc: 'Finds the nearest structure (village, fortress, etc.).',
+        example: 'locate structure minecraft:village_plains',
+        tip: 'Common structures: village_plains, fortress, monument, stronghold, mansion, bastion_remnant',
+      },
+    ],
+  },
+  {
+    category: 'Time & Weather',
+    entries: [
+      {
+        cmd: 'time set',
+        syntax: 'time set <value>',
+        desc: 'Sets the world time.',
+        detail:
+          'Use named values like <code>day</code>, <code>night</code>, <code>noon</code>, or <code>midnight</code>. You can also use exact tick values (0-24000). Day starts at 1000, sunset at 12000, night at 13000.',
+        example: 'time set day',
+      },
+      {
+        cmd: 'time add',
+        syntax: 'time add <ticks>',
+        desc: 'Advances the clock forward by a number of ticks.',
+        detail: 'There are 24,000 ticks in one Minecraft day. Adding 6000 ticks skips about a quarter of the day.',
+        example: 'time add 6000',
+      },
+      {
+        cmd: 'weather clear',
+        syntax: 'weather clear [seconds]',
+        desc: 'Clears the weather (makes it sunny).',
+        detail:
+          'Optionally set how many seconds the clear weather lasts. Without a number, it picks a random duration.',
+        example: 'weather clear 999999',
+      },
+      {
+        cmd: 'weather rain',
+        syntax: 'weather rain [seconds]',
+        desc: 'Makes it rain (or snow in cold biomes).',
+        example: 'weather rain',
+      },
+      {
+        cmd: 'weather thunder',
+        syntax: 'weather thunder [seconds]',
+        desc: 'Starts a thunderstorm.',
+        example: 'weather thunder',
+      },
+    ],
+  },
+  {
+    category: 'Players & Permissions',
+    entries: [
+      {
+        cmd: 'gamemode',
+        syntax: 'gamemode <mode> <player>',
+        desc: "Changes a player's game mode.",
+        detail:
+          "Modes: <code>survival</code> (normal gameplay), <code>creative</code> (fly + unlimited blocks), <code>adventure</code> (can't break/place blocks), <code>spectator</code> (invisible, fly through walls).",
+        example: 'gamemode creative Steve',
+      },
+      {
+        cmd: 'kick',
+        syntax: 'kick <player> [reason]',
+        desc: 'Disconnects a player from the server.',
+        detail: 'They can rejoin unless they are banned. Good for players misbehaving.',
+        example: 'kick Steve Please stop griefing',
+      },
+      {
+        cmd: 'ban',
+        syntax: 'ban <player> [reason]',
+        desc: 'Permanently bans a player from the server.',
+        detail: 'The player is immediately kicked and cannot rejoin. Use <code>pardon</code> to unban them.',
+        example: "ban Griefer123 Destroying other players' builds",
+      },
+      { cmd: 'pardon', syntax: 'pardon <player>', desc: 'Unbans a previously banned player.', example: 'pardon Steve' },
+      {
+        cmd: 'ban-ip',
+        syntax: 'ban-ip <ip>',
+        desc: 'Bans an IP address from the server.',
+        detail: 'Blocks all accounts from that IP. Use carefully.',
+      },
+      {
+        cmd: 'op',
+        syntax: 'op <player>',
+        desc: 'Gives a player operator (admin) privileges.',
+        detail: 'Operators can use all server commands. Be careful who you op!',
+        tip: 'Use the Players tab for more control over op levels (1-4).',
+      },
+      {
+        cmd: 'deop',
+        syntax: 'deop <player>',
+        desc: 'Removes operator privileges from a player.',
+        example: 'deop Steve',
+      },
+      {
+        cmd: 'whitelist',
+        syntax: 'whitelist <add|remove|list|on|off|reload>',
+        desc: 'Manages the server whitelist.',
+        detail:
+          'When the whitelist is on, only listed players can join. <code>whitelist add Steve</code> adds a player. <code>whitelist on</code> enables it.',
+        example: 'whitelist add Steve',
+      },
+    ],
+  },
+  {
+    category: 'Teleporting & Movement',
+    entries: [
+      {
+        cmd: 'tp / teleport',
+        syntax: 'tp <player> <x> <y> <z>',
+        desc: 'Teleports a player to specific coordinates.',
+        detail: 'Use exact numbers or <code>~</code> for relative positions. <code>~ ~ ~</code> means "right here".',
+        example: 'tp Steve 100 64 -200',
+        tip: 'tp Steve ~ ~50 ~ will teleport Steve 50 blocks up from their current position.',
+      },
+      {
+        cmd: 'tp (to player)',
+        syntax: 'tp <player> <target>',
+        desc: 'Teleports one player to another player.',
+        example: 'tp Steve Alex',
+      },
+      {
+        cmd: 'spawnpoint',
+        syntax: 'spawnpoint <player> <x> <y> <z>',
+        desc: 'Sets where a player respawns after dying.',
+        example: 'spawnpoint Steve 100 64 -200',
+      },
+      {
+        cmd: 'setworldspawn',
+        syntax: 'setworldspawn <x> <y> <z>',
+        desc: "Sets the world's default spawn point for all new players.",
+        example: 'setworldspawn 0 64 0',
+      },
+      {
+        cmd: 'spreadplayers',
+        syntax: 'spreadplayers <x> <z> <minDist> <maxRange> <player...>',
+        desc: 'Randomly spreads players across an area.',
+        detail: 'Useful for minigames or spreading players out at the start of a challenge.',
+        example: 'spreadplayers 0 0 100 500 @a',
+      },
+    ],
+  },
+  {
+    category: 'Giving Items & Effects',
+    entries: [
+      {
+        cmd: 'give',
+        syntax: 'give <player> <item> [amount]',
+        desc: 'Gives items to a player.',
+        detail: 'Item IDs look like <code>minecraft:diamond</code> or just <code>diamond</code>. Amount defaults to 1.',
+        example: 'give Steve diamond 64',
+        tip: 'Common items: diamond, iron_ingot, golden_apple, netherite_ingot, elytra, ender_pearl',
+      },
+      {
+        cmd: 'clear',
+        syntax: 'clear <player> [item] [amount]',
+        desc: "Removes items from a player's inventory.",
+        detail: 'Without specifying an item, clears their entire inventory!',
+        example: 'clear Steve dirt',
+      },
+      {
+        cmd: 'effect give',
+        syntax: 'effect give <player> <effect> [seconds] [level]',
+        desc: 'Applies a status effect to a player.',
+        detail:
+          'Effects include speed, strength, regeneration, invisibility, etc. Level 0 = level I, level 1 = level II.',
+        example: 'effect give Steve speed 60 1',
+        tip: 'Useful effects: speed, strength, regeneration, night_vision, invisibility, jump_boost, resistance, fire_resistance, slow_falling',
+      },
+      {
+        cmd: 'effect clear',
+        syntax: 'effect clear <player> [effect]',
+        desc: 'Removes status effects from a player.',
+        detail: 'Without specifying an effect, removes ALL effects.',
+        example: 'effect clear Steve',
+      },
+      {
+        cmd: 'enchant',
+        syntax: 'enchant <player> <enchantment> [level]',
+        desc: 'Enchants the item a player is holding.',
+        example: 'enchant Steve sharpness 5',
+        tip: 'Common enchantments: sharpness, protection, efficiency, unbreaking, fortune, looting, mending',
+      },
+      {
+        cmd: 'xp',
+        syntax: 'xp add <player> <amount> [levels|points]',
+        desc: 'Gives or removes XP from a player.',
+        example: 'xp add Steve 30 levels',
+      },
+    ],
+  },
+  {
+    category: 'Game Rules',
+    entries: [
+      {
+        cmd: 'difficulty',
+        syntax: 'difficulty <level>',
+        desc: 'Changes the server difficulty.',
+        detail: 'Options: <code>peaceful</code> (no mobs), <code>easy</code>, <code>normal</code>, <code>hard</code>.',
+        example: 'difficulty hard',
+      },
+      {
+        cmd: 'gamerule keepInventory',
+        syntax: 'gamerule keepInventory true/false',
+        desc: 'Whether players keep items when they die.',
+        detail: "When true, dying won't drop your items. Great for younger players or when building.",
+        tip: 'This is one of the most popular gamerules to change.',
+      },
+      {
+        cmd: 'gamerule doDaylightCycle',
+        syntax: 'gamerule doDaylightCycle true/false',
+        desc: 'Whether time passes naturally.',
+        detail:
+          'Set to false to freeze the sun in place. Combine with <code>time set day</code> for permanent daytime.',
+      },
+      {
+        cmd: 'gamerule doMobSpawning',
+        syntax: 'gamerule doMobSpawning true/false',
+        desc: 'Whether mobs spawn naturally.',
+        detail: 'Disabling this stops all natural mob spawning (both hostile and friendly). Spawners still work.',
+      },
+      {
+        cmd: 'gamerule doWeatherCycle',
+        syntax: 'gamerule doWeatherCycle true/false',
+        desc: 'Whether weather changes naturally.',
+        detail: 'Set to false and use <code>weather clear</code> for permanent sunshine.',
+      },
+      {
+        cmd: 'gamerule mobGriefing',
+        syntax: 'gamerule mobGriefing true/false',
+        desc: 'Whether mobs can destroy blocks.',
+        detail:
+          "When false, creepers won't blow up blocks and endermen won't pick them up. Mobs still do damage to players.",
+        tip: 'This also prevents villagers from farming, which may not be what you want.',
+      },
+      {
+        cmd: 'gamerule pvp',
+        syntax: 'gamerule pvp true/false',
+        desc: 'Whether players can damage each other.',
+        detail:
+          'Set to false to prevent PvP combat. Note: this is actually set in server.properties, not as a gamerule. Use the server.properties editor in Settings.',
+      },
+      {
+        cmd: 'gamerule doFireTick',
+        syntax: 'gamerule doFireTick true/false',
+        desc: 'Whether fire spreads and burns things.',
+        detail: 'Set to false to prevent accidental fire damage to builds.',
+      },
+      {
+        cmd: 'gamerule announceAdvancements',
+        syntax: 'gamerule announceAdvancements true/false',
+        desc: 'Whether advancement messages show in chat.',
+        detail: 'Set to false to stop the "[Player] has made the advancement..." messages.',
+      },
+      {
+        cmd: 'gamerule commandBlockOutput',
+        syntax: 'gamerule commandBlockOutput true/false',
+        desc: 'Whether command blocks show output in chat.',
+        detail: 'Set to false to reduce chat spam from command blocks.',
+      },
+      {
+        cmd: 'gamerule showDeathMessages',
+        syntax: 'gamerule showDeathMessages true/false',
+        desc: 'Whether death messages appear in chat.',
+      },
+      {
+        cmd: 'gamerule naturalRegeneration',
+        syntax: 'gamerule naturalRegeneration true/false',
+        desc: 'Whether players regenerate health from being full.',
+        detail: 'When false, players must use potions or golden apples to heal. Makes the game much harder.',
+      },
+      {
+        cmd: 'gamerule randomTickSpeed',
+        syntax: 'gamerule randomTickSpeed <number>',
+        desc: 'Controls how fast crops grow and leaves decay.',
+        detail: 'Default is 3. Higher = faster crop growth. Setting to 0 freezes crop growth entirely.',
+        example: 'gamerule randomTickSpeed 10',
+      },
+    ],
+  },
+  {
+    category: 'World Borders & Spawn',
+    entries: [
+      {
+        cmd: 'worldborder set',
+        syntax: 'worldborder set <size> [seconds]',
+        desc: 'Sets the world border size.',
+        detail:
+          'Size is the total width/height in blocks. If you add seconds, it gradually shrinks or grows to that size.',
+        example: 'worldborder set 5000',
+        tip: 'Shrinking borders are great for minigames! Try: worldborder set 100 600',
+      },
+      {
+        cmd: 'worldborder center',
+        syntax: 'worldborder center <x> <z>',
+        desc: 'Moves the center of the world border.',
+        example: 'worldborder center 0 0',
+      },
+      { cmd: 'worldborder get', syntax: 'worldborder get', desc: 'Shows the current world border size.' },
+    ],
+  },
+  {
+    category: 'Performance & Advanced',
+    entries: [
+      {
+        cmd: 'tick rate',
+        syntax: 'tick rate <rate>',
+        desc: 'Changes the server tick speed.',
+        detail:
+          'Default is 20 ticks/second. Lower = slower game. Higher = faster. <strong>Changing this can cause lag.</strong>',
+        example: 'tick rate 20',
+      },
+      {
+        cmd: 'tick freeze',
+        syntax: 'tick freeze',
+        desc: 'Freezes all game ticks.',
+        detail:
+          'The world stops: mobs freeze, items stop, nothing moves. Players can still walk around. Use <code>tick unfreeze</code> to resume.',
+      },
+      {
+        cmd: 'forceload',
+        syntax: 'forceload add <x> <z>',
+        desc: 'Keeps a chunk loaded even when no players are nearby.',
+        detail:
+          'Useful for farms or machines that need to run 24/7. Use <code>forceload query</code> to see which chunks are forceloaded.',
+        tip: 'Forceloading too many chunks can cause lag.',
+      },
+      {
+        cmd: 'kill',
+        syntax: 'kill <target>',
+        desc: 'Instantly kills entities.',
+        detail:
+          'Use <code>@e[type=zombie]</code> to kill all zombies, or <code>@e[type=item]</code> to clean up item drops.',
+        example: 'kill @e[type=zombie]',
+        tip: 'Be very careful with @e (all entities) — it will kill players too! Use @e[type=!player] to exclude players.',
+      },
+      {
+        cmd: 'fill',
+        syntax: 'fill <x1> <y1> <z1> <x2> <y2> <z2> <block> [mode]',
+        desc: 'Fills a region with a specific block.',
+        detail:
+          'Modes: <code>replace</code> (default), <code>hollow</code> (only edges), <code>outline</code> (only outer shell), <code>destroy</code> (drops items).',
+        example: 'fill 0 60 0 20 64 20 stone',
+      },
+      {
+        cmd: 'setblock',
+        syntax: 'setblock <x> <y> <z> <block>',
+        desc: 'Places a single block at the given coordinates.',
+        example: 'setblock 0 64 0 diamond_block',
+      },
+      {
+        cmd: 'summon',
+        syntax: 'summon <entity> [x] [y] [z]',
+        desc: 'Spawns an entity at the given location.',
+        example: 'summon minecraft:pig ~ ~ ~',
+        tip: 'Fun entities to summon: pig, cow, villager, iron_golem, ender_dragon, lightning_bolt',
+      },
+    ],
+  },
+  {
+    category: 'Recipes',
+    entries: [
+      {
+        cmd: 'recipe give',
+        syntax: 'recipe give <player> <recipe|*>',
+        desc: "Unlocks recipes in a player's recipe book.",
+        detail:
+          'Use <code>*</code> to unlock all recipes at once. Only affects the recipe book UI — players can still craft anything at a crafting table.',
+        example: 'recipe give Steve *',
+      },
+      {
+        cmd: 'recipe take',
+        syntax: 'recipe take <player> <recipe|*>',
+        desc: "Removes recipes from a player's recipe book.",
+        detail:
+          'Hides recipes from the recipe book. Use <code>*</code> to hide all. Players can still craft items manually if they know the pattern.',
+        example: 'recipe take Steve minecraft:diamond_sword',
+        tip: 'To truly disable crafting recipes, you need a datapack or mod like CraftTweaker.',
+      },
+    ],
+  },
+  {
+    category: 'Selectors & Shortcuts',
+    entries: [
+      {
+        cmd: '@a',
+        syntax: '@a',
+        desc: 'Targets ALL players on the server.',
+        detail:
+          'Use in place of a player name to affect everyone. Example: <code>effect give @a speed 60</code> gives everyone speed.',
+        tip: 'You can filter: @a[distance=..10] = players within 10 blocks of the command source.',
+      },
+      {
+        cmd: '@p',
+        syntax: '@p',
+        desc: 'Targets the NEAREST player.',
+        detail: 'Useful when running commands from command blocks.',
+      },
+      {
+        cmd: '@r',
+        syntax: '@r',
+        desc: 'Targets a RANDOM player.',
+        detail: 'Fun for minigames! Example: <code>tp @r 0 64 0</code> teleports a random player to spawn.',
+      },
+      {
+        cmd: '@e',
+        syntax: '@e',
+        desc: 'Targets ALL entities (mobs, items, everything).',
+        detail:
+          'Very powerful but dangerous. <code>@e</code> includes players! Use <code>@e[type=!player]</code> to exclude them.',
+        tip: 'Filter by type: @e[type=zombie], @e[type=item], @e[type=!player]',
+      },
+      {
+        cmd: '@s',
+        syntax: '@s',
+        desc: 'Targets the entity running the command (yourself).',
+        detail: 'Rarely used from the server console, more useful in-game or from command blocks.',
+      },
+      {
+        cmd: '~ (tilde)',
+        syntax: '~ or ~5 or ~-3',
+        desc: 'Relative coordinates — offset from current position.',
+        detail:
+          '<code>~</code> = exact current position. <code>~5</code> = 5 blocks forward. <code>~-3</code> = 3 blocks backward. Used in place of X, Y, or Z values.',
+        example: 'tp Steve ~ ~10 ~ (teleport 10 blocks up)',
+      },
+    ],
+  },
 ];
 
 function renderCmdHelp(filter) {
@@ -2088,10 +2761,11 @@ function renderCmdHelp(filter) {
   let totalMatches = 0;
 
   for (const cat of CMD_HELP_DATA) {
-    const matchingEntries = cat.entries.filter(e => {
+    const matchingEntries = cat.entries.filter((e) => {
       if (!q) return true;
-      const haystack = `${e.cmd} ${e.desc} ${e.detail || ''} ${e.syntax} ${e.example || ''} ${e.tip || ''} ${cat.category}`.toLowerCase();
-      return q.split(/\s+/).every(word => haystack.includes(word));
+      const haystack =
+        `${e.cmd} ${e.desc} ${e.detail || ''} ${e.syntax} ${e.example || ''} ${e.tip || ''} ${cat.category}`.toLowerCase();
+      return q.split(/\s+/).every((word) => haystack.includes(word));
     });
 
     if (matchingEntries.length === 0) continue;
@@ -2105,7 +2779,10 @@ function renderCmdHelp(filter) {
       detailParts.push(`<p>${e.desc}</p>`);
       if (e.detail) detailParts.push(`<p>${e.detail}</p>`);
       detailParts.push(`<p><strong>Usage:</strong> <span class="cmd-syntax">${esc(e.syntax)}</span></p>`);
-      if (e.example) detailParts.push(`<p class="cmd-example"><strong>Example:</strong> <span class="cmd-syntax">${esc(e.example)}</span></p>`);
+      if (e.example)
+        detailParts.push(
+          `<p class="cmd-example"><strong>Example:</strong> <span class="cmd-syntax">${esc(e.example)}</span></p>`,
+        );
       if (e.tip) detailParts.push(`<div class="cmd-tip">Tip: ${e.tip}</div>`);
 
       // Only show "Try it" button for commands that are directly runnable (no arguments needed)
@@ -2137,7 +2814,7 @@ function renderCmdHelp(filter) {
   body.innerHTML = html;
 
   // Wire up expand/collapse
-  body.querySelectorAll('.cmd-help-entry-header').forEach(header => {
+  body.querySelectorAll('.cmd-help-entry-header').forEach((header) => {
     header.addEventListener('click', (e) => {
       if (e.target.closest('.cmd-help-entry-run')) return; // don't toggle when clicking Try
       header.closest('.cmd-help-entry').classList.toggle('open');
@@ -2145,7 +2822,7 @@ function renderCmdHelp(filter) {
   });
 
   // Wire up "Try it" buttons
-  body.querySelectorAll('[data-try-cmd]').forEach(btn => {
+  body.querySelectorAll('[data-try-cmd]').forEach((btn) => {
     btn.addEventListener('click', async () => {
       const cmd = btn.dataset.tryCmd;
       btn.textContent = 'Sending...';
@@ -2163,13 +2840,15 @@ function renderCmdHelp(filter) {
           flash('quick-action-msg', err.message, true);
         }
       }
-      setTimeout(() => { btn.textContent = 'Try it'; }, 2000);
+      setTimeout(() => {
+        btn.textContent = 'Try it';
+      }, 2000);
     });
   });
 
   // If searching, auto-expand all entries for convenience
   if (q) {
-    body.querySelectorAll('.cmd-help-entry').forEach(e => e.classList.add('open'));
+    body.querySelectorAll('.cmd-help-entry').forEach((e) => e.classList.add('open'));
   }
 }
 
@@ -2182,7 +2861,9 @@ $('btn-cmd-help').addEventListener('click', () => {
 });
 
 $('cmd-help-close').addEventListener('click', () => hide('cmd-help-modal'));
-$('cmd-help-modal').addEventListener('click', e => { if (e.target === $('cmd-help-modal')) hide('cmd-help-modal'); });
+$('cmd-help-modal').addEventListener('click', (e) => {
+  if (e.target === $('cmd-help-modal')) hide('cmd-help-modal');
+});
 
 // Live search
 $('cmd-help-search').addEventListener('input', (e) => {

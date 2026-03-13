@@ -9,8 +9,11 @@ export default function backupRoutes(ctx) {
   const router = Router();
 
   router.get('/backups', requireAdmin, async (req, res) => {
-    try { res.json(await Backup.listBackups(ctx.config)); }
-    catch (err) { res.status(500).json({ error: err.message }); }
+    try {
+      res.json(await Backup.listBackups(ctx.config));
+    } catch (err) {
+      res.status(500).json({ error: err.message });
+    }
   });
 
   router.post('/backups', requireAdmin, async (req, res) => {
@@ -22,7 +25,9 @@ export default function backupRoutes(ctx) {
         user: req.session.user.email,
       });
       res.json(result);
-    } catch (err) { res.status(500).json({ error: err.message }); }
+    } catch (err) {
+      res.status(500).json({ error: err.message });
+    }
   });
 
   router.post('/backups/restore', requireAdmin, async (req, res) => {
@@ -33,7 +38,9 @@ export default function backupRoutes(ctx) {
       const result = await Backup.restoreBackup(ctx.config, filename, ctx.mc);
       ctx.config = await ctx.loadConfig();
       res.json(result);
-    } catch (err) { res.status(500).json({ error: err.message }); }
+    } catch (err) {
+      res.status(500).json({ error: err.message });
+    }
   });
 
   router.delete('/backups/:filename', requireAdmin, async (req, res) => {
@@ -42,7 +49,9 @@ export default function backupRoutes(ctx) {
     try {
       await Backup.deleteBackup(ctx.config, filename);
       res.json({ ok: true });
-    } catch (err) { res.status(500).json({ error: err.message }); }
+    } catch (err) {
+      res.status(500).json({ error: err.message });
+    }
   });
 
   router.get('/backups/schedule', requireAdmin, (req, res) => {

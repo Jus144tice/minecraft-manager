@@ -9,12 +9,12 @@ export function buildHelmet() {
   return helmet({
     contentSecurityPolicy: {
       directives: {
-        defaultSrc:      ["'self'"],
-        scriptSrc:       ["'self'", "'unsafe-inline'"],
-        styleSrc:        ["'self'", "'unsafe-inline'"],
-        imgSrc:          ["'self'", 'https:', 'data:', 'blob:'],
-        connectSrc:      ["'self'", 'ws:', 'wss:'],
-        frameAncestors:  ["'none'"],
+        defaultSrc: ["'self'"],
+        scriptSrc: ["'self'", "'unsafe-inline'"],
+        styleSrc: ["'self'", "'unsafe-inline'"],
+        imgSrc: ["'self'", 'https:', 'data:', 'blob:'],
+        connectSrc: ["'self'", 'ws:', 'wss:'],
+        frameAncestors: ["'none'"],
         upgradeInsecureRequests: process.env.TRUST_PROXY === '1' ? [] : null,
       },
     },

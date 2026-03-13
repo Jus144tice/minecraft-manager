@@ -75,11 +75,15 @@ export async function getServerProperties(serverPath) {
 export async function setServerProperties(serverPath, props) {
   const filePath = path.join(serverPath, 'server.properties');
   let existing = '';
-  try { existing = await fs.readFile(filePath, 'utf8'); } catch { /* ok */ }
+  try {
+    existing = await fs.readFile(filePath, 'utf8');
+  } catch {
+    /* ok */
+  }
 
   const lines = existing.split('\n');
   const handled = new Set();
-  const updated = lines.map(line => {
+  const updated = lines.map((line) => {
     const trimmed = line.trim();
     if (!trimmed || trimmed.startsWith('#')) return line;
     const eq = trimmed.indexOf('=');
@@ -151,7 +155,12 @@ export async function deleteMod(serverPath, filename, modsFolder = 'mods', disab
     safeJoin(path.join(serverPath, disabledFolder), filename),
   ];
   for (const p of candidates) {
-    try { await fs.unlink(p); return; } catch { /* try next */ }
+    try {
+      await fs.unlink(p);
+      return;
+    } catch {
+      /* try next */
+    }
   }
   throw new Error(`Mod file not found: ${filename}`);
 }
@@ -169,7 +178,7 @@ export function hashFile(filePath) {
   return new Promise((resolve, reject) => {
     const hash = crypto.createHash('sha1');
     const stream = createReadStream(filePath);
-    stream.on('data', d => hash.update(d));
+    stream.on('data', (d) => hash.update(d));
     stream.on('end', () => resolve(hash.digest('hex')));
     stream.on('error', reject);
   });
@@ -177,7 +186,10 @@ export function hashFile(filePath) {
 
 export async function hashMods(serverPath, modsFolder = 'mods', disabledFolder = 'mods_disabled') {
   const result = {};
-  for (const [folder, enabled] of [[modsFolder, true], [disabledFolder, false]]) {
+  for (const [folder, enabled] of [
+    [modsFolder, true],
+    [disabledFolder, false],
+  ]) {
     const dir = path.join(serverPath, folder);
     try {
       const entries = await fs.readdir(dir);
@@ -185,9 +197,13 @@ export async function hashMods(serverPath, modsFolder = 'mods', disabledFolder =
         if (!name.endsWith('.jar')) continue;
         try {
           result[name] = { hash: await hashFile(path.join(dir, name)), enabled };
-        } catch { /* skip unreadable */ }
+        } catch {
+          /* skip unreadable */
+        }
       }
-    } catch { /* folder missing */ }
+    } catch {
+      /* folder missing */
+    }
   }
   return result;
 }

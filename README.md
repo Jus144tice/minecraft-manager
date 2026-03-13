@@ -7,6 +7,7 @@ A self-hosted web control panel for a Minecraft Forge server running on Linux. B
 **License:** [Apache 2.0](LICENSE)
 
 **Features:**
+
 - Start / stop / restart the server from a browser
 - Live streaming console with command input (via RCON)
 - Mod manager — enable/disable mods, identify client vs server vs both-sided mods via Modrinth, browse and download new mods directly from Modrinth. Client-only mods are always excluded — they can't run server-side.
@@ -20,11 +21,11 @@ A self-hosted web control panel for a Minecraft Forge server running on Linux. B
 
 ## Requirements
 
-| Requirement | Notes |
-|---|---|
-| Ubuntu 22.04 or newer | Any modern Linux should work |
-| Node.js 18 or newer | Used to run the web panel |
-| Java 17 or newer | Already needed for Minecraft Forge |
+| Requirement            | Notes                                  |
+| ---------------------- | -------------------------------------- |
+| Ubuntu 22.04 or newer  | Any modern Linux should work           |
+| Node.js 18 or newer    | Used to run the web panel              |
+| Java 17 or newer       | Already needed for Minecraft Forge     |
 | Minecraft Forge server | Pre-installed and able to run manually |
 
 ---
@@ -58,6 +59,7 @@ sudo apt install -y nodejs
 ```
 
 Verify:
+
 ```bash
 node --version   # should be v18 or higher
 ```
@@ -116,13 +118,13 @@ Fill in `config.json` (copy from `config.example.json`):
   "autoStart": true,
 
   // Backups — all settings can also be changed in Settings → App Config
-  "backupEnabled": true,              // enable scheduled backups
-  "backupSchedule": "0 3 * * *",      // cron expression (default: daily at 3 AM)
+  "backupEnabled": true, // enable scheduled backups
+  "backupSchedule": "0 3 * * *", // cron expression (default: daily at 3 AM)
   "backupPath": "/mnt/backups/minecraft", // where to store backup archives
-  "maxBackups": 14,                   // keep last N scheduled backups (0 = keep all)
+  "maxBackups": 14, // keep last N scheduled backups (0 = keep all)
 
   // Set to false to connect to your real server; restart the panel after changing
-  "demoMode": false
+  "demoMode": false,
 }
 ```
 
@@ -132,10 +134,10 @@ Fill in `config.json` (copy from `config.example.json`):
 
 The `bindHost` setting controls which network interfaces the web panel listens on:
 
-| Mode | `bindHost` | Who can reach it | Use case |
-|---|---|---|---|
-| **Production** (default) | `127.0.0.1` | Localhost only — requires Nginx/Caddy reverse proxy | Internet-facing deployment with HTTPS |
-| **LAN testing** | `0.0.0.0` | Any device on the local network | Trying the panel from your phone or another PC on a trusted home LAN |
+| Mode                     | `bindHost`  | Who can reach it                                    | Use case                                                             |
+| ------------------------ | ----------- | --------------------------------------------------- | -------------------------------------------------------------------- |
+| **Production** (default) | `127.0.0.1` | Localhost only — requires Nginx/Caddy reverse proxy | Internet-facing deployment with HTTPS                                |
+| **LAN testing**          | `0.0.0.0`   | Any device on the local network                     | Trying the panel from your phone or another PC on a trusted home LAN |
 
 **Production (recommended):** Leave `bindHost` at `127.0.0.1` and put Nginx or Caddy in front (see [Nginx reverse proxy](#nginx-reverse-proxy) below). This is the default and the only safe option for internet-facing deployments.
 
@@ -156,21 +158,21 @@ cp .env.example .env
 nano .env
 ```
 
-| Variable | Required | Description |
-|---|---|---|
-| `SESSION_SECRET` | Yes (production) | Long random string for signing session cookies. Generate: `node -e "console.log(require('crypto').randomBytes(48).toString('hex'))"` |
-| `TRUST_PROXY` | Yes (behind Nginx/Caddy) | Set to `1` — enables correct client IP detection and secure cookies |
-| `APP_URL` | Yes (OIDC) | Public base URL, e.g. `https://mc.example.com` — must match OIDC callback URLs |
-| `ALLOWED_EMAILS` | Recommended | Comma-separated list of emails allowed to log in, e.g. `you@gmail.com,family@outlook.com`. Leave empty to allow any authenticated account. |
-| `GOOGLE_CLIENT_ID` | One provider required | From Google Cloud Console |
-| `GOOGLE_CLIENT_SECRET` | One provider required | From Google Cloud Console |
-| `MICROSOFT_CLIENT_ID` | One provider required | From Azure Portal |
-| `MICROSOFT_CLIENT_SECRET` | One provider required | From Azure Portal |
-| `MICROSOFT_TENANT` | Optional | `common` (default), `consumers`, or a tenant ID |
-| `LOCAL_PASSWORD` | Optional | Fallback password login. Rate-limited to 20 attempts/15 min. |
-| `DATABASE_URL` | Optional | PostgreSQL connection string. Enables persistent sessions, user management with admin levels, and queryable audit logs. See [Database setup](#database-postgresql) below. |
-| `BIND_HOST` | Optional | Override `bindHost` from config.json (e.g. `127.0.0.1` or `0.0.0.0`). Useful for switching between production and LAN testing without editing config. |
-| `WEB_PORT` | Optional | Override `webPort` from config.json. |
+| Variable                  | Required                 | Description                                                                                                                                                               |
+| ------------------------- | ------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `SESSION_SECRET`          | Yes (production)         | Long random string for signing session cookies. Generate: `node -e "console.log(require('crypto').randomBytes(48).toString('hex'))"`                                      |
+| `TRUST_PROXY`             | Yes (behind Nginx/Caddy) | Set to `1` — enables correct client IP detection and secure cookies                                                                                                       |
+| `APP_URL`                 | Yes (OIDC)               | Public base URL, e.g. `https://mc.example.com` — must match OIDC callback URLs                                                                                            |
+| `ALLOWED_EMAILS`          | Recommended              | Comma-separated list of emails allowed to log in, e.g. `you@gmail.com,family@outlook.com`. Leave empty to allow any authenticated account.                                |
+| `GOOGLE_CLIENT_ID`        | One provider required    | From Google Cloud Console                                                                                                                                                 |
+| `GOOGLE_CLIENT_SECRET`    | One provider required    | From Google Cloud Console                                                                                                                                                 |
+| `MICROSOFT_CLIENT_ID`     | One provider required    | From Azure Portal                                                                                                                                                         |
+| `MICROSOFT_CLIENT_SECRET` | One provider required    | From Azure Portal                                                                                                                                                         |
+| `MICROSOFT_TENANT`        | Optional                 | `common` (default), `consumers`, or a tenant ID                                                                                                                           |
+| `LOCAL_PASSWORD`          | Optional                 | Fallback password login. Rate-limited to 20 attempts/15 min.                                                                                                              |
+| `DATABASE_URL`            | Optional                 | PostgreSQL connection string. Enables persistent sessions, user management with admin levels, and queryable audit logs. See [Database setup](#database-postgresql) below. |
+| `BIND_HOST`               | Optional                 | Override `bindHost` from config.json (e.g. `127.0.0.1` or `0.0.0.0`). Useful for switching between production and LAN testing without editing config.                     |
+| `WEB_PORT`                | Optional                 | Override `webPort` from config.json.                                                                                                                                      |
 
 In production, set these in the systemd service file (see below) rather than a `.env` file.
 
@@ -231,10 +233,10 @@ Admin access (`admin_level = 1`) is required for backups, user management, and a
 
 **Automatic admin grant:**
 
-| Login method | Admin level | Why |
-|---|---|---|
-| **Demo mode** (any password) | Always admin | Full access needed to demo the UI |
-| **Local password** (`LOCAL_PASSWORD`) | Always admin | You have the server password — you're the admin |
+| Login method                           | Admin level   | Why                                                                                                              |
+| -------------------------------------- | ------------- | ---------------------------------------------------------------------------------------------------------------- |
+| **Demo mode** (any password)           | Always admin  | Full access needed to demo the UI                                                                                |
+| **Local password** (`LOCAL_PASSWORD`)  | Always admin  | You have the server password — you're the admin                                                                  |
 | **First OIDC user** (Google/Microsoft) | Auto-promoted | When no admins exist in the database yet, the first person to log in via OIDC is automatically promoted to admin |
 
 **Manual promotion** (for additional admins after the first):
@@ -268,16 +270,19 @@ cat /home/minecraft/server/run.sh
 ```
 
 It will look something like:
+
 ```
 java @user_jvm_args.txt @libraries/net/minecraftforge/forge/1.20.1-47.3.0/unix_args.txt "$@"
 ```
 
 Copy that line into `startCommand` in `config.json`, replace `"$@"` with `nogui`, and add your memory flags:
+
 ```
 java -Xms2G -Xmx8G @user_jvm_args.txt @libraries/net/minecraftforge/forge/1.20.1-47.3.0/unix_args.txt nogui
 ```
 
 **Old Forge (pre-1.17):**
+
 ```
 java -Xms2G -Xmx8G -jar forge-1.16.5-36.2.39.jar nogui
 ```
@@ -297,6 +302,7 @@ npm start
 ```
 
 For auto-restart on file changes:
+
 ```bash
 npm run dev
 ```
@@ -507,6 +513,7 @@ The web panel port (3000) and RCON port (25575) must **not** be opened — they 
 ## Authentication
 
 In production, log in via **Google** or **Microsoft**. The OIDC flow:
+
 1. Click the provider button → redirected to Google/Microsoft
 2. Authenticate → redirected back to `APP_URL/auth/callback/<provider>`
 3. Email checked against `ALLOWED_EMAILS` (if set)
@@ -521,19 +528,23 @@ In **demo mode**, no login is required. Demo mode is for local development only 
 ## Using the Panel
 
 ### Dashboard
+
 - **Start / Stop / Restart** — controls the Minecraft server process
 - **Force Kill** — sends SIGKILL if the server is frozen (last resort)
 - **Broadcast** — sends a message to all online players via `/say`
 - **Online Players** — auto-populates on page load; shows who is online with a quick kick button
 
 ### Console
+
 - Streams the server log in real time via WebSocket
 - Type commands in the input bar and press Enter — sent via RCON while the server is running
 
 ### Mods tab
 
 #### Installed Mods
+
 Lists every `.jar` in your `mods/` folder. Client-only mods are never shown here — they cannot run server-side. You can:
+
 - **Enable / Disable** — disabled mods are moved to `mods_disabled/` and not loaded by Forge
 - **Delete** — permanently removes the file
 - **Filter** by name or by side (server-only / both / unknown)
@@ -545,6 +556,7 @@ Lists every `.jar` in your `mods/` folder. Client-only mods are never shown here
 > In demo mode, mods are pre-identified automatically and the Identify button is hidden.
 
 #### Browse Modrinth
+
 - Opens to a paginated list of popular server-compatible Forge mods by download count
 - Search by name to filter results
 - Filter by side (any / server-only / client+server)
@@ -553,11 +565,11 @@ Lists every `.jar` in your `mods/` folder. Client-only mods are never shown here
 
 ### Players tab
 
-| Sub-tab | What it does |
-|---|---|
+| Sub-tab       | What it does                                                                                                                     |
+| ------------- | -------------------------------------------------------------------------------------------------------------------------------- |
 | **Operators** | Add/remove ops. Level 4 = full admin, Level 3 = moderator (kick/ban), Level 2 = most commands, Level 1 = bypass spawn protection |
-| **Whitelist** | Add/remove players. Enable the whitelist in server.properties to restrict who can join |
-| **Bans** | Ban and unban players by name |
+| **Whitelist** | Add/remove players. Enable the whitelist in server.properties to restrict who can join                                           |
+| **Bans**      | Ban and unban players by name                                                                                                    |
 
 > When RCON is connected, changes take effect immediately on the live server. When the server is offline, the panel edits `ops.json`, `whitelist.json`, and `banned-players.json` directly — changes apply on next start.
 
@@ -573,12 +585,12 @@ Full point-in-time snapshots of everything needed to restore your server. Each b
 
 **Scheduled backups** run automatically on a cron schedule (default: daily at 3 AM). Configure the schedule, storage path, and retention in **Settings → App Config**:
 
-| Setting | Default | Description |
-|---|---|---|
-| Scheduled Backups | Off | Enable/disable the cron schedule |
-| Backup Schedule | `0 3 * * *` | Cron expression (daily at 3 AM) |
-| Backup Storage Path | `./backups` | Where archives are stored — set to a separate HDD mount |
-| Max Scheduled Backups | 14 | Keep the last N scheduled backups; older ones are pruned automatically. Manual backups are never pruned. |
+| Setting               | Default     | Description                                                                                              |
+| --------------------- | ----------- | -------------------------------------------------------------------------------------------------------- |
+| Scheduled Backups     | Off         | Enable/disable the cron schedule                                                                         |
+| Backup Schedule       | `0 3 * * *` | Cron expression (daily at 3 AM)                                                                          |
+| Backup Storage Path   | `./backups` | Where archives are stored — set to a separate HDD mount                                                  |
+| Max Scheduled Backups | 14          | Keep the last N scheduled backups; older ones are pruned automatically. Manual backups are never pruned. |
 
 **Restore** from any saved backup. This replaces all server files, mods, config, and database contents. The Minecraft server must be stopped first. After restore, restart the manager app and the Minecraft server.
 
@@ -595,11 +607,11 @@ Full point-in-time snapshots of everything needed to restore your server. Each b
 
 This is a common source of confusion when building a Forge modpack:
 
-| Type | Install on server? | Players need it? |
-|---|---|---|
-| **Both** | Yes | Yes — must be in their mod profile too |
-| **Server-only** | Yes | No — clients don't need it installed |
-| **Client-only** | **No** | Yes — they install it locally only |
+| Type            | Install on server? | Players need it?                       |
+| --------------- | ------------------ | -------------------------------------- |
+| **Both**        | Yes                | Yes — must be in their mod profile too |
+| **Server-only** | Yes                | No — clients don't need it installed   |
+| **Client-only** | **No**             | Yes — they install it locally only     |
 
 Examples of client-only mods: minimaps (JourneyMap), shader loaders (Oculus), performance mods (Rubidium), HUD mods. These will crash the server if loaded server-side.
 
@@ -612,25 +624,30 @@ When players connect via Modrinth, they install the modpack profile which should
 ## Troubleshooting
 
 **Panel won't start:**
+
 - Check `config.json` exists and is valid JSON
 - Make sure Node.js 18+ is installed: `node --version`
 - The manager validates config on startup and prints clear errors if `serverPath`, `startCommand`, `rconPort`, `webPort`, or `bindHost` are invalid. Fix the listed fields and restart.
 
 **"RCON not connected" error:**
+
 - Verify `enable-rcon=true` is in `server.properties`
 - The `rcon.password` in `server.properties` must match `rconPassword` in `config.json`
 - RCON only becomes available after Forge fully loads — this can take 1–3 minutes with 200 mods. Use the **Reconnect RCON** button in **Settings → App Config** after the server finishes starting.
 
 **Server won't start from the panel:**
+
 - Test the start command manually in a terminal first: `cd /your/server && java -Xms2G -Xmx8G ...`
 - Make sure `serverPath` in `config.json` points to the correct folder
 - Check the Console tab for the full error output
 
 **Mods not identified after clicking "Identify Mods":**
+
 - The mod was likely not downloaded from Modrinth (e.g., from a website or CurseForge directly). The SHA1 hash won't match Modrinth's database.
 - You can manually check a mod's side requirements at [modrinth.com](https://modrinth.com).
 
 **Changes to config.json not taking effect:**
+
 - The panel must be restarted after changing `webPort` or `demoMode`. Other settings (RCON paths, start command) take effect on the next action.
 - Environment variable changes (auth secrets, `ALLOWED_EMAILS`) require a service restart: `sudo systemctl restart mc-manager`
 

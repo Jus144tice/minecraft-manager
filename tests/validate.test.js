@@ -1,7 +1,13 @@
 // Tests for input validation in src/validate.js
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { isValidMinecraftName, isSafeModFilename, isSafeCommand, sanitizeReason, validateConfig } from '../src/validate.js';
+import {
+  isValidMinecraftName,
+  isSafeModFilename,
+  isSafeCommand,
+  sanitizeReason,
+  validateConfig,
+} from '../src/validate.js';
 
 // --- isValidMinecraftName ---
 

@@ -18,9 +18,7 @@ export function safeJoin(base, ...parts) {
 
   // The resolved path must be the base itself OR start with base + separator.
   if (resolved !== normalBase && !resolved.startsWith(normalBase + path.sep)) {
-    throw new Error(
-      `Path traversal blocked: "${parts.join('/')}" resolves outside "${base}"`,
-    );
+    throw new Error(`Path traversal blocked: "${parts.join('/')}" resolves outside "${base}"`);
   }
 
   return resolved;

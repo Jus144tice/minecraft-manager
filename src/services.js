@@ -6,10 +6,10 @@ import * as Demo from './demoData.js';
 import { audit, info } from './audit.js';
 
 // ---- Crash detection constants ----
-const MAX_RESTARTS = 3;          // max auto-restarts within the window
+const MAX_RESTARTS = 3; // max auto-restarts within the window
 const RESTART_WINDOW_MS = 600000; // 10-minute sliding window
-const RESTART_DELAY_MS = 10000;   // wait 10s before restarting
-const MIN_RUNTIME_MS = 30000;     // ignore exits within 30s of start (startup crash)
+const RESTART_DELAY_MS = 10000; // wait 10s before restarting
+const MIN_RUNTIME_MS = 30000; // ignore exits within 30s of start (startup crash)
 
 export function createServices({ config, saveConfig, loadConfig, mc, broadcast, broadcastStatus }) {
   let rcon = null;
@@ -53,7 +53,13 @@ export function createServices({ config, saveConfig, loadConfig, mc, broadcast, 
   }
 
   async function connectRcon() {
-    if (rcon) { try { rcon.disconnect(); } catch { /* ok */ } }
+    if (rcon) {
+      try {
+        rcon.disconnect();
+      } catch {
+        /* ok */
+      }
+    }
     rcon = new RconClient(config.rconHost || '127.0.0.1', config.rconPort || 25575, config.rconPassword);
     try {
       await rcon.connect();
@@ -72,7 +78,7 @@ export function createServices({ config, saveConfig, loadConfig, mc, broadcast, 
       while (attempts < 24) {
         if (!mc.running) break;
         if (await connectRcon()) return;
-        await new Promise(r => setTimeout(r, 5000));
+        await new Promise((r) => setTimeout(r, 5000));
         attempts++;
       }
       info('[RCON] Could not connect after server start.');
@@ -80,7 +86,8 @@ export function createServices({ config, saveConfig, loadConfig, mc, broadcast, 
   }
 
   async function rconCmd(cmd) {
-    if (!rcon || !rcon.connected) throw new Error('RCON is not connected. Server may still be starting, or check rcon settings.');
+    if (!rcon || !rcon.connected)
+      throw new Error('RCON is not connected. Server may still be starting, or check rcon settings.');
     return rcon.sendCommand(cmd);
   }
 
@@ -98,7 +105,10 @@ export function createServices({ config, saveConfig, loadConfig, mc, broadcast, 
 
   function handleProcessExit(code, uptimeSeconds) {
     // Clean up RCON
-    if (rcon) { rcon.disconnect(); rcon = null; }
+    if (rcon) {
+      rcon.disconnect();
+      rcon = null;
+    }
     clearTimeout(rconReconnectTimer);
     clearTimeout(autoRestartTimer);
     broadcastStatus();
@@ -111,7 +121,7 @@ export function createServices({ config, saveConfig, loadConfig, mc, broadcast, 
     // Determine if this was a crash
     const uptime = uptimeSeconds ?? null;
     const isCrash = code !== 0 && code != null;
-    const startupCrash = uptime != null && uptime < (MIN_RUNTIME_MS / 1000);
+    const startupCrash = uptime != null && uptime < MIN_RUNTIME_MS / 1000;
 
     if (!isCrash) return; // clean exit (code 0) — not a crash
 
@@ -132,7 +142,13 @@ export function createServices({ config, saveConfig, loadConfig, mc, broadcast, 
     // Startup crash — don't restart (would loop immediately)
     if (startupCrash) {
       info('Startup crash detected — skipping auto-restart to avoid restart loop');
-      broadcast({ type: 'crash', message: 'Startup crash detected — auto-restart skipped to avoid restart loop. Check the console log and restart manually.', code, time: Date.now() });
+      broadcast({
+        type: 'crash',
+        message:
+          'Startup crash detected — auto-restart skipped to avoid restart loop. Check the console log and restart manually.',
+        code,
+        time: Date.now(),
+      });
       return;
     }
 
@@ -140,7 +156,12 @@ export function createServices({ config, saveConfig, loadConfig, mc, broadcast, 
     pruneRestartWindow();
     if (recentRestarts.length >= MAX_RESTARTS) {
       info(`Auto-restart rate limit reached (${MAX_RESTARTS} restarts in ${RESTART_WINDOW_MS / 60000} minutes)`);
-      broadcast({ type: 'crash', message: `Auto-restart limit reached (${MAX_RESTARTS} in ${RESTART_WINDOW_MS / 60000} min). Restart manually.`, code, time: Date.now() });
+      broadcast({
+        type: 'crash',
+        message: `Auto-restart limit reached (${MAX_RESTARTS} in ${RESTART_WINDOW_MS / 60000} min). Restart manually.`,
+        code,
+        time: Date.now(),
+      });
       return;
     }
 
@@ -148,7 +169,13 @@ export function createServices({ config, saveConfig, loadConfig, mc, broadcast, 
     recentRestarts.push(Date.now());
     const attempt = recentRestarts.length;
     info(`Auto-restarting server in ${RESTART_DELAY_MS / 1000}s (attempt ${attempt}/${MAX_RESTARTS})`);
-    broadcast({ type: 'crash', message: `Crash detected — auto-restarting in ${RESTART_DELAY_MS / 1000}s (attempt ${attempt}/${MAX_RESTARTS})...`, code, time: Date.now(), autoRestarting: true });
+    broadcast({
+      type: 'crash',
+      message: `Crash detected — auto-restarting in ${RESTART_DELAY_MS / 1000}s (attempt ${attempt}/${MAX_RESTARTS})...`,
+      code,
+      time: Date.now(),
+      autoRestarting: true,
+    });
 
     autoRestartTimer = setTimeout(() => {
       try {
@@ -167,8 +194,12 @@ export function createServices({ config, saveConfig, loadConfig, mc, broadcast, 
   mc.on('stopped', handleProcessExit);
 
   return {
-    get config() { return config; },
-    set config(c) { config = c; },
+    get config() {
+      return config;
+    },
+    set config(c) {
+      config = c;
+    },
     saveConfig,
     loadConfig,
     mc,
@@ -182,6 +213,8 @@ export function createServices({ config, saveConfig, loadConfig, mc, broadcast, 
     connectRcon,
     scheduleRconConnect,
     rconCmd,
-    get rconConnected() { return !!(rcon?.connected); },
+    get rconConnected() {
+      return !!rcon?.connected;
+    },
   };
 }

@@ -29,7 +29,7 @@ test('DEMO_BROWSE_RESULTS: all hits have a non-empty project_id', () => {
 });
 
 test('no duplicate project IDs across demo mods', () => {
-  const ids = DEMO_MODS.filter(m => m._projectId).map(m => m._projectId);
+  const ids = DEMO_MODS.filter((m) => m._projectId).map((m) => m._projectId);
   const dupes = ids.filter((id, i) => ids.indexOf(id) !== i);
   assert.deepEqual(dupes, [], `Duplicate _projectId values: ${dupes.join(', ')}`);
 });
@@ -37,23 +37,20 @@ test('no duplicate project IDs across demo mods', () => {
 // ---- Network: Modrinth API validates all project IDs ----
 
 test('Modrinth API: all demo mod project IDs exist and have icon URLs', { timeout: 30_000 }, async () => {
-  const ids = [...new Set(DEMO_MODS.filter(m => m._projectId).map(m => m._projectId))];
+  const ids = [...new Set(DEMO_MODS.filter((m) => m._projectId).map((m) => m._projectId))];
 
   const params = new URLSearchParams({ ids: JSON.stringify(ids) });
   const res = await fetch(`${MODRINTH_API}/projects?${params}`, { headers: UA });
   assert.equal(res.status, 200, `Modrinth API returned HTTP ${res.status}`);
 
   const projects = await res.json();
-  const byId = Object.fromEntries(projects.map(p => [p.id, p]));
+  const byId = Object.fromEntries(projects.map((p) => [p.id, p]));
 
-  const missing = ids.filter(id => !byId[id]);
+  const missing = ids.filter((id) => !byId[id]);
   assert.deepEqual(missing, [], `Project ID(s) not found on Modrinth: ${missing.join(', ')}`);
 
   for (const project of projects) {
-    assert.ok(
-      project.icon_url,
-      `Project ${project.slug} (${project.id}) has no icon_url on Modrinth`,
-    );
+    assert.ok(project.icon_url, `Project ${project.slug} (${project.id}) has no icon_url on Modrinth`);
     assert.ok(
       project.icon_url.startsWith('https://'),
       `Project ${project.slug} icon_url is not HTTPS: ${project.icon_url}`,
@@ -62,23 +59,20 @@ test('Modrinth API: all demo mod project IDs exist and have icon URLs', { timeou
 });
 
 test('Modrinth API: all browse result project IDs exist and have icon URLs', { timeout: 30_000 }, async () => {
-  const ids = [...new Set(DEMO_BROWSE_RESULTS.hits.map(h => h.project_id))];
+  const ids = [...new Set(DEMO_BROWSE_RESULTS.hits.map((h) => h.project_id))];
 
   const params = new URLSearchParams({ ids: JSON.stringify(ids) });
   const res = await fetch(`${MODRINTH_API}/projects?${params}`, { headers: UA });
   assert.equal(res.status, 200, `Modrinth API returned HTTP ${res.status}`);
 
   const projects = await res.json();
-  const byId = Object.fromEntries(projects.map(p => [p.id, p]));
+  const byId = Object.fromEntries(projects.map((p) => [p.id, p]));
 
-  const missing = ids.filter(id => !byId[id]);
+  const missing = ids.filter((id) => !byId[id]);
   assert.deepEqual(missing, [], `Browse result project ID(s) not found on Modrinth: ${missing.join(', ')}`);
 
   for (const project of projects) {
-    assert.ok(
-      project.icon_url,
-      `Browse result ${project.slug} (${project.id}) has no icon_url on Modrinth`,
-    );
+    assert.ok(project.icon_url, `Browse result ${project.slug} (${project.id}) has no icon_url on Modrinth`);
     assert.ok(
       project.icon_url.startsWith('https://'),
       `Browse result ${project.slug} icon_url is not HTTPS: ${project.icon_url}`,
@@ -95,10 +89,7 @@ test('enrichDemoIcons: mods with a project ID get a valid HTTPS icon URL', { tim
     if (!mod._projectId) continue; // null = intentionally no Modrinth entry
     const url = mod.modrinthData.iconUrl;
     assert.ok(url, `After enrichment, ${mod.filename} (${mod._projectId}) still has no iconUrl`);
-    assert.ok(
-      url.startsWith('https://'),
-      `After enrichment, ${mod.filename} iconUrl is not HTTPS: ${url}`,
-    );
+    assert.ok(url.startsWith('https://'), `After enrichment, ${mod.filename} iconUrl is not HTTPS: ${url}`);
   }
 });
 
@@ -108,10 +99,7 @@ test('enrichDemoIcons: browse results get a valid HTTPS icon URL', { timeout: 30
   for (const hit of DEMO_BROWSE_RESULTS.hits) {
     const url = hit.icon_url;
     assert.ok(url, `After enrichment, browse result ${hit.slug} (${hit.project_id}) has no icon_url`);
-    assert.ok(
-      url.startsWith('https://'),
-      `After enrichment, browse result ${hit.slug} icon_url is not HTTPS: ${url}`,
-    );
+    assert.ok(url.startsWith('https://'), `After enrichment, browse result ${hit.slug} icon_url is not HTTPS: ${url}`);
   }
 });
 
@@ -125,11 +113,17 @@ test('enriched icon URLs are reachable (HTTP 200)', { timeout: 60_000 }, async (
   const urls = [];
   for (const mod of DEMO_MODS) {
     const url = mod.modrinthData.iconUrl;
-    if (url && !seen.has(url)) { seen.add(url); urls.push({ url, label: mod.filename }); }
+    if (url && !seen.has(url)) {
+      seen.add(url);
+      urls.push({ url, label: mod.filename });
+    }
   }
   for (const hit of DEMO_BROWSE_RESULTS.hits) {
     const url = hit.icon_url;
-    if (url && !seen.has(url)) { seen.add(url); urls.push({ url, label: hit.slug }); }
+    if (url && !seen.has(url)) {
+      seen.add(url);
+      urls.push({ url, label: hit.slug });
+    }
   }
 
   // HEAD-check all URLs in parallel
@@ -144,11 +138,11 @@ test('enriched icon URLs are reachable (HTTP 200)', { timeout: 60_000 }, async (
     }),
   );
 
-  const failures = results.filter(r => !r.ok);
+  const failures = results.filter((r) => !r.ok);
   assert.equal(
     failures.length,
     0,
     `${failures.length} icon URL(s) are unreachable:\n` +
-      failures.map(f => `  ${f.label}: ${f.url} → HTTP ${f.status}${f.error ? ` (${f.error})` : ''}`).join('\n'),
+      failures.map((f) => `  ${f.label}: ${f.url} → HTTP ${f.status}${f.error ? ` (${f.error})` : ''}`).join('\n'),
   );
 });
