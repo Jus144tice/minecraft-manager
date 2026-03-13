@@ -15,7 +15,10 @@ A self-hosted web control panel for a Minecraft Forge server running on Linux. B
 - Edit `server.properties` in the browser
 - OIDC authentication (Google and/or Microsoft) with email allowlist; optional local password fallback
 - WebSocket-based live log streaming
-- Full backup & restore — scheduled nightly (configurable cron), stores server files + mods + config + database as a single tar.gz snapshot. Restore to any point in time from the Backups tab.
+- Full backup & restore — scheduled nightly (configurable cron), quiesced snapshots via RCON, disk-space preflight checks, concurrent-operation locking. Restore to any point in time from the Backups tab.
+- Discord/webhook notifications — server crashes, auto-restarts, backups, lag spikes, player bans/kicks, and mod changes delivered to Discord or any webhook endpoint
+- Ops endpoints — `/healthz`, `/readyz`, and `/metrics` (Prometheus format) for systemd, Nginx, UptimeRobot, or Prometheus/Grafana
+- TPS monitoring with configurable lag-spike alerts and auto-restart on crash
 
 ---
 
@@ -24,7 +27,7 @@ A self-hosted web control panel for a Minecraft Forge server running on Linux. B
 | Requirement            | Notes                                  |
 | ---------------------- | -------------------------------------- |
 | Ubuntu 22.04 or newer  | Any modern Linux should work           |
-| Node.js 18 or newer    | Used to run the web panel              |
+| Node.js 20 or newer    | Used to run the web panel              |
 | Java 17 or newer       | Already needed for Minecraft Forge     |
 | Minecraft Forge server | Pre-installed and able to run manually |
 
@@ -54,14 +57,14 @@ When you're ready to connect to a real server, follow the **Configuration** and 
 ### 1. Install Node.js on Ubuntu
 
 ```bash
-curl -fsSL https://deb.nodesource.com/setup_18.x | sudo -E bash -
+curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
 sudo apt install -y nodejs
 ```
 
 Verify:
 
 ```bash
-node --version   # should be v18 or higher
+node --version   # should be v20 or higher
 ```
 
 ### 2. Clone the repo
@@ -120,11 +123,33 @@ Fill in `config.json` (copy from `config.example.json`):
   // Auto-start the Minecraft server when the manager starts (recommended for systemd service)
   "autoStart": true,
 
+  // Auto-restart on crash (with exponential backoff)
+  "autoRestart": true,
+
+  // TPS lag-spike alert threshold (20 = perfect; below this triggers notifications)
+  "tpsAlertThreshold": 18,
+
   // Backups — all settings can also be changed in Settings → App Config
   "backupEnabled": true, // enable scheduled backups
   "backupSchedule": "0 3 * * *", // cron expression (default: daily at 3 AM)
   "backupPath": "/mnt/backups/minecraft", // where to store backup archives
   "maxBackups": 14, // keep last N scheduled backups (0 = keep all)
+
+  // Webhook notifications (Discord or generic JSON POST)
+  "notifications": {
+    "webhookUrl": "", // Discord webhook URL or any HTTP endpoint
+    "events": [
+      "SERVER_CRASH",
+      "SERVER_AUTO_RESTART",
+      "SERVER_START",
+      "SERVER_STOP",
+      "BACKUP_CREATE",
+      "BACKUP_FAILED",
+      "LAG_SPIKE",
+      "PLAYER_BAN",
+      "PLAYER_KICK",
+    ],
+  },
 
   // Set to false to connect to your real server; restart the panel after changing
   "demoMode": false,
@@ -587,7 +612,7 @@ Full point-in-time snapshots of everything needed to restore your server. Each b
 - **App config** — `config.json`
 - **PostgreSQL database** — users, admin levels, audit logs, sessions (when connected)
 
-**Create a backup** manually at any time with an optional note (e.g. "Before adding new mods"). The server does not need to be stopped for backups.
+**Create a backup** manually at any time with an optional note (e.g. "Before adding new mods"). The server does not need to be stopped — when RCON is connected, the manager automatically quiesces the server (`save-all` + `save-off`) for a consistent snapshot, then re-enables auto-save afterwards.
 
 **Scheduled backups** run automatically on a cron schedule (default: daily at 3 AM). Configure the schedule, storage path, and retention in **Settings → App Config**:
 
@@ -604,8 +629,46 @@ Full point-in-time snapshots of everything needed to restore your server. Each b
 
 ### Settings tab
 
-- **App Config** — edit all `config.json` values in the browser (no SSH needed after initial setup). Change RCON password, start command, memory flags, backup schedule, etc. Toggle demo mode here. Note: secrets like session keys and OIDC credentials are managed as environment variables, not through this UI.
+- **App Config** — edit all `config.json` values in the browser (no SSH needed after initial setup). Change RCON password, launch config, memory flags, backup schedule, notification webhooks, etc. Toggle demo mode here. Note: secrets like session keys and OIDC credentials are managed as environment variables, not through this UI.
 - **server.properties** — full editor for all server properties. Key settings (RCON, whitelist, online-mode, etc.) are shown first. **Restart the Minecraft server** after saving.
+
+### Notifications
+
+The manager can send webhook notifications for important server events. Configure a webhook URL in **Settings → App Config** or directly in `config.json`:
+
+```json
+"notifications": {
+  "webhookUrl": "https://discord.com/api/webhooks/123456/abcdef...",
+  "events": ["SERVER_CRASH", "SERVER_AUTO_RESTART", "BACKUP_FAILED", "LAG_SPIKE"]
+}
+```
+
+**Supported events:** `SERVER_START`, `SERVER_STOP`, `SERVER_KILL`, `SERVER_RESTART`, `SERVER_CRASH`, `SERVER_AUTO_RESTART`, `BACKUP_CREATE`, `BACKUP_RESTORE`, `BACKUP_FAILED`, `PLAYER_BAN`, `PLAYER_UNBAN`, `PLAYER_KICK`, `MOD_INSTALL`, `MOD_DELETE`, `MODPACK_IMPORT`, `LAG_SPIKE`, `LOGIN_FAILED`, `LOGIN_DENIED`
+
+If the `events` array is omitted, all events are sent. If present, only listed events trigger notifications.
+
+**Discord:** When the webhook URL points to `discord.com` or `discordapp.com`, the manager sends rich embeds with color-coded severity (green for starts/backups, red for crashes/failures, orange for warnings). **Other endpoints:** receive a plain JSON POST with `event`, `title`, `message`, `details`, and `timestamp` fields.
+
+Lag spike notifications have a 5-minute cooldown to prevent spam during sustained low-TPS periods.
+
+---
+
+## Monitoring & health endpoints
+
+Three unauthenticated endpoints are available for external monitoring tools. They are mounted before the auth middleware, so probes and scrapers work without session cookies.
+
+| Endpoint   | Purpose                                                                                                      |
+| ---------- | ------------------------------------------------------------------------------------------------------------ |
+| `/healthz` | Liveness check — returns `200 { status: "ok", uptime }` if the process is running                            |
+| `/readyz`  | Readiness check — returns `200` when the database and config are loaded; `503` otherwise                     |
+| `/metrics` | Prometheus text exposition format — exports process memory/CPU, database status, Minecraft TPS/players/state |
+
+**Example uses:**
+
+- **systemd:** `ExecStartPost=/usr/bin/curl -sf http://127.0.0.1:3000/healthz` to verify the service started
+- **Nginx upstream:** `proxy_pass` with health checks against `/readyz`
+- **UptimeRobot / Uptime Kuma:** monitor `/healthz`
+- **Prometheus/Grafana:** scrape `/metrics` for dashboards and alerting
 
 ---
 
@@ -632,7 +695,7 @@ When players connect via Modrinth, they install the modpack profile which should
 **Panel won't start:**
 
 - Check `config.json` exists and is valid JSON
-- Make sure Node.js 18+ is installed: `node --version`
+- Make sure Node.js 20+ is installed: `node --version`
 - The manager validates config on startup and prints clear errors if `serverPath`, `launch`, `rconPort`, `webPort`, or `bindHost` are invalid. Fix the listed fields and restart.
 
 **"RCON not connected" error:**
@@ -654,7 +717,7 @@ When players connect via Modrinth, they install the modpack profile which should
 
 **Changes to config.json not taking effect:**
 
-- The panel must be restarted after changing `webPort` or `demoMode`. Other settings (RCON paths, start command) take effect on the next action.
+- The panel must be restarted after changing `webPort` or `demoMode`. Other settings (RCON paths, launch config) take effect on the next action.
 - Environment variable changes (auth secrets, `ALLOWED_EMAILS`) require a service restart: `sudo systemctl restart mc-manager`
 
 ---
