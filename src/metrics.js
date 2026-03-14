@@ -4,6 +4,7 @@
 import { execFile } from 'child_process';
 import { readdir, stat } from 'fs/promises';
 import path from 'path';
+import os from 'os';
 
 // ---- CPU snapshot for the MC child process ----
 
@@ -49,7 +50,11 @@ function sampleProcessCpu(pid) {
       execFile('ps', ['-o', '%cpu=', '-p', String(pid)], { timeout: 3000 }, (err, stdout) => {
         if (err) return resolve(null);
         const val = parseFloat(stdout.trim());
-        resolve(Number.isFinite(val) ? val : null);
+        if (!Number.isFinite(val)) return resolve(null);
+        // ps reports per-core CPU% (can exceed 100% on multi-core systems).
+        // Normalize to 0-100% by dividing by the number of logical cores.
+        const cores = os.cpus().length || 1;
+        resolve(Math.min(100, val / cores));
       });
     }
   });
