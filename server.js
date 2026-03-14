@@ -194,6 +194,17 @@ app.get('/api/session', (req, res) => {
 });
 
 // ============================================================
+// Public API routes — read-only, no auth required (guest access)
+// Mutating endpoints inside these modules use requireAdmin internally.
+// ============================================================
+
+app.use('/api', statusRoutes(ctx));
+app.use('/api', playerRoutes(ctx));
+app.use('/api', modRoutes(ctx));
+app.use('/api', modrinthRoutes(ctx));
+app.use('/api', settingsRoutes(ctx));
+
+// ============================================================
 // All routes below require a valid session + CSRF
 // ============================================================
 
@@ -210,15 +221,10 @@ app.get('/api/csrf-token', (req, res) => {
 app.use('/api', buildCsrfCheck());
 
 // ============================================================
-// Route modules
+// Authenticated route modules
 // ============================================================
 
-app.use('/api', statusRoutes(ctx));
 app.use('/api', serverRoutes(ctx));
-app.use('/api', playerRoutes(ctx));
-app.use('/api', modRoutes(ctx));
-app.use('/api', modrinthRoutes(ctx));
-app.use('/api', settingsRoutes(ctx));
 app.use('/api', userRoutes());
 app.use('/api', backupRoutes(ctx));
 app.use('/api', modpackRoutes(ctx));
@@ -248,11 +254,7 @@ wss.on('connection', (ws, req) => {
   }
 
   sessionMiddleware(req, { getHeader: () => {}, setHeader: () => {}, end: () => {} }, () => {
-    if (!req.session?.user) {
-      ws.close(4001, 'Unauthorized');
-      return;
-    }
-
+    // Allow guest connections (read-only) — they receive broadcasts but cannot send commands
     wsClients.add(ws);
 
     if (config.demoMode) {

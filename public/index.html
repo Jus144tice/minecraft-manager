@@ -8,13 +8,16 @@
     <link rel="stylesheet" href="styles.css" />
   </head>
   <body>
-    <!-- LOGIN SCREEN -->
-    <div id="login-screen" class="login-screen">
+    <!-- LOGIN MODAL (overlay on top of dashboard) -->
+    <div id="login-modal" class="login-modal-overlay hidden">
       <div class="login-box">
-        <div class="login-logo">
-          <span class="logo-icon">&#9733;</span>
-          <h1>Minecraft Manager</h1>
-          <p>Server Control Panel</p>
+        <div class="login-modal-header">
+          <div class="login-logo">
+            <span class="logo-icon">&#9733;</span>
+            <h1>Minecraft Manager</h1>
+            <p>Sign in for admin access</p>
+          </div>
+          <button class="btn btn-sm btn-ghost login-modal-close" id="login-modal-close">&times;</button>
         </div>
 
         <!-- OIDC buttons — shown when Google/Microsoft providers are configured -->
@@ -42,8 +45,8 @@
       </div>
     </div>
 
-    <!-- MAIN APP -->
-    <div id="app" class="hidden">
+    <!-- MAIN APP (always visible — guests see view-only dashboard) -->
+    <div id="app">
       <!-- Demo mode banner -->
       <div id="demo-banner" class="demo-banner hidden">
         <span class="demo-banner-icon">&#9432;</span>
@@ -70,8 +73,27 @@
         </nav>
         <div class="topbar-right">
           <span id="server-badge" class="badge badge-stopped">Stopped</span>
-          <span id="role-badge" class="badge badge-role hidden"></span>
-          <button class="btn btn-sm btn-ghost" id="logout-btn">Logout</button>
+          <!-- User menu -->
+          <div class="user-menu-container">
+            <button class="btn btn-sm btn-ghost user-menu-toggle" id="user-menu-btn" title="Account">
+              <span class="user-icon">&#9787;</span>
+              <span id="user-menu-name" class="user-menu-name">Guest</span>
+            </button>
+            <div id="user-menu-dropdown" class="user-menu-dropdown hidden">
+              <!-- When not logged in -->
+              <div id="user-menu-guest" class="user-menu-section">
+                <span class="user-menu-label dim">Not logged in</span>
+                <button class="btn btn-sm btn-primary btn-full" id="btn-show-login">Log In</button>
+              </div>
+              <!-- When logged in -->
+              <div id="user-menu-authed" class="user-menu-section hidden">
+                <span class="user-menu-label" id="user-menu-email"></span>
+                <span id="role-badge" class="badge badge-role"></span>
+                <hr class="hr-subtle" />
+                <button class="btn btn-sm btn-ghost btn-full" id="logout-btn">Log Out</button>
+              </div>
+            </div>
+          </div>
         </div>
       </header>
 
@@ -125,6 +147,13 @@
             <div class="stat-label">Disk</div>
             <div class="stat-value" id="stat-disk">-</div>
           </div>
+        </div>
+
+        <!-- Server address bar (shown when server is running) -->
+        <div id="server-url-bar" class="server-url-bar hidden">
+          <span class="server-url-label">Server Address</span>
+          <code class="server-url-text" id="server-url-text"></code>
+          <button class="btn btn-sm btn-ghost" id="btn-copy-server-url" title="Copy to clipboard">Copy</button>
         </div>
 
         <div class="control-section admin-only">

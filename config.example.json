@@ -16,6 +16,7 @@
       "nogui"
     ]
   },
+  "serverAddress": "play.example.com",
   "minecraftVersion": "1.20.1",
   "modsFolder": "mods",
   "disabledModsFolder": "mods_disabled",

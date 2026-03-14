@@ -118,6 +118,7 @@ const modsPager = createPagination({
 const browsePager = modsPager; // same object; alias makes call-sites self-documenting
 let csrfToken = ''; // fetched after login; sent as X-CSRF-Token on all mutating requests
 let isAdmin = false; // true when logged-in user has adminLevel >= 1
+let isLoggedIn = false; // true when a valid session exists
 
 // --- API helpers ---
 // Session cookie is sent automatically by the browser (same-origin, httpOnly).
@@ -130,9 +131,9 @@ async function api(method, path, body) {
   if (body !== undefined) opts.body = JSON.stringify(body);
   const res = await fetch('/api' + path, opts);
   if (res.status === 401) {
-    // Session expired or logged out from another tab — return to login
-    showLoginScreen();
-    throw new Error('Session expired. Please log in again.');
+    // Session expired or not logged in — show login modal
+    showLoginModal();
+    throw new Error('Please log in to perform this action.');
   }
   const data = await res.json().catch(() => ({}));
   if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
@@ -189,7 +190,7 @@ function esc(str) {
   return String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 }
 
-// --- Login screen setup ---
+// --- Login modal setup ---
 
 function setupLoginUI(providers) {
   // Show OIDC buttons for any configured providers
@@ -211,24 +212,35 @@ function setupLoginUI(providers) {
   if (!providers.local) hide('login-local-section');
 }
 
-function showLoginScreen() {
-  if (ws) {
-    ws.close();
-    ws = null;
-  }
-  hide('app');
+function showLoginModal() {
   // Load providers fresh so login buttons are correct
   fetch('/api/auth/providers')
     .then((r) => r.json())
     .then(setupLoginUI)
     .catch(() => {});
-  show('login-screen');
+  $('login-error').classList.add('hidden');
+  $('login-password').value = '';
+  show('login-modal');
 }
 
-// --- Local password login ---
+function hideLoginModal() {
+  hide('login-modal');
+}
+
+// --- Login modal event handlers ---
 $('login-btn').addEventListener('click', login);
 $('login-password').addEventListener('keydown', (e) => {
   if (e.key === 'Enter') login();
+});
+$('login-modal-close').addEventListener('click', hideLoginModal);
+$('btn-show-login').addEventListener('click', () => {
+  hideUserMenu();
+  showLoginModal();
+});
+
+// Close login modal on backdrop click
+$('login-modal').addEventListener('click', (e) => {
+  if (e.target.id === 'login-modal') hideLoginModal();
 });
 
 async function login() {
@@ -244,9 +256,18 @@ async function login() {
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data.error || 'Login failed');
     });
-    hide('login-screen');
-    show('app');
-    initApp();
+    hideLoginModal();
+    // Refresh session state after login
+    await refreshSession();
+    // Re-fetch CSRF token now that we have a session
+    try {
+      const { token } = await GET('/csrf-token');
+      csrfToken = token;
+    } catch {
+      /* non-fatal */
+    }
+    applyRoleVisibility();
+    updateUserMenu();
   } catch (err) {
     errEl.textContent = err.message || 'Login failed.';
     errEl.classList.remove('hidden');
@@ -255,39 +276,88 @@ async function login() {
 
 // --- Logout ---
 $('logout-btn').addEventListener('click', async () => {
-  if (ws) {
-    ws.close();
-    ws = null;
-  }
   await fetch('/auth/logout', { method: 'POST' }).catch(() => {});
-  window.location.reload(); // cleanest way to reset all state and re-check session
+  isLoggedIn = false;
+  isAdmin = false;
+  csrfToken = '';
+  hideUserMenu();
+  applyRoleVisibility();
+  updateUserMenu();
 });
 
-// --- Startup: check existing session ---
-(async () => {
+// --- User menu ---
+function hideUserMenu() {
+  $('user-menu-dropdown').classList.add('hidden');
+}
+
+$('user-menu-btn').addEventListener('click', (e) => {
+  e.stopPropagation();
+  $('user-menu-dropdown').classList.toggle('hidden');
+});
+
+// Close user menu on outside click
+document.addEventListener('click', (e) => {
+  if (!e.target.closest('.user-menu-container')) {
+    hideUserMenu();
+  }
+});
+
+function updateUserMenu() {
+  if (isLoggedIn) {
+    hide('user-menu-guest');
+    show('user-menu-authed');
+    $('user-menu-name').textContent = window._userName || 'User';
+    $('user-menu-email').textContent = window._userEmail || '';
+  } else {
+    show('user-menu-guest');
+    hide('user-menu-authed');
+    $('user-menu-name').textContent = 'Guest';
+  }
+}
+
+// --- Session helper ---
+async function refreshSession() {
   try {
     const session = await fetch('/api/session').then((r) => r.json());
     if (session.loggedIn) {
+      isLoggedIn = true;
       isAdmin = (session.adminLevel || 0) >= 1;
-      hide('login-screen');
-      show('app');
-      initApp();
-      return;
+      window._userName = session.name;
+      window._userEmail = session.email;
+    } else {
+      isLoggedIn = false;
+      isAdmin = false;
+      window._userName = null;
+      window._userEmail = null;
     }
   } catch {
-    /* network error — fall through to login */
+    isLoggedIn = false;
+    isAdmin = false;
   }
+}
 
-  // Not logged in — configure login UI based on available providers
-  const providers = await fetch('/api/auth/providers')
-    .then((r) => r.json())
-    .catch(() => ({}));
-  setupLoginUI(providers);
-  show('login-screen');
+// --- Startup: always show dashboard, check session in background ---
+(async () => {
+  await refreshSession();
+  initApp();
+  updateUserMenu();
 })();
 
 // Demo banner dismiss
 $('demo-banner-close').addEventListener('click', () => hide('demo-banner'));
+
+// Server URL copy button
+$('btn-copy-server-url').addEventListener('click', () => {
+  const addr = window._serverAddress;
+  if (!addr) return;
+  navigator.clipboard.writeText(addr).then(() => {
+    const btn = $('btn-copy-server-url');
+    btn.textContent = 'Copied!';
+    setTimeout(() => {
+      btn.textContent = 'Copy';
+    }, 2000);
+  });
+});
 
 // --- Tab navigation ---
 document.querySelectorAll('.tab-btn').forEach((btn) => {
@@ -350,27 +420,21 @@ function onSubtabActivate(subtab) {
 
 // --- App init ---
 async function initApp() {
-  // Fetch CSRF token first so all subsequent mutating requests include it.
-  try {
-    const { token } = await GET('/csrf-token');
-    csrfToken = token;
-  } catch {
-    /* non-fatal — CSRF check will reject mutating requests until resolved */
-  }
-
-  // Refresh role from session (covers fresh login where isAdmin wasn't set at startup)
-  try {
-    const session = await fetch('/api/session').then((r) => r.json());
-    if (session.loggedIn) isAdmin = (session.adminLevel || 0) >= 1;
-  } catch {
-    /* non-fatal */
+  // Fetch CSRF token so mutating requests include it (only if logged in)
+  if (isLoggedIn) {
+    try {
+      const { token } = await GET('/csrf-token');
+      csrfToken = token;
+    } catch {
+      /* non-fatal — CSRF check will reject mutating requests until resolved */
+    }
   }
 
   connectWs();
   loadStatus(); // initial load; WebSocket takes over for live updates
   if (statusInterval) clearInterval(statusInterval);
   statusInterval = setInterval(loadStatus, 30000); // fallback poll in case WS drops
-  // Show demo banner if in demo mode; also stash demoMode for UI decisions
+  // Show demo banner if in demo mode; stash config for UI decisions
   try {
     const cfg = await GET('/config');
     if (cfg.demoMode) {
@@ -381,6 +445,8 @@ async function initApp() {
     } else {
       window._demoMode = false;
     }
+    // Server address for the copy widget
+    window._serverAddress = cfg.serverAddress || '';
   } catch {
     /* ignore */
   }
@@ -445,12 +511,11 @@ function applyRoleVisibility() {
     }
   });
 
-  // Role badge in topbar
+  // Role badge in user menu dropdown
   const badge = $('role-badge');
-  if (badge) {
+  if (badge && isLoggedIn) {
     badge.textContent = isAdmin ? 'Admin' : 'Viewer';
     badge.className = 'badge ' + (isAdmin ? 'badge-admin' : 'badge-viewer');
-    show(badge);
   }
 }
 
@@ -477,13 +542,8 @@ function connectWs() {
     }
   };
 
-  ws.onclose = (ev) => {
+  ws.onclose = () => {
     ws = null;
-    // Code 4001 = unauthorized (session expired) — don't reconnect
-    if (ev.code === 4001) {
-      showLoginScreen();
-      return;
-    }
     wsReconnectTimer = setTimeout(connectWs, 5000);
   };
 
@@ -664,6 +724,17 @@ function updateDashboard(s) {
     show('lag-alert');
   } else if (!s.lagSpike && !lagAlertDismissed) {
     hide('lag-alert');
+  }
+
+  // Server address bar — show when running and serverAddress is configured
+  const urlBar = $('server-url-bar');
+  if (urlBar && window._serverAddress) {
+    if (s.running) {
+      $('server-url-text').textContent = window._serverAddress;
+      show(urlBar);
+    } else {
+      hide(urlBar);
+    }
   }
 
   // Online players — auto-update from WebSocket data

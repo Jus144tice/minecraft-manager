@@ -48,6 +48,7 @@ export default function settingsRoutes(ctx) {
   router.post('/config', requireAdmin, async (req, res) => {
     const allowed = [
       'serverPath',
+      'serverAddress',
       'rconHost',
       'rconPort',
       'rconPassword',

@@ -23,7 +23,7 @@ import crypto from 'crypto';
 import { audit } from './audit.js';
 import { getPool, upsertUser, countAdmins, setAdminLevel } from './db.js';
 
-const SESSION_MAX_AGE = 24 * 60 * 60 * 1000; // 24 hours
+const SESSION_MAX_AGE = 30 * 24 * 60 * 60 * 1000; // 30 days
 
 // ---- Allowlist ----
 
@@ -70,6 +70,7 @@ export function buildSessionMiddleware(config) {
     name: 'mcm.sid', // custom name avoids fingerprinting as express-session
     resave: false,
     saveUninitialized: false,
+    rolling: true, // reset cookie expiry on each request — keeps active users logged in
     cookie: {
       httpOnly: true,
       secure: process.env.TRUST_PROXY === '1', // true = only sent over HTTPS

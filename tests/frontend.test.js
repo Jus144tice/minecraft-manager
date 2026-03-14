@@ -36,20 +36,20 @@ test('HTML: has all required tab buttons', () => {
   dom.window.close();
 });
 
-test('HTML: has login screen with password field and login button', () => {
+test('HTML: has login modal with password field and login button', () => {
   const dom = createDOM();
   const doc = dom.window.document;
-  assert.ok(doc.getElementById('login-screen'));
+  assert.ok(doc.getElementById('login-modal'));
   assert.ok(doc.getElementById('login-password'));
   assert.ok(doc.getElementById('login-btn'));
   dom.window.close();
 });
 
-test('HTML: app section is hidden by default', () => {
+test('HTML: app section is visible by default (guest mode)', () => {
   const dom = createDOM();
   const doc = dom.window.document;
   const app = doc.getElementById('app');
-  assert.ok(app.classList.contains('hidden'));
+  assert.ok(!app.classList.contains('hidden'), 'app should be visible for guest access');
   dom.window.close();
 });
 

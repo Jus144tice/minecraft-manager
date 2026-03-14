@@ -3,23 +3,49 @@
 
 import { test, expect } from '@playwright/test';
 
-// Helper: log in as demo user and navigate to the app.
+// Helper: log in as demo user via the user menu -> login modal.
 async function login(page) {
   await page.goto('/');
-  // Wait for the login screen
+  // Dashboard loads immediately in guest mode
+  await page.waitForSelector('.tab-btn[data-tab="dashboard"]', { state: 'visible' });
+  // Open user menu and click "Log In"
+  await page.click('#user-menu-btn');
+  await page.click('#btn-show-login');
+  // Fill login modal
   await page.waitForSelector('#login-password', { state: 'visible' });
   await page.fill('#login-password', 'demo');
   await page.click('#login-btn');
-  // Wait for app to load (tab bar becomes visible)
-  await page.waitForSelector('.tab-btn[data-tab="dashboard"]', { state: 'visible' });
+  // Wait for login modal to close and admin controls to appear
+  await page.waitForSelector('#login-modal', { state: 'hidden' });
 }
+
+// ============================================================
+// Guest mode (no login required)
+// ============================================================
+
+test('dashboard loads without login (guest mode)', async ({ page }) => {
+  await page.goto('/');
+  await page.waitForSelector('.tab-btn[data-tab="dashboard"]', { state: 'visible' });
+  const activeTab = await page.textContent('.tab-btn.active');
+  expect(activeTab).toBe('Dashboard');
+});
+
+test('user menu shows Guest when not logged in', async ({ page }) => {
+  await page.goto('/');
+  await page.waitForSelector('#user-menu-name', { state: 'visible' });
+  const name = await page.textContent('#user-menu-name');
+  expect(name).toBe('Guest');
+});
 
 // ============================================================
 // Login
 // ============================================================
 
-test('login screen shows demo hint', async ({ page }) => {
+test('login modal shows demo hint', async ({ page }) => {
   await page.goto('/');
+  await page.waitForSelector('.tab-btn[data-tab="dashboard"]', { state: 'visible' });
+  await page.click('#user-menu-btn');
+  await page.click('#btn-show-login');
   await page.waitForSelector('#demo-hint', { state: 'visible' });
   const hint = await page.textContent('#demo-hint');
   expect(hint).toContain('Demo mode');
@@ -27,9 +53,9 @@ test('login screen shows demo hint', async ({ page }) => {
 
 test('login with any password succeeds', async ({ page }) => {
   await login(page);
-  // Dashboard tab should be active
-  const activeTab = await page.textContent('.tab-btn.active');
-  expect(activeTab).toBe('Dashboard');
+  // User menu should show logged-in state
+  const name = await page.textContent('#user-menu-name');
+  expect(name).not.toBe('Guest');
 });
 
 test('session persists after login', async ({ page }) => {
@@ -37,9 +63,12 @@ test('session persists after login', async ({ page }) => {
   // Reload the page — should stay logged in
   await page.reload();
   await page.waitForSelector('.tab-btn[data-tab="dashboard"]', { state: 'visible' });
-  // Login screen should be hidden
-  const loginVisible = await page.isVisible('#login-screen');
+  // Login modal should be hidden
+  const loginVisible = await page.isVisible('#login-modal');
   expect(loginVisible).toBe(false);
+  // User should still be logged in (not Guest)
+  const name = await page.textContent('#user-menu-name');
+  expect(name).not.toBe('Guest');
 });
 
 // ============================================================
@@ -176,9 +205,8 @@ test('settings tab can switch to server.properties', async ({ page }) => {
 // ============================================================
 
 test('WebSocket connects and receives status', async ({ page }) => {
-  await login(page);
-  // The app connects WS on login — wait for stat-status to update from default "Stopped"
-  // In demo mode the server starts running, so it should show "Running" or player count
+  await page.goto('/');
+  // WebSocket connects in guest mode — wait for stat-status to update from default
   await page.waitForFunction(
     () => {
       const el = document.getElementById('stat-players');

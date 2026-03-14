@@ -127,9 +127,10 @@ export function checkWsOrigin(origin, host, appUrl) {
 
 // ---- Admin access guard ----
 // Requires the logged-in user to have adminLevel >= 1.
-// Apply after requireSession so req.session.user is always populated.
+// Returns 401 if not logged in, 403 if logged in but not admin.
 
 export function requireAdmin(req, res, next) {
-  if ((req.session.user?.adminLevel || 0) >= 1) return next();
+  if (!req.session?.user) return res.status(401).json({ error: 'Authentication required' });
+  if ((req.session.user.adminLevel || 0) >= 1) return next();
   res.status(403).json({ error: 'Admin access required' });
 }

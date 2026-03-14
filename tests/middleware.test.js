@@ -316,12 +316,12 @@ test('requireAdmin: rejects when adminLevel is missing', () => {
   assert.equal(res.statusCode, 403);
 });
 
-test('requireAdmin: rejects when user is missing', () => {
+test('requireAdmin: rejects with 401 when user is missing', () => {
   const res = mockRes();
   const next = trackNext();
   requireAdmin(mockReq({ session: {} }), res, next);
   assert.equal(next.wasCalled(), false);
-  assert.equal(res.statusCode, 403);
+  assert.equal(res.statusCode, 401);
 });
 
 // ===================== checkWsOrigin =====================

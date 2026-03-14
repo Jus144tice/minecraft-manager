@@ -76,13 +76,25 @@ body {
   opacity: 1;
 }
 
-/* --- Login --- */
-.login-screen {
+/* --- Login modal overlay --- */
+.login-modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.7);
   display: flex;
   align-items: center;
   justify-content: center;
-  min-height: 100vh;
-  background: radial-gradient(ellipse at center, #1a2a1a 0%, var(--bg) 70%);
+  z-index: 1100;
+  padding: 1rem;
+}
+.login-modal-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+}
+.login-modal-close {
+  font-size: 1.2rem;
+  margin: -0.5rem -0.5rem 0 0;
 }
 .login-box {
   background: var(--surface);
@@ -515,6 +527,72 @@ body {
   background: #2a2a2a;
   color: #999;
   border: 1px solid #444;
+}
+
+/* --- User menu --- */
+.user-menu-container {
+  position: relative;
+}
+.user-menu-toggle {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+.user-icon {
+  font-size: 1.1rem;
+}
+.user-menu-name {
+  font-size: 0.82rem;
+  max-width: 120px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.user-menu-dropdown {
+  position: absolute;
+  top: 100%;
+  right: 0;
+  margin-top: 0.35rem;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 0.75rem;
+  min-width: 200px;
+  z-index: 200;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+}
+.user-menu-section {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+.user-menu-label {
+  font-size: 0.82rem;
+  color: var(--text-dim);
+  word-break: break-all;
+}
+
+/* --- Server URL bar --- */
+.server-url-bar {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 0.6rem 1rem;
+  margin-bottom: 1rem;
+}
+.server-url-label {
+  color: var(--text-dim);
+  font-size: 0.85rem;
+  white-space: nowrap;
+}
+.server-url-text {
+  color: var(--primary);
+  font-size: 0.95rem;
+  font-weight: 600;
+  flex: 1;
 }
 
 .side-badge {
@@ -1275,11 +1353,14 @@ textarea:focus {
     padding: 0.75rem;
   }
 
-  /* Login box */
+  /* Login modal */
   .login-box {
     width: auto;
     max-width: 340px;
     margin: 0 0.75rem;
+  }
+  .user-menu-name {
+    display: none;
   }
 
   /* Topbar */
