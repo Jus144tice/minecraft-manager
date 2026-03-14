@@ -117,6 +117,7 @@ const modsPager = createPagination({
 });
 const browsePager = modsPager; // same object; alias makes call-sites self-documenting
 let csrfToken = ''; // fetched after login; sent as X-CSRF-Token on all mutating requests
+let isAdmin = false; // true when logged-in user has adminLevel >= 1
 
 // --- API helpers ---
 // Session cookie is sent automatically by the browser (same-origin, httpOnly).
@@ -267,6 +268,7 @@ $('logout-btn').addEventListener('click', async () => {
   try {
     const session = await fetch('/api/session').then((r) => r.json());
     if (session.loggedIn) {
+      isAdmin = (session.adminLevel || 0) >= 1;
       hide('login-screen');
       show('app');
       initApp();
@@ -356,6 +358,14 @@ async function initApp() {
     /* non-fatal — CSRF check will reject mutating requests until resolved */
   }
 
+  // Refresh role from session (covers fresh login where isAdmin wasn't set at startup)
+  try {
+    const session = await fetch('/api/session').then((r) => r.json());
+    if (session.loggedIn) isAdmin = (session.adminLevel || 0) >= 1;
+  } catch {
+    /* non-fatal */
+  }
+
   connectWs();
   loadStatus(); // initial load; WebSocket takes over for live updates
   if (statusInterval) clearInterval(statusInterval);
@@ -377,6 +387,9 @@ async function initApp() {
 
   // Load preflight checks (non-blocking)
   loadPreflight();
+
+  // Apply role-based visibility
+  applyRoleVisibility();
 }
 
 // --- Preflight checks ---
@@ -419,6 +432,26 @@ function renderPreflight(result) {
     .join('');
 
   show('preflight-panel');
+}
+
+// --- Role-based visibility ---
+function applyRoleVisibility() {
+  // Show/hide all elements marked admin-only
+  document.querySelectorAll('.admin-only').forEach((el) => {
+    if (isAdmin) {
+      el.classList.remove('hidden');
+    } else {
+      el.classList.add('hidden');
+    }
+  });
+
+  // Role badge in topbar
+  const badge = $('role-badge');
+  if (badge) {
+    badge.textContent = isAdmin ? 'Admin' : 'Viewer';
+    badge.className = 'badge ' + (isAdmin ? 'badge-admin' : 'badge-viewer');
+    show(badge);
+  }
 }
 
 // --- WebSocket (live console) ---
@@ -673,9 +706,7 @@ function renderOnlinePlayers(players) {
   el.innerHTML = players
     .map(
       (name) =>
-        `<span class="chip">${esc(name)}
-      <button class="chip-kick" data-name="${esc(name)}" title="Kick">&#10005;</button>
-    </span>`,
+        `<span class="chip">${esc(name)}${isAdmin ? `<button class="chip-kick" data-name="${esc(name)}" title="Kick">&#10005;</button>` : ''}</span>`,
     )
     .join('');
   el.querySelectorAll('.chip-kick').forEach((btn) => {
@@ -854,7 +885,9 @@ function renderMods() {
           <span class="dim">${formatSize(mod.size)}</span>
         </div>
       </div>
-      <div class="mod-actions">
+      ${
+        isAdmin
+          ? `<div class="mod-actions">
         <button class="btn btn-sm ${mod.enabled ? 'btn-warning' : 'btn-success'}"
           data-action="toggle-mod" data-filename="${esc(mod.filename)}" data-enable="${!mod.enabled}">
           ${mod.enabled ? 'Disable' : 'Enable'}
@@ -863,7 +896,9 @@ function renderMods() {
           data-action="delete-mod" data-filename="${esc(mod.filename)}">
           Delete
         </button>
-      </div>
+      </div>`
+          : ''
+      }
     </div>`;
     })
     .join('');
@@ -1085,13 +1120,17 @@ function renderBrowseResults(hits) {
           <span class="dim browse-size"${cached?.fileSize != null ? '' : ' hidden'}>${cached?.fileSize != null ? formatSize(cached.fileSize) : ''}</span>
         </div>
       </div>
-      <div class="mod-actions">
+      ${
+        isAdmin
+          ? `<div class="mod-actions">
         ${
           isInstalled
             ? '<button class="btn btn-sm" disabled>Installed</button>'
             : `<button class="btn btn-sm btn-primary" data-action="install-mod" data-projectid="${esc(hit.project_id)}" data-title="${esc(hit.title)}">Install</button>`
         }
-      </div>
+      </div>`
+          : ''
+      }
     </div>`;
     })
     .join('');
@@ -1221,15 +1260,17 @@ function renderModDetail(project, context = {}) {
     (a, b) => (b.featured ? 1 : 0) - (a.featured ? 1 : 0) || (a.ordering || 0) - (b.ordering || 0),
   );
 
-  // Action buttons
-  const actionBtns = isInstalled
-    ? `<button class="btn ${installedMod.enabled ? 'btn-warning' : 'btn-success'}"
+  // Action buttons (admin only)
+  const actionBtns = !isAdmin
+    ? ''
+    : isInstalled
+      ? `<button class="btn ${installedMod.enabled ? 'btn-warning' : 'btn-success'}"
          data-action="toggle-mod" data-filename="${esc(installedFile)}" data-enable="${!installedMod.enabled}">
          ${installedMod.enabled ? 'Disable' : 'Enable'}
        </button>
        <button class="btn btn-danger"
          data-action="delete-mod" data-filename="${esc(installedFile)}" data-close-detail="true">Delete</button>`
-    : `<button class="btn btn-primary btn-lg"
+      : `<button class="btn btn-primary btn-lg"
          data-action="install-mod" data-projectid="${esc(project.id)}" data-title="${esc(project.title)}">Install</button>`;
 
   $('mod-detail-content').innerHTML = `
@@ -1354,7 +1395,7 @@ async function loadOps() {
       return;
     }
     el.innerHTML = `<table class="player-table">
-      <thead><tr><th>Name</th><th>Level</th><th>UUID</th><th>Actions</th></tr></thead>
+      <thead><tr><th>Name</th><th>Level</th><th>UUID</th>${isAdmin ? '<th>Actions</th>' : ''}</tr></thead>
       <tbody>${ops
         .map(
           (op) => `
@@ -1362,9 +1403,7 @@ async function loadOps() {
           <td><strong>${esc(op.name)}</strong></td>
           <td><span class="level-badge level-${op.level}">Level ${op.level}</span></td>
           <td class="dim small">${esc(op.uuid || '-')}</td>
-          <td>
-            <button class="btn btn-sm btn-danger" data-action="remove-op" data-name="${esc(op.name)}">Remove</button>
-          </td>
+          ${isAdmin ? `<td><button class="btn btn-sm btn-danger" data-action="remove-op" data-name="${esc(op.name)}">Remove</button></td>` : ''}
         </tr>`,
         )
         .join('')}
@@ -1408,16 +1447,14 @@ async function loadWhitelist() {
       return;
     }
     el.innerHTML = `<table class="player-table">
-      <thead><tr><th>Name</th><th>UUID</th><th>Actions</th></tr></thead>
+      <thead><tr><th>Name</th><th>UUID</th>${isAdmin ? '<th>Actions</th>' : ''}</tr></thead>
       <tbody>${list
         .map(
           (e) => `
         <tr>
           <td><strong>${esc(e.name)}</strong></td>
           <td class="dim small">${esc(e.uuid || '-')}</td>
-          <td>
-            <button class="btn btn-sm btn-danger" data-action="remove-wl" data-name="${esc(e.name)}">Remove</button>
-          </td>
+          ${isAdmin ? `<td><button class="btn btn-sm btn-danger" data-action="remove-wl" data-name="${esc(e.name)}">Remove</button></td>` : ''}
         </tr>`,
         )
         .join('')}
@@ -1461,16 +1498,14 @@ async function loadBans() {
       return;
     }
     el.innerHTML = `<table class="player-table">
-      <thead><tr><th>Name</th><th>Reason</th><th>Actions</th></tr></thead>
+      <thead><tr><th>Name</th><th>Reason</th>${isAdmin ? '<th>Actions</th>' : ''}</tr></thead>
       <tbody>${banned
         .map(
           (e) => `
         <tr>
           <td><strong>${esc(e.name)}</strong></td>
           <td class="dim">${esc(e.reason || '-')}</td>
-          <td>
-            <button class="btn btn-sm btn-success" data-action="unban-player" data-name="${esc(e.name)}">Unban</button>
-          </td>
+          ${isAdmin ? `<td><button class="btn btn-sm btn-success" data-action="unban-player" data-name="${esc(e.name)}">Unban</button></td>` : ''}
         </tr>`,
         )
         .join('')}

@@ -17,6 +17,7 @@ import {
   buildSameOriginCheck,
   buildCsrfCheck,
   checkWsOrigin,
+  requireAdmin,
 } from './src/middleware.js';
 import { validateConfig, migrateLaunchConfig, launchToString } from './src/validate.js';
 import { info, setNotifyHook } from './src/audit.js';
@@ -223,7 +224,7 @@ app.use('/api', backupRoutes(ctx));
 app.use('/api', modpackRoutes(ctx));
 app.use('/api', auditRoutes());
 
-app.post('/api/rcon/connect', async (req, res) => {
+app.post('/api/rcon/connect', requireAdmin, async (req, res) => {
   if (ctx.config.demoMode) return res.json({ ok: true, connected: true, demo: true });
   const ok = await ctx.connectRcon();
   res.json({ ok, connected: ok });

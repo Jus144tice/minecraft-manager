@@ -12,6 +12,7 @@ import cron from 'node-cron';
 import * as Backup from '../backup.js';
 import { audit } from '../audit.js';
 import { runPreflight } from '../preflight.js';
+import { requireAdmin } from '../middleware.js';
 
 export default function settingsRoutes(ctx) {
   const router = Router();
@@ -25,7 +26,7 @@ export default function settingsRoutes(ctx) {
     }
   });
 
-  router.post('/settings/properties', async (req, res) => {
+  router.post('/settings/properties', requireAdmin, async (req, res) => {
     if (ctx.config.demoMode) {
       Object.assign(Demo.DEMO_PROPERTIES, req.body);
       return res.json({ ok: true, demo: true });
@@ -44,7 +45,7 @@ export default function settingsRoutes(ctx) {
     res.json(safe);
   });
 
-  router.post('/config', async (req, res) => {
+  router.post('/config', requireAdmin, async (req, res) => {
     const allowed = [
       'serverPath',
       'rconHost',
@@ -209,7 +210,7 @@ export default function settingsRoutes(ctx) {
   });
 
   // Create a directory (used by the directory browser's "New Folder" button)
-  router.post('/mkdir', async (req, res) => {
+  router.post('/mkdir', requireAdmin, async (req, res) => {
     const { path: dirPath } = req.body;
     if (!dirPath || typeof dirPath !== 'string') {
       return res.status(400).json({ error: 'path is required' });

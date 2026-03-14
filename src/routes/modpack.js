@@ -8,6 +8,7 @@ import * as Demo from '../demoData.js';
 import { audit } from '../audit.js';
 import { isSafeModFilename } from '../validate.js';
 import { acquireOp, releaseOp } from '../operationLock.js';
+import { requireAdmin } from '../middleware.js';
 
 export default function modpackRoutes(ctx) {
   const router = Router();
@@ -155,7 +156,7 @@ export default function modpackRoutes(ctx) {
     }
   });
 
-  router.post('/modpack/import', async (req, res) => {
+  router.post('/modpack/import', requireAdmin, async (req, res) => {
     const { mods } = req.body;
     if (!Array.isArray(mods) || mods.length === 0) {
       return res.status(400).json({ error: 'No mods to install' });

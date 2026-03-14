@@ -1,11 +1,13 @@
 // Player management routes: online list, ops, whitelist, bans, kick, broadcast.
-// Uses RCON when connected; falls back to editing JSON files directly when offline.
+// Read endpoints (GET) are available to all authenticated users.
+// Mutating endpoints (POST/DELETE) require admin access.
 
 import { Router } from 'express';
 import * as SF from '../serverFiles.js';
 import * as Demo from '../demoData.js';
 import { audit } from '../audit.js';
 import { isValidMinecraftName, isSafeCommand, sanitizeReason } from '../validate.js';
+import { requireAdmin } from '../middleware.js';
 
 export default function playerRoutes(ctx) {
   const router = Router();
@@ -33,7 +35,7 @@ export default function playerRoutes(ctx) {
     res.json(await SF.getOps(ctx.config.serverPath));
   });
 
-  router.post('/players/op', async (req, res) => {
+  router.post('/players/op', requireAdmin, async (req, res) => {
     const { name, level = 4 } = req.body;
     if (!name) return res.status(400).json({ error: 'name required' });
     if (!isValidMinecraftName(name)) return res.status(400).json({ error: 'Invalid player name' });
@@ -64,7 +66,7 @@ export default function playerRoutes(ctx) {
     }
   });
 
-  router.delete('/players/op/:name', async (req, res) => {
+  router.delete('/players/op/:name', requireAdmin, async (req, res) => {
     const { name } = req.params;
     if (!isValidMinecraftName(name)) return res.status(400).json({ error: 'Invalid player name' });
     if (ctx.config.demoMode) {
@@ -90,7 +92,7 @@ export default function playerRoutes(ctx) {
     res.json(await SF.getWhitelist(ctx.config.serverPath));
   });
 
-  router.post('/players/whitelist', async (req, res) => {
+  router.post('/players/whitelist', requireAdmin, async (req, res) => {
     const { name } = req.body;
     if (!name) return res.status(400).json({ error: 'name required' });
     if (!isValidMinecraftName(name)) return res.status(400).json({ error: 'Invalid player name' });
@@ -114,7 +116,7 @@ export default function playerRoutes(ctx) {
     }
   });
 
-  router.delete('/players/whitelist/:name', async (req, res) => {
+  router.delete('/players/whitelist/:name', requireAdmin, async (req, res) => {
     const { name } = req.params;
     if (!isValidMinecraftName(name)) return res.status(400).json({ error: 'Invalid player name' });
     if (ctx.config.demoMode) {
@@ -143,7 +145,7 @@ export default function playerRoutes(ctx) {
     });
   });
 
-  router.post('/players/ban', async (req, res) => {
+  router.post('/players/ban', requireAdmin, async (req, res) => {
     const { name, reason: rawReason = 'Banned by admin' } = req.body;
     if (!name) return res.status(400).json({ error: 'name required' });
     if (!isValidMinecraftName(name)) return res.status(400).json({ error: 'Invalid player name' });
@@ -176,7 +178,7 @@ export default function playerRoutes(ctx) {
     }
   });
 
-  router.delete('/players/ban/:name', async (req, res) => {
+  router.delete('/players/ban/:name', requireAdmin, async (req, res) => {
     const { name } = req.params;
     if (!isValidMinecraftName(name)) return res.status(400).json({ error: 'Invalid player name' });
     if (ctx.config.demoMode) {
@@ -197,7 +199,7 @@ export default function playerRoutes(ctx) {
     }
   });
 
-  router.post('/players/kick', async (req, res) => {
+  router.post('/players/kick', requireAdmin, async (req, res) => {
     const { name, reason: rawReason = 'Kicked by admin' } = req.body;
     if (!name) return res.status(400).json({ error: 'name required' });
     if (!isValidMinecraftName(name)) return res.status(400).json({ error: 'Invalid player name' });
@@ -219,7 +221,7 @@ export default function playerRoutes(ctx) {
     }
   });
 
-  router.post('/players/say', async (req, res) => {
+  router.post('/players/say', requireAdmin, async (req, res) => {
     const { message } = req.body;
     if (!message) return res.status(400).json({ error: 'message required' });
     if (!isSafeCommand(message)) return res.status(400).json({ error: 'Invalid message' });

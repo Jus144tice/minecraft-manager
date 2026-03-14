@@ -14,6 +14,7 @@ A self-hosted web control panel for a Minecraft Forge server running on Linux. B
 - Player management — operators (with permission levels 1–4), whitelist, bans
 - Edit `server.properties` in the browser
 - OIDC authentication (Google and/or Microsoft) with email allowlist; optional local password fallback
+- Role-based access — Admin (full control) and Viewer (read-only); first OIDC user auto-promoted to admin
 - WebSocket-based live log streaming
 - Full backup & restore — scheduled nightly (configurable cron), quiesced snapshots via RCON, disk-space preflight checks, concurrent-operation locking. Restore to any point in time from the Backups tab.
 - Discord/webhook notifications — server crashes, auto-restarts, backups, lag spikes, player bans/kicks, and mod changes delivered to Discord or any webhook endpoint
@@ -481,6 +482,33 @@ In production, log in via **Google** or **Microsoft**. The OIDC flow:
 A **local password** login is available as a fallback if `LOCAL_PASSWORD` is set. It is rate-limited to 20 attempts per 15 minutes per IP.
 
 In **demo mode**, no login is required. Demo mode is for local development only — do not deploy with `"demoMode": true` behind a public URL.
+
+### Roles & permissions
+
+Every user has one of two roles:
+
+| Role       | Access                                                                                                                       |
+| ---------- | ---------------------------------------------------------------------------------------------------------------------------- |
+| **Admin**  | Full access — start/stop server, manage mods, edit players, backups, settings, and all other controls                        |
+| **Viewer** | Read-only — can see the dashboard, console output, mod list, player lists, and server status, but cannot perform any actions |
+
+**How roles are assigned:**
+
+- The **first user** to log in via Google or Microsoft OIDC is **automatically promoted to admin** (so you don't get locked out of your own panel).
+- All subsequent OIDC users start as **Viewer**.
+- **Local password** login (`LOCAL_PASSWORD`) always grants **Admin** access.
+- In **demo mode**, everyone is Admin.
+
+**How to promote a user to Admin:**
+
+1. Log in as an existing Admin.
+2. Go to the **Users** panel (admin-only, accessible via the API or a database-connected deployment).
+3. Find the user and set their admin level to 1:
+   - **Via the UI**: Navigate to `/api/users` in the admin panel, find the user, and click to promote them.
+   - **Via the API**: `PUT /api/users/:email/admin` with body `{ "level": 1 }`.
+   - **Via the database**: `UPDATE users SET admin_level = 1 WHERE email = 'user@example.com';`
+
+> **Note:** Roles require a PostgreSQL database (`DATABASE_URL`). Without a database, session data is stored in memory and all OIDC users get the default admin level (0 = Viewer). Use `LOCAL_PASSWORD` for single-admin setups without a database.
 
 ---
 

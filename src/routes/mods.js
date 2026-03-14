@@ -1,4 +1,5 @@
 // Installed mod routes: list, Modrinth lookup (bulk SHA1), toggle, delete.
+// Mutating endpoints (toggle, delete) require admin access.
 
 import { Router } from 'express';
 import * as SF from '../serverFiles.js';
@@ -6,6 +7,7 @@ import * as Modrinth from '../modrinth.js';
 import * as Demo from '../demoData.js';
 import { audit } from '../audit.js';
 import { isSafeModFilename } from '../validate.js';
+import { requireAdmin } from '../middleware.js';
 
 export default function modRoutes(ctx) {
   const router = Router();
@@ -42,7 +44,7 @@ export default function modRoutes(ctx) {
     }
   });
 
-  router.post('/mods/toggle', async (req, res) => {
+  router.post('/mods/toggle', requireAdmin, async (req, res) => {
     const { filename, enable } = req.body;
     if (!filename) return res.status(400).json({ error: 'filename required' });
     if (!isSafeModFilename(filename)) return res.status(400).json({ error: 'Invalid filename' });
@@ -60,7 +62,7 @@ export default function modRoutes(ctx) {
     }
   });
 
-  router.delete('/mods/:filename', async (req, res) => {
+  router.delete('/mods/:filename', requireAdmin, async (req, res) => {
     const { filename } = req.params;
     if (!isSafeModFilename(filename)) return res.status(400).json({ error: 'Invalid filename' });
     if (ctx.config.demoMode) {

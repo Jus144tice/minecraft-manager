@@ -1,11 +1,12 @@
 // Server control routes: start, stop, kill, restart, RCON command, stdin.
-// All endpoints require an authenticated session (applied globally in server.js).
+// All mutating endpoints require admin access.
 
 import { Router } from 'express';
 import * as Demo from '../demoData.js';
 import { audit } from '../audit.js';
 import { isSafeCommand } from '../validate.js';
 import { getActiveOps } from '../operationLock.js';
+import { requireAdmin } from '../middleware.js';
 
 export default function serverRoutes(ctx) {
   const router = Router();
@@ -20,7 +21,7 @@ export default function serverRoutes(ctx) {
     }
   }
 
-  router.post('/server/start', async (req, res) => {
+  router.post('/server/start', requireAdmin, async (req, res) => {
     if (ctx.config.demoMode) {
       if (ctx.demoState.running) return res.status(400).json({ error: 'Demo server is already running' });
       ctx.demoState.running = true;
@@ -50,7 +51,7 @@ export default function serverRoutes(ctx) {
     }
   });
 
-  router.post('/server/stop', async (req, res) => {
+  router.post('/server/stop', requireAdmin, async (req, res) => {
     if (ctx.config.demoMode) {
       if (!ctx.demoState.running) return res.status(400).json({ error: 'Demo server is not running' });
       ctx.broadcast({
@@ -84,7 +85,7 @@ export default function serverRoutes(ctx) {
     }
   });
 
-  router.post('/server/kill', async (req, res) => {
+  router.post('/server/kill', requireAdmin, async (req, res) => {
     if (ctx.config.demoMode) {
       ctx.demoState.running = false;
       ctx.demoState.startTime = null;
@@ -99,7 +100,7 @@ export default function serverRoutes(ctx) {
     res.json({ ok: true, message: 'Process killed' });
   });
 
-  router.post('/server/restart', async (req, res) => {
+  router.post('/server/restart', requireAdmin, async (req, res) => {
     if (ctx.config.demoMode) {
       ctx.demoState.running = false;
       ctx.demoState.startTime = null;
@@ -142,7 +143,7 @@ export default function serverRoutes(ctx) {
     }
   });
 
-  router.post('/server/command', async (req, res) => {
+  router.post('/server/command', requireAdmin, async (req, res) => {
     const { command } = req.body;
     if (!command) return res.status(400).json({ error: 'command required' });
     if (!isSafeCommand(command)) return res.status(400).json({ error: 'Invalid command' });
@@ -160,7 +161,7 @@ export default function serverRoutes(ctx) {
     }
   });
 
-  router.post('/server/stdin', async (req, res) => {
+  router.post('/server/stdin', requireAdmin, async (req, res) => {
     const { command } = req.body;
     if (!command) return res.status(400).json({ error: 'command required' });
     if (!isSafeCommand(command)) return res.status(400).json({ error: 'Invalid command' });

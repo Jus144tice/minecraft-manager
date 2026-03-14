@@ -1,5 +1,6 @@
 // Modrinth integration routes: browse, search, project detail, versions, download.
 // Client-only mods are filtered out of all search results (they crash the server).
+// Download (POST) requires admin access; browsing (GET) is available to all.
 
 import { Router } from 'express';
 import * as SF from '../serverFiles.js';
@@ -8,6 +9,7 @@ import * as Demo from '../demoData.js';
 import { audit } from '../audit.js';
 import { isSafeModFilename } from '../validate.js';
 import { marked } from 'marked';
+import { requireAdmin } from '../middleware.js';
 
 export default function modrinthRoutes(ctx) {
   const router = Router();
@@ -100,7 +102,7 @@ export default function modrinthRoutes(ctx) {
     }
   });
 
-  router.post('/modrinth/download', async (req, res) => {
+  router.post('/modrinth/download', requireAdmin, async (req, res) => {
     const { versionId } = req.body;
     if (!versionId) return res.status(400).json({ error: 'versionId required' });
     if (!/^[a-zA-Z0-9_-]{1,64}$/.test(versionId)) return res.status(400).json({ error: 'Invalid version ID' });
