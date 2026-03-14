@@ -38,6 +38,10 @@ body {
   font-size: 14px;
   line-height: 1.5;
   min-height: 100vh;
+  overflow-x: hidden;
+}
+html {
+  overflow-x: hidden;
 }
 
 /* --- Demo banner --- */
@@ -227,6 +231,7 @@ body {
   max-width: 1100px;
   margin: 0 auto;
   padding: 1.5rem;
+  overflow-x: hidden;
 }
 .hidden {
   display: none !important;
@@ -1321,7 +1326,7 @@ textarea:focus {
 
 /* --- Responsive --- */
 
-/* Tablet */
+/* Tablet (≤768px) */
 @media (max-width: 768px) {
   .mod-detail-hero {
     flex-direction: column;
@@ -1339,9 +1344,72 @@ textarea:focus {
   .backup-actions {
     width: 100%;
   }
+
+  /* Topbar: wrap tabs to second row */
+  .topbar {
+    flex-wrap: wrap;
+    height: auto;
+    padding: 0.5rem 1rem;
+    gap: 0.35rem;
+  }
+  .tab-nav {
+    order: 3;
+    width: 100%;
+    padding-bottom: 0.1rem;
+    /* Fade hints for horizontal scroll */
+    -webkit-mask-image: linear-gradient(to right, transparent 0, black 8px, black calc(100% - 24px), transparent 100%);
+    mask-image: linear-gradient(to right, transparent 0, black 8px, black calc(100% - 24px), transparent 100%);
+  }
+
+  /* Stat grid: 2 columns on tablets */
+  .stat-grid {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 0.75rem;
+  }
+
+  /* Demo banner: stack for readability */
+  .demo-banner {
+    font-size: 0.8rem;
+    padding: 0.5rem 0.75rem;
+    gap: 0.5rem;
+  }
+
+  /* Server URL bar: stack label above URL */
+  .server-url-bar {
+    flex-wrap: wrap;
+    gap: 0.4rem;
+    padding: 0.5rem 0.75rem;
+  }
+  .server-url-text {
+    font-size: 0.88rem;
+    word-break: break-all;
+  }
+
+  /* Subtab nav: scrollable */
+  .subtab-nav {
+    overflow-x: auto;
+    scrollbar-width: none;
+    -webkit-overflow-scrolling: touch;
+  }
+  .subtab-nav::-webkit-scrollbar {
+    display: none;
+  }
+  .subtab-btn {
+    white-space: nowrap;
+    flex-shrink: 0;
+  }
+
+  /* Header actions: wrap better */
+  .header-actions {
+    flex-wrap: wrap;
+  }
+  .header-actions .btn {
+    font-size: 0.78rem;
+    padding: 0.3rem 0.55rem;
+  }
 }
 
-/* Phone */
+/* Phone (≤600px) */
 @media (max-width: 600px) {
   .form-row {
     grid-template-columns: 1fr;
@@ -1358,6 +1426,10 @@ textarea:focus {
     width: auto;
     max-width: 340px;
     margin: 0 0.75rem;
+    padding: 1.5rem;
+  }
+  .login-logo h1 {
+    font-size: 1.2rem;
   }
   .user-menu-name {
     display: none;
@@ -1365,12 +1437,61 @@ textarea:focus {
 
   /* Topbar */
   .topbar {
-    padding: 0 0.75rem;
-    gap: 0.5rem;
+    padding: 0.4rem 0.75rem;
+    gap: 0.25rem;
+  }
+  .topbar-left .logo-icon {
+    font-size: 1.2rem;
   }
   .tab-btn {
-    padding: 0.35rem 0.55rem;
+    padding: 0.4rem 0.6rem;
     font-size: 0.78rem;
+    /* Ensure min 44px touch target height */
+    min-height: 36px;
+  }
+
+  /* Server badge: smaller on mobile */
+  #server-badge {
+    font-size: 0.7rem;
+    padding: 0.15rem 0.45rem;
+  }
+
+  /* Stat grid: 2 columns, compact cards */
+  .stat-grid {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 0.5rem;
+  }
+  .stat-card {
+    padding: 0.65rem 0.75rem;
+  }
+  .stat-label {
+    font-size: 0.72rem;
+  }
+  .stat-value {
+    font-size: 1.05rem;
+  }
+
+  /* Demo banner */
+  .demo-banner {
+    font-size: 0.78rem;
+    padding: 0.45rem 0.65rem;
+    gap: 0.4rem;
+    line-height: 1.4;
+  }
+
+  /* Server URL bar */
+  .server-url-bar {
+    flex-wrap: wrap;
+    gap: 0.35rem;
+    padding: 0.5rem 0.75rem;
+  }
+  .server-url-label {
+    font-size: 0.78rem;
+  }
+  .server-url-text {
+    font-size: 0.85rem;
+    flex-basis: 100%;
+    word-break: break-all;
   }
 
   /* Console */
@@ -1381,6 +1502,10 @@ textarea:focus {
   .console-input-bar {
     gap: 0.35rem;
     padding: 0.4rem 0.5rem;
+  }
+  .console-output {
+    font-size: 0.72rem;
+    padding: 0.5rem;
   }
 
   /* Filter bars */
@@ -1399,18 +1524,33 @@ textarea:focus {
   /* Cards & actions */
   .mod-card {
     flex-wrap: wrap;
+    padding: 0.6rem;
+    gap: 0.5rem;
+  }
+  .mod-icon,
+  .mod-icon-placeholder {
+    width: 40px;
+    height: 40px;
   }
   .mod-actions {
     width: 100%;
     justify-content: flex-end;
   }
+  .mod-title {
+    font-size: 0.88rem;
+  }
   .backup-card {
     flex-direction: column;
     align-items: flex-start;
+    padding: 0.65rem 0.75rem;
   }
   .backup-actions {
     width: 100%;
     justify-content: flex-end;
+  }
+  .backup-meta {
+    font-size: 0.72rem;
+    gap: 0.5rem;
   }
 
   /* Quick actions grid */
@@ -1419,7 +1559,22 @@ textarea:focus {
   }
   .action-btn-grid .btn {
     font-size: 0.75rem;
-    padding: 0.25rem 0.5rem;
+    padding: 0.3rem 0.55rem;
+    min-height: 32px;
+  }
+
+  /* Control sections */
+  .control-section {
+    padding: 0.75rem;
+  }
+  .control-section h3 {
+    font-size: 0.82rem;
+  }
+
+  /* Button rows: allow wrapping, ensure touch targets */
+  .btn-row .btn {
+    min-height: 38px;
+    font-size: 0.8rem;
   }
 
   /* Mod detail */
@@ -1437,6 +1592,9 @@ textarea:focus {
     flex-direction: row;
     flex-wrap: wrap;
   }
+  .mod-detail-header {
+    padding: 0.85rem;
+  }
   .gallery-img {
     height: 120px;
   }
@@ -1453,24 +1611,45 @@ textarea:focus {
     display: none;
   }
 
-  /* Modals */
+  /* Modals — full-width on phones */
   .modal {
     max-width: calc(100vw - 1rem);
+    max-height: 90vh;
+  }
+  .modal-header {
+    padding: 0.75rem;
+  }
+  .modal-header h3 {
+    font-size: 1rem;
+  }
+  .modal-body {
+    padding: 0.75rem;
   }
   .cmd-help-modal-wide {
     max-width: calc(100vw - 1rem);
+    max-height: 90vh;
   }
   .modpack-modal-wide {
     max-width: calc(100vw - 1rem);
+  }
+  .cmd-help-search-bar {
+    padding: 0.5rem 0.75rem;
   }
 
   /* Page headers */
   .page-header {
     flex-direction: column;
     align-items: flex-start;
+    margin-bottom: 0.75rem;
+  }
+  .page-header h2 {
+    font-size: 1.05rem;
   }
   .header-actions {
     width: 100%;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.35rem;
   }
 
   /* Schedule picker */
@@ -1491,6 +1670,96 @@ textarea:focus {
   }
   .add-row input {
     min-width: 0;
+  }
+
+  /* Settings form */
+  .settings-form {
+    padding: 0.85rem;
+    gap: 0.85rem;
+  }
+
+  /* Subtab buttons: ensure touch-friendly */
+  .subtab-btn {
+    padding: 0.5rem 0.75rem;
+    font-size: 0.82rem;
+    min-height: 38px;
+  }
+
+  /* Version modal rows */
+  .version-row {
+    flex-direction: column;
+    gap: 0.5rem;
+    align-items: flex-start;
+  }
+
+  /* Player management: compact add rows */
+  .legend-box {
+    font-size: 0.78rem;
+    padding: 0.6rem 0.75rem;
+    line-height: 1.5;
+  }
+
+  /* Restore modal */
+  .restore-warning {
+    font-size: 0.82rem;
+    padding: 0.6rem 0.75rem;
+  }
+
+  /* Modpack conflict rows */
+  .modpack-conflict-row {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.35rem;
+  }
+
+  /* Directory browser */
+  .dir-crumbs {
+    font-size: 0.78rem;
+  }
+  .dir-entry {
+    padding: 0.55rem 0.75rem;
+    min-height: 40px;
+  }
+
+  /* Chips — online players */
+  .chip {
+    font-size: 0.78rem;
+    padding: 0.15rem 0.5rem 0.15rem 0.6rem;
+  }
+
+  /* Console hint text */
+  .console-hint {
+    font-size: 0.72rem;
+  }
+
+  /* Prevent iOS auto-zoom on input focus (needs ≥16px) */
+  input[type='text'],
+  input[type='password'],
+  input[type='number'],
+  input[type='email'],
+  select,
+  textarea {
+    font-size: 16px;
+  }
+}
+
+/* Very small phones (≤380px) */
+@media (max-width: 380px) {
+  .stat-grid {
+    grid-template-columns: 1fr;
+  }
+  .topbar {
+    padding: 0.35rem 0.5rem;
+  }
+  .tab-btn {
+    padding: 0.35rem 0.45rem;
+    font-size: 0.72rem;
+  }
+  .btn-row {
+    flex-direction: column;
+  }
+  .btn-row .btn {
+    width: 100%;
   }
 }
 

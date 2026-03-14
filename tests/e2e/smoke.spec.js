@@ -53,7 +53,14 @@ test('login modal shows demo hint', async ({ page }) => {
 
 test('login with any password succeeds', async ({ page }) => {
   await login(page);
-  // User menu should show logged-in state
+  // User menu should show logged-in state (wait for async update)
+  await page.waitForFunction(
+    () => {
+      const el = document.getElementById('user-menu-name');
+      return el && el.textContent !== 'Guest';
+    },
+    { timeout: 5000 },
+  );
   const name = await page.textContent('#user-menu-name');
   expect(name).not.toBe('Guest');
 });
