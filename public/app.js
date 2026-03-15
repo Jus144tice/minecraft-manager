@@ -958,8 +958,32 @@ async function loadDiscordStatus() {
     $('discord-channel').textContent = ds.notificationChannelName || 'Not configured';
     $('discord-members').textContent = ds.memberCount != null ? String(ds.memberCount) : '-';
 
-    // Disable send button if no notification channel
-    $('btn-discord-send').disabled = !ds.connected || !ds.notificationChannelId;
+    // Check if sending is possible and show appropriate UI
+    const sendReady = $('discord-send-ready');
+    const sendBlocked = $('discord-send-blocked');
+    const blockedMsg = $('discord-send-blocked-msg');
+
+    if (!ds.connected) {
+      hide(sendReady);
+      show(sendBlocked);
+      blockedMsg.innerHTML = 'Discord bot is not connected. Check bot token and configuration in Settings.';
+    } else if (!ds.notificationChannelId) {
+      hide(sendReady);
+      show(sendBlocked);
+      blockedMsg.innerHTML =
+        'No notification channel configured. Set <strong>discordNotificationChannelId</strong> in Settings.';
+    } else if (ds.canSend === false) {
+      hide(sendReady);
+      show(sendBlocked);
+      blockedMsg.innerHTML =
+        'The bot does not have <strong>Send Messages</strong> permission in ' +
+        esc(ds.notificationChannelName || 'the notification channel') +
+        '. Grant the bot Send Messages permission in Discord server settings.';
+    } else {
+      show(sendReady);
+      hide(sendBlocked);
+      $('btn-discord-send').disabled = false;
+    }
   } catch {
     $('stat-discord').textContent = 'N/A';
     $('stat-discord').className = 'stat-value text-dim';

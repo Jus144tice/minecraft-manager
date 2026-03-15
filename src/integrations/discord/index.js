@@ -246,11 +246,18 @@ export function getDiscordStatus() {
     }
   }
 
-  // Add notification channel name if configured
+  // Add notification channel name and permission check if configured
   if (connected && discordConfig?.notificationChannelId) {
     try {
       const ch = client.channels?.cache?.get(discordConfig.notificationChannelId);
-      if (ch) status.notificationChannelName = `#${ch.name}`;
+      if (ch) {
+        status.notificationChannelName = `#${ch.name}`;
+        // Check if the bot can send messages in this channel
+        const perms = ch.permissionsFor?.(client.user);
+        if (perms) {
+          status.canSend = perms.has('SendMessages');
+        }
+      }
     } catch {
       /* channel not cached yet */
     }

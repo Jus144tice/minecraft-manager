@@ -226,11 +226,16 @@
           </div>
           <div class="discord-message-section">
             <h4>Send to Discord</h4>
-            <div class="input-row">
-              <input type="text" id="discord-msg-input" placeholder="Message to send to Discord channel..." />
-              <button class="btn btn-primary" id="btn-discord-send">Send</button>
+            <div id="discord-send-blocked" class="hidden">
+              <p id="discord-send-blocked-msg" class="dim" style="font-size: 0.85rem"></p>
             </div>
-            <p id="discord-msg-status" class="control-msg"></p>
+            <div id="discord-send-ready">
+              <div class="input-row">
+                <input type="text" id="discord-msg-input" placeholder="Message to send to Discord channel..." />
+                <button class="btn btn-primary" id="btn-discord-send">Send</button>
+              </div>
+              <p id="discord-msg-status" class="control-msg"></p>
+            </div>
           </div>
         </div>
 
