@@ -156,7 +156,8 @@ test('mods browse subtab loads Modrinth results', async ({ page }) => {
 test('players tab shows operators list', async ({ page }) => {
   await login(page);
   await page.click('.tab-btn[data-tab="players"]');
-  // Operators subtab is active by default
+  // Online is the default subtab, so switch to Operators
+  await page.click('.subtab-btn[data-subtab="ops"]');
   const opsSection = page.locator('#ops-list');
   await expect(opsSection).toBeVisible();
 });
