@@ -139,11 +139,19 @@ async function broadcastMetrics() {
         uptime: ctx.getDemoUptime(),
         demoMode: true,
         rconConnected: true,
+        minecraftVersion: config.minecraftVersion || 'unknown',
         ...m,
       };
     } else {
       const m = await collectMetrics({ mc, rconCmd: ctx.rconCmd, rconConnected: ctx.rconConnected, config });
-      payload = { type: 'status', running: mc.running, uptime: mc.getUptime(), rconConnected: ctx.rconConnected, ...m };
+      payload = {
+        type: 'status',
+        running: mc.running,
+        uptime: mc.getUptime(),
+        rconConnected: ctx.rconConnected,
+        minecraftVersion: config.minecraftVersion || 'unknown',
+        ...m,
+      };
       // Notify on lag spikes (with cooldown)
       if (m.lagSpike && m.tps != null) {
         notifyLagSpike(m.tps, m.tpsThreshold);
