@@ -2177,6 +2177,12 @@ textarea:focus {
   font-weight: 600;
 }
 
+.mod-version {
+  font-weight: 400;
+  font-size: 0.8rem;
+  color: var(--text-dim);
+}
+
 /* Clickable mod title */
 .mod-title-link {
   cursor: pointer;

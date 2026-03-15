@@ -1093,6 +1093,7 @@ function renderMods() {
               ? `<span class="mod-title-link" data-action="mod-detail" data-id="${esc(md.projectSlug || md.projectId)}" data-source="installed" data-filename="${esc(mod.filename)}" data-author="${esc(md.author || '')}">${esc(title)}</span>`
               : `<span>${esc(title)}</span>`
           }
+          ${ver ? `<span class="mod-version">v${esc(ver)}</span>` : ''}
           <span class="side-badge ${side.cls}">${side.text}</span>
           ${!mod.enabled ? '<span class="side-badge mod-off-badge">Disabled</span>' : ''}
         </div>
@@ -1101,7 +1102,6 @@ function renderMods() {
           ${md?.author ? `<span class="dim" title="Author">by <strong>${esc(md.author)}</strong></span>` : ''}
           ${md?.downloads != null ? `<span class="dim" title="Downloads">&#11015; ${Number(md.downloads).toLocaleString()}</span>` : ''}
           ${md?.follows != null ? `<span class="dim" title="Followers">&#9829; ${Number(md.follows).toLocaleString()}</span>` : ''}
-          ${ver ? `<span class="dim">v${esc(ver)}</span>` : ''}
           <span class="dim">${formatSize(mod.size)}</span>
         </div>
       </div>
