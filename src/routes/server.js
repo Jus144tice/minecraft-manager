@@ -2,11 +2,14 @@
 // All mutating endpoints require admin access.
 
 import { Router } from 'express';
+import fs from 'fs/promises';
+import path from 'path';
 import * as Demo from '../demoData.js';
 import { audit } from '../audit.js';
 import { isSafeCommand } from '../validate.js';
 import { getActiveOps } from '../operationLock.js';
 import { requireAdmin } from '../middleware.js';
+import { getServerProperties } from '../serverFiles.js';
 
 export default function serverRoutes(ctx) {
   const router = Router();
@@ -174,6 +177,47 @@ export default function serverRoutes(ctx) {
       res.json({ ok: true });
     } catch (err) {
       res.status(400).json({ error: err.message });
+    }
+  });
+
+  router.post('/server/regenerate-world', requireAdmin, async (req, res) => {
+    if (ctx.config.demoMode) {
+      return res.json({ ok: true, message: '[DEMO] World deleted. Start the server to generate a new world.' });
+    }
+    try {
+      if (ctx.mc.running) {
+        return res.status(400).json({ error: 'Server must be stopped before regenerating the world.' });
+      }
+      checkLifecycleLock('regenerate world');
+
+      const props = await getServerProperties(ctx.config.serverPath);
+      const levelName = props['level-name'] || 'world';
+
+      // Validate level-name is safe (no traversal)
+      if (levelName.includes('..') || levelName.includes('/') || levelName.includes('\\')) {
+        return res.status(400).json({ error: 'Invalid level-name in server.properties' });
+      }
+
+      const worldPath = path.join(ctx.config.serverPath, levelName);
+
+      // Also remove nether/end dimension folders that Minecraft creates alongside
+      const folders = [worldPath, `${worldPath}_nether`, `${worldPath}_the_end`];
+      for (const dir of folders) {
+        try {
+          await fs.rm(dir, { recursive: true, force: true });
+        } catch {
+          /* folder may not exist */
+        }
+      }
+
+      audit('WORLD_REGENERATE', { user: req.session.user.email, levelName, ip: req.ip });
+      res.json({
+        ok: true,
+        message: `World "${levelName}" deleted. Start the server to generate a new world.`,
+      });
+    } catch (err) {
+      const status = err.message.includes('already in progress') ? 409 : 500;
+      res.status(status).json({ error: err.message });
     }
   });
 

@@ -288,6 +288,7 @@
                 >
                   Enable Auto-save
                 </button>
+                <button class="btn btn-sm btn-danger" id="btn-regenerate-world">Regenerate World</button>
               </div>
             </div>
             <div class="action-category">
@@ -651,9 +652,10 @@
         <div class="page-header">
           <h2>Mod Manager</h2>
           <div class="header-actions">
-            <button class="btn btn-sm btn-ghost admin-only" id="btn-export-modpack">Export Modpack</button>
+            <button class="btn btn-sm btn-ghost admin-only" id="btn-export-modpack">Export JSON</button>
+            <button class="btn btn-sm btn-ghost admin-only" id="btn-export-mrpack">Export .mrpack</button>
             <button class="btn btn-sm btn-ghost admin-only" id="btn-import-modpack">Import Modpack</button>
-            <input type="file" id="modpack-file-input" accept=".json" class="hidden" />
+            <input type="file" id="modpack-file-input" accept=".json,.mrpack" class="hidden" />
             <button class="btn btn-sm btn-ghost" id="btn-refresh-mods">Refresh List</button>
           </div>
         </div>

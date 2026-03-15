@@ -188,6 +188,27 @@ export function hashFile(filePath) {
   });
 }
 
+export function hashFileSha512(filePath) {
+  return new Promise((resolve, reject) => {
+    const hash = crypto.createHash('sha512');
+    const stream = createReadStream(filePath);
+    stream.on('data', (d) => hash.update(d));
+    stream.on('end', () => resolve(hash.digest('hex')));
+    stream.on('error', reject);
+  });
+}
+
+/**
+ * Write an override file to a relative path under serverPath, creating directories as needed.
+ * Uses safeJoin to prevent path traversal.
+ */
+export async function writeOverrideFile(serverPath, relativePath, buffer) {
+  const target = safeJoin(serverPath, relativePath);
+  await fs.mkdir(path.dirname(target), { recursive: true });
+  await fs.writeFile(target, buffer);
+  return target;
+}
+
 export async function hashMods(serverPath, modsFolder = 'mods', disabledFolder = 'mods_disabled') {
   const result = {};
   for (const [folder, enabled] of [

@@ -790,6 +790,9 @@ function updateDashboard(s) {
     hide('lag-alert');
   }
 
+  // Clear crash alert once the server is back up
+  if (s.running) hide('crash-alert');
+
   // Server address bar — show when running and serverAddress is configured
   const urlBar = $('server-url-bar');
   if (urlBar && window._serverAddress) {
@@ -901,6 +904,22 @@ $('btn-kill').addEventListener('click', async () => {
     flash('control-msg', 'Process killed.');
   } catch (err) {
     flash('control-msg', err.message, true);
+  }
+});
+
+$('btn-regenerate-world').addEventListener('click', async () => {
+  if (
+    !confirm(
+      'REGENERATE THE WORLD?\n\nThis will permanently delete the current world and all player builds. ' +
+        'The server must be stopped first. A new world will be generated on next start.\n\nThis cannot be undone!',
+    )
+  )
+    return;
+  try {
+    const r = await POST('/server/regenerate-world');
+    flash('quick-action-msg', r.message || 'World deleted.');
+  } catch (err) {
+    flash('quick-action-msg', err.message, true);
   }
 });
 
@@ -2684,12 +2703,16 @@ $('modpack-file-input').addEventListener('change', async (e) => {
   const file = e.target.files[0];
   if (!file) return;
   try {
-    const text = await file.text();
-    const modpack = JSON.parse(text);
-    if (!modpack.mods || !Array.isArray(modpack.mods)) {
-      throw new Error('Invalid modpack file: missing "mods" array');
+    if (file.name.endsWith('.mrpack')) {
+      await analyzeMrpack(file);
+    } else {
+      const text = await file.text();
+      const modpack = JSON.parse(text);
+      if (!modpack.mods || !Array.isArray(modpack.mods)) {
+        throw new Error('Invalid modpack file: missing "mods" array');
+      }
+      await analyzeModpack(modpack);
     }
-    await analyzeModpack(modpack);
   } catch (err) {
     alert('Failed to read modpack: ' + err.message);
   }
@@ -2887,6 +2910,294 @@ function renderModpackReport(report, analysis) {
   $('modpack-modal-body').innerHTML = html;
   $('btn-modpack-report-close').addEventListener('click', () => hide('modpack-modal'));
 }
+
+// ============================================================
+// .mrpack import/export
+// ============================================================
+
+async function analyzeMrpack(file) {
+  show('modpack-modal');
+  $('modpack-modal-title').textContent = 'Import .mrpack';
+  $('modpack-modal-body').innerHTML = '<p class="dim">Uploading and analyzing .mrpack file...</p>';
+
+  try {
+    const buf = await file.arrayBuffer();
+    const res = await fetch('/api/modpack/mrpack/analyze', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/octet-stream', 'X-CSRF-Token': csrfToken },
+      body: buf,
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ error: res.statusText }));
+      throw new Error(err.error || err.details?.join(', ') || 'Analysis failed');
+    }
+    const data = await res.json();
+    renderMrpackAnalysis(data);
+  } catch (err) {
+    $('modpack-modal-body').innerHTML = `<p class="error-msg">Analysis failed: ${esc(err.message)}</p>`;
+  }
+}
+
+function renderMrpackAnalysis(data) {
+  const c = data.classification;
+  const serverCount = c.server.length;
+  const bothCount = c.both.length;
+  const clientCount = c.client.length;
+  const unknownCount = c.unknown.length;
+
+  let html = `<div class="modpack-summary">
+    <p><strong>${esc(data.name)}</strong></p>
+    <p class="dim small">MC ${esc(data.minecraftVersion || '?')} / ${esc(data.loader || '?')} ${esc(data.loaderVersion || '')}</p>
+    <div class="modpack-stats">
+      ${serverCount ? `<span class="modpack-stat modpack-stat-new">${serverCount} server</span>` : ''}
+      ${bothCount ? `<span class="modpack-stat modpack-stat-new">${bothCount} both</span>` : ''}
+      ${unknownCount ? `<span class="modpack-stat modpack-stat-conflict">${unknownCount} unknown</span>` : ''}
+      ${clientCount ? `<span class="modpack-stat modpack-stat-client">${clientCount} client-only</span>` : ''}
+    </div>
+  </div>`;
+
+  // Server + Both mods (will be installed)
+  const installMods = [...c.server, ...c.both];
+  if (installMods.length > 0) {
+    html += `<div class="modpack-section">
+      <h4>Will Install on Server (${installMods.length})</h4>
+      <p class="dim small">Server and shared mods — these will be downloaded and installed.</p>
+      <div class="modpack-mod-list">
+        ${installMods.map((m) => `<span class="modpack-mod-chip">${esc(pathBasename(m.path))} <span class="dim">${m.classification}</span></span>`).join('')}
+      </div>
+    </div>`;
+  }
+
+  // Unknown mods (need user decision)
+  if (unknownCount > 0) {
+    html += `<div class="modpack-section">
+      <h4>Unknown Environment (${unknownCount})</h4>
+      <p class="dim small">These mods have no environment metadata. Choose how to handle them.</p>
+      <label class="toggle-label mb-sm">
+        <input type="radio" name="mrpack-unknown" value="install" />
+        <span>Install all unknown mods (permissive)</span>
+      </label>
+      <label class="toggle-label mb-sm">
+        <input type="radio" name="mrpack-unknown" value="skip" checked />
+        <span>Skip all unknown mods (conservative)</span>
+      </label>
+      <div class="modpack-mod-list">
+        ${c.unknown.map((m) => `<span class="modpack-mod-chip modpack-chip-skip">${esc(pathBasename(m.path))}</span>`).join('')}
+      </div>
+    </div>`;
+  }
+
+  // Client-only (skipped)
+  if (clientCount > 0) {
+    html += `<div class="modpack-section">
+      <h4>Client-Only — Skipped (${clientCount})</h4>
+      <p class="dim small">These mods are not needed on the server and will not be installed.</p>
+      <div class="modpack-mod-list">
+        ${c.client.map((m) => `<span class="modpack-mod-chip modpack-chip-client">${esc(pathBasename(m.path))}</span>`).join('')}
+      </div>
+    </div>`;
+  }
+
+  // Overrides
+  if (data.overrideCount > 0 || data.serverOverrideCount > 0) {
+    const total = data.overrideCount + data.serverOverrideCount;
+    html += `<div class="modpack-section">
+      <label class="toggle-label">
+        <input type="checkbox" id="mrpack-include-overrides" checked />
+        <span>Install ${total} override file(s) (configs, datapacks, etc.)</span>
+      </label>
+    </div>`;
+  }
+
+  // Action buttons
+  if (installMods.length > 0 || unknownCount > 0) {
+    html += `<div class="btn-row mt-lg">
+      <button class="btn btn-primary" id="btn-mrpack-install">Install to Server</button>
+      <button class="btn btn-ghost" id="btn-mrpack-cancel">Cancel</button>
+    </div>
+    <p id="mrpack-install-msg" class="control-msg"></p>`;
+  } else {
+    html += `<div class="btn-row mt-lg">
+      <p class="dim">No server-compatible mods found in this pack.</p>
+      <button class="btn btn-ghost" id="btn-mrpack-cancel">Close</button>
+    </div>`;
+  }
+
+  $('modpack-modal-title').textContent = `Import: ${esc(data.name)}`;
+  $('modpack-modal-body').innerHTML = html;
+
+  // Wire cancel
+  const cancelBtn = $('btn-mrpack-cancel');
+  if (cancelBtn) cancelBtn.addEventListener('click', () => hide('modpack-modal'));
+
+  // Wire install
+  const installBtn = $('btn-mrpack-install');
+  if (installBtn) {
+    installBtn.addEventListener('click', async () => {
+      installBtn.disabled = true;
+      installBtn.textContent = 'Installing...';
+
+      const unknownRadio = document.querySelector('input[name="mrpack-unknown"]:checked');
+      const unknownAction = unknownRadio?.value || 'skip';
+      const overridesCb = document.getElementById('mrpack-include-overrides');
+      const includeOverrides = overridesCb?.checked || false;
+
+      try {
+        const report = await POST('/modpack/mrpack/import', {
+          token: data.token,
+          unknownAction,
+          includeOverrides,
+        });
+        renderMrpackReport(report);
+        await loadMods();
+      } catch (err) {
+        flash('mrpack-install-msg', 'Import failed: ' + err.message, true);
+        installBtn.disabled = false;
+        installBtn.textContent = 'Install to Server';
+      }
+    });
+  }
+}
+
+function renderMrpackReport(report) {
+  let html = '<h4>Import Complete</h4>';
+
+  if (report.installed.length > 0) {
+    html += `<div class="modpack-section">
+      <p class="modpack-stat modpack-stat-new">${report.installed.length} mod(s) installed</p>
+      <div class="modpack-mod-list">
+        ${report.installed.map((m) => `<span class="modpack-mod-chip">${esc(m.filename)} <span class="dim">${m.classification || ''} — ${formatSize(m.size || 0)}</span></span>`).join('')}
+      </div>
+    </div>`;
+  }
+
+  if (report.failed.length > 0) {
+    html += `<div class="modpack-section">
+      <p class="modpack-stat modpack-stat-conflict">${report.failed.length} mod(s) failed</p>
+      <div class="modpack-mod-list">
+        ${report.failed.map((m) => `<span class="modpack-mod-chip modpack-chip-fail">${esc(m.path)} <span class="dim">— ${esc(m.error)}</span></span>`).join('')}
+      </div>
+    </div>`;
+  }
+
+  if (report.skipped.length > 0) {
+    html += `<div class="modpack-section">
+      <p class="dim">${report.skipped.length} mod(s) skipped</p>
+      <div class="modpack-mod-list">
+        ${report.skipped.map((m) => `<span class="modpack-mod-chip modpack-chip-skip">${esc(m.path)} <span class="dim">— ${esc(m.reason)}</span></span>`).join('')}
+      </div>
+    </div>`;
+  }
+
+  if (report.overridesApplied > 0) {
+    html += `<p class="dim">${report.overridesApplied} override file(s) applied.</p>`;
+  }
+
+  if (report.warnings?.length > 0) {
+    html += `<div class="modpack-section">
+      <h4>Warnings</h4>
+      ${report.warnings.map((w) => `<p class="dim small">${esc(w)}</p>`).join('')}
+    </div>`;
+  }
+
+  html += `<div class="btn-row mt-lg">
+    <button class="btn btn-ghost" id="btn-mrpack-report-close">Close</button>
+  </div>`;
+
+  $('modpack-modal-title').textContent = 'Import Report';
+  $('modpack-modal-body').innerHTML = html;
+  $('btn-mrpack-report-close').addEventListener('click', () => hide('modpack-modal'));
+}
+
+function pathBasename(p) {
+  return p.split('/').pop() || p;
+}
+
+// Export .mrpack
+$('btn-export-mrpack').addEventListener('click', async () => {
+  // Show export options modal
+  show('modpack-modal');
+  $('modpack-modal-title').textContent = 'Export .mrpack';
+  $('modpack-modal-body').innerHTML = `
+    <div class="modpack-summary">
+      <p>Choose which mod categories to include in the exported .mrpack file.</p>
+    </div>
+    <div class="modpack-section">
+      <h4>Include Categories</h4>
+      <label class="toggle-label mb-sm"><input type="checkbox" id="mrpack-exp-server" checked /><span>Server-only mods</span></label>
+      <label class="toggle-label mb-sm"><input type="checkbox" id="mrpack-exp-both" checked /><span>Shared mods (client + server)</span></label>
+      <label class="toggle-label mb-sm"><input type="checkbox" id="mrpack-exp-client" /><span>Client-only mods</span></label>
+      <label class="toggle-label mb-sm"><input type="checkbox" id="mrpack-exp-unknown" /><span>Unknown environment mods</span></label>
+    </div>
+    <div class="modpack-section">
+      <h4>Options</h4>
+      <label class="toggle-label mb-sm"><input type="checkbox" id="mrpack-exp-overrides" /><span>Include server.properties as override</span></label>
+    </div>
+    <p id="mrpack-export-warn" class="dim small"></p>
+    <div class="btn-row mt-lg">
+      <button class="btn btn-primary" id="btn-mrpack-export-go">Export .mrpack</button>
+      <button class="btn btn-ghost" id="btn-mrpack-export-cancel">Cancel</button>
+    </div>`;
+
+  $('btn-mrpack-export-cancel').addEventListener('click', () => hide('modpack-modal'));
+
+  // Update warning text when client/unknown toggled
+  const updateWarn = () => {
+    const warns = [];
+    if ($('mrpack-exp-client').checked) warns.push('Client-only mods are included');
+    if ($('mrpack-exp-unknown').checked) warns.push('Unknown-environment mods are included');
+    $('mrpack-export-warn').textContent =
+      warns.length > 0 ? warns.join('. ') + '. This export may not be suitable for all environments.' : '';
+  };
+  $('mrpack-exp-client').addEventListener('change', updateWarn);
+  $('mrpack-exp-unknown').addEventListener('change', updateWarn);
+
+  $('btn-mrpack-export-go').addEventListener('click', async () => {
+    const cats = [];
+    if ($('mrpack-exp-server').checked) cats.push('server');
+    if ($('mrpack-exp-both').checked) cats.push('both');
+    if ($('mrpack-exp-client').checked) cats.push('client');
+    if ($('mrpack-exp-unknown').checked) cats.push('unknown');
+
+    if (cats.length === 0) {
+      alert('Select at least one category.');
+      return;
+    }
+
+    const overrides = $('mrpack-exp-overrides').checked;
+    const btn = $('btn-mrpack-export-go');
+    btn.disabled = true;
+    btn.textContent = 'Exporting...';
+
+    try {
+      const params = new URLSearchParams({ include: cats.join(','), overrides: String(overrides) });
+      const res = await fetch(`/api/modpack/mrpack/export?${params}`, {
+        headers: { 'X-CSRF-Token': csrfToken },
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({ error: res.statusText }));
+        throw new Error(err.error || 'Export failed');
+      }
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      const disposition = res.headers.get('Content-Disposition') || '';
+      const filenameMatch = disposition.match(/filename="(.+?)"/);
+      a.download = filenameMatch?.[1] || 'modpack.mrpack';
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+      hide('modpack-modal');
+    } catch (err) {
+      alert('Export failed: ' + err.message);
+    } finally {
+      btn.disabled = false;
+      btn.textContent = 'Export .mrpack';
+    }
+  });
+});
 
 $('modpack-modal-close').addEventListener('click', () => hide('modpack-modal'));
 $('modpack-modal').addEventListener('click', (e) => {
