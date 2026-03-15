@@ -40,6 +40,7 @@ import backupRoutes from './src/routes/backups.js';
 import modpackRoutes from './src/routes/modpack.js';
 import auditRoutes from './src/routes/audit.js';
 import healthRoutes from './src/routes/health.js';
+import identityRoutes from './src/routes/identity.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const CONFIG_PATH = path.join(__dirname, 'config.json');
@@ -197,10 +198,31 @@ app.get('/api/auth/providers', (req, res) => {
   res.json(authProviders);
 });
 
-app.get('/api/session', (req, res) => {
+app.get('/api/session', async (req, res) => {
   if (req.session?.user) {
     const { email, name, provider, adminLevel, loginAt } = req.session.user;
-    res.json({ loggedIn: true, email, name, provider, adminLevel: adminLevel || 0, loginAt, dbConnected: dbReady });
+    const session = {
+      loggedIn: true,
+      email,
+      name,
+      provider,
+      adminLevel: adminLevel || 0,
+      loginAt,
+      dbConnected: dbReady,
+    };
+
+    // Include linked Minecraft player if a panel link exists
+    try {
+      const { getLink } = await import('./src/panelLinks.js');
+      const link = await getLink(email);
+      if (link) {
+        session.linkedPlayer = { minecraftName: link.minecraftName, verified: link.verified };
+      }
+    } catch {
+      // panelLinks not available — that's fine
+    }
+
+    res.json(session);
   } else {
     res.json({ loggedIn: false });
   }
@@ -242,6 +264,7 @@ app.use('/api', userRoutes());
 app.use('/api', backupRoutes(ctx));
 app.use('/api', modpackRoutes(ctx));
 app.use('/api', auditRoutes());
+app.use('/api', identityRoutes(ctx));
 
 app.post('/api/rcon/connect', requireAdmin, async (req, res) => {
   if (ctx.config.demoMode) return res.json({ ok: true, connected: true, demo: true });
@@ -324,6 +347,9 @@ if (config.demoMode) {
   await Demo.enrichDemoIcons().catch((err) =>
     console.warn('[Demo] Icon enrichment failed (icons may be missing):', err.message),
   );
+  // Seed demo panel links
+  const { loadDemoLinks } = await import('./src/panelLinks.js');
+  loadDemoLinks(Demo.DEMO_PANEL_LINKS);
 }
 
 if (!config.demoMode) {

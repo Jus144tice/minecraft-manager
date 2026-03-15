@@ -30,7 +30,9 @@ let cleanupTimer = null;
 
 /**
  * @typedef {object} PendingChallenge
- * @property {string} discordUserId
+ * @property {string} sourceType - 'discord' or 'panel'
+ * @property {string} sourceId - Discord user ID or panel email
+ * @property {string} discordUserId - Alias for sourceId (backward compat, set when sourceType is 'discord')
  * @property {string} minecraftName
  * @property {string} code
  * @property {number} createdAt
@@ -188,30 +190,35 @@ function hasPendingCode(code) {
 }
 
 /**
- * Create a pending link challenge for a Discord user.
- * Replaces any existing pending challenge for that user.
+ * Create a pending link challenge.
+ * Replaces any existing pending challenge for that source.
  *
- * @param {string} discordUserId
+ * @param {string} sourceId - Discord user ID or panel email
  * @param {string} minecraftName - The MC name they claim to own
+ * @param {'discord'|'panel'} [sourceType='discord'] - Which system initiated the challenge
  * @returns {PendingChallenge} The created challenge
  */
-export function createChallenge(discordUserId, minecraftName) {
-  // Replace any existing challenge for this user
-  pendingChallenges.delete(discordUserId);
+export function createChallenge(sourceId, minecraftName, sourceType = 'discord') {
+  const key = `${sourceType}:${sourceId}`;
+  // Replace any existing challenge for this source
+  pendingChallenges.delete(key);
 
   const now = Date.now();
   const challenge = {
-    discordUserId,
+    sourceType,
+    sourceId,
+    discordUserId: sourceType === 'discord' ? sourceId : undefined,
     minecraftName,
     code: generateCode(),
     createdAt: now,
     expiresAt: now + challengeTimeoutMs,
   };
 
-  pendingChallenges.set(discordUserId, challenge);
+  pendingChallenges.set(key, challenge);
 
-  audit('DISCORD_LINK_CHALLENGE', {
-    discordUserId,
+  audit('LINK_CHALLENGE', {
+    sourceType,
+    sourceId,
     minecraftName,
     expiresInMs: challengeTimeoutMs,
   });
@@ -223,14 +230,17 @@ export function createChallenge(discordUserId, minecraftName) {
 }
 
 /**
- * Get the pending challenge for a Discord user.
+ * Get the pending challenge for a source.
  * Returns null if no challenge or if expired.
+ * @param {string} sourceId - Discord user ID or panel email
+ * @param {'discord'|'panel'} [sourceType='discord']
  */
-export function getPendingChallenge(discordUserId) {
-  const challenge = pendingChallenges.get(discordUserId);
+export function getPendingChallenge(sourceId, sourceType = 'discord') {
+  const key = `${sourceType}:${sourceId}`;
+  const challenge = pendingChallenges.get(key);
   if (!challenge) return null;
   if (Date.now() > challenge.expiresAt) {
-    pendingChallenges.delete(discordUserId);
+    pendingChallenges.delete(key);
     return null;
   }
   return challenge;
@@ -259,8 +269,9 @@ export function verifyChallenge(minecraftName, code) {
 
     // Player name must match (case-insensitive)
     if (challenge.minecraftName.toLowerCase() !== minecraftName.toLowerCase()) {
-      audit('DISCORD_LINK_WRONG_PLAYER', {
-        discordUserId: challenge.discordUserId,
+      audit('LINK_WRONG_PLAYER', {
+        sourceType: challenge.sourceType,
+        sourceId: challenge.sourceId,
         expectedPlayer: challenge.minecraftName,
         actualPlayer: minecraftName,
         code: upperCode,
@@ -277,10 +288,12 @@ export function verifyChallenge(minecraftName, code) {
 }
 
 /**
- * Remove any pending challenge for a user.
+ * Remove any pending challenge for a source.
+ * @param {string} sourceId - Discord user ID or panel email
+ * @param {'discord'|'panel'} [sourceType='discord']
  */
-export function cancelChallenge(discordUserId) {
-  return pendingChallenges.delete(discordUserId);
+export function cancelChallenge(sourceId, sourceType = 'discord') {
+  return pendingChallenges.delete(`${sourceType}:${sourceId}`);
 }
 
 /**

@@ -48,6 +48,15 @@ CREATE TABLE IF NOT EXISTS discord_links (
   linked_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 CREATE INDEX IF NOT EXISTS idx_discord_links_mc_name ON discord_links (minecraft_name);
+
+CREATE TABLE IF NOT EXISTS panel_links (
+  user_email      TEXT NOT NULL PRIMARY KEY,
+  minecraft_name  TEXT NOT NULL,
+  linked_by       TEXT NOT NULL DEFAULT 'self',
+  verified        BOOLEAN NOT NULL DEFAULT FALSE,
+  linked_at       TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_panel_links_mc_name ON panel_links (minecraft_name);
 `;
 
 // ---- Lifecycle ----
@@ -227,6 +236,55 @@ export async function getDiscordLinkByMinecraftName(minecraftName) {
 export async function deleteDiscordLink(discordId) {
   if (!pool) return false;
   const { rowCount } = await pool.query('DELETE FROM discord_links WHERE discord_id = $1', [discordId]);
+  return rowCount > 0;
+}
+
+// ---- Panel link helpers ----
+
+/** Upsert a panel-user-to-Minecraft account link. */
+export async function upsertPanelLink(email, minecraftName, linkedBy, verified = false) {
+  if (!pool) return null;
+  const { rows } = await pool.query(
+    `INSERT INTO panel_links (user_email, minecraft_name, linked_by, verified, linked_at)
+     VALUES ($1, $2, $3, $4, NOW())
+     ON CONFLICT (user_email) DO UPDATE
+       SET minecraft_name = EXCLUDED.minecraft_name,
+           linked_by = EXCLUDED.linked_by,
+           verified = EXCLUDED.verified,
+           linked_at = NOW()
+     RETURNING *`,
+    [email, minecraftName, linkedBy, verified],
+  );
+  return rows[0];
+}
+
+/** Get a panel link by user email. */
+export async function getPanelLink(email) {
+  if (!pool) return null;
+  const { rows } = await pool.query('SELECT * FROM panel_links WHERE user_email = $1', [email]);
+  return rows[0] || null;
+}
+
+/** Get all panel links. */
+export async function listPanelLinks() {
+  if (!pool) return [];
+  const { rows } = await pool.query('SELECT * FROM panel_links ORDER BY linked_at DESC');
+  return rows;
+}
+
+/** Find a panel link by Minecraft name. */
+export async function getPanelLinkByMinecraftName(minecraftName) {
+  if (!pool) return null;
+  const { rows } = await pool.query('SELECT * FROM panel_links WHERE LOWER(minecraft_name) = LOWER($1)', [
+    minecraftName,
+  ]);
+  return rows[0] || null;
+}
+
+/** Delete a panel link. Returns true if a row was deleted. */
+export async function deletePanelLink(email) {
+  if (!pool) return false;
+  const { rowCount } = await pool.query('DELETE FROM panel_links WHERE user_email = $1', [email]);
   return rowCount > 0;
 }
 

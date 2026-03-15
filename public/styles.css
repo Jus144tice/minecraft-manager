@@ -596,6 +596,20 @@ html {
   padding: 0.15rem 0.4rem;
 }
 
+/* MC link in user profile */
+.mc-link-info {
+  padding: 0.5rem 0;
+}
+.mc-link-player {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.9rem;
+}
+.mc-link-details {
+  margin-left: 40px;
+}
+
 /* Player list cells */
 .player-cell {
   display: flex;

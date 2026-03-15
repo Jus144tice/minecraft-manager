@@ -9,6 +9,7 @@ import { connectDiscord, disconnectDiscord, getDiscordClient } from './client.js
 import { setCommandContext } from './commands.js';
 import { initDiscordNotifications, stopDiscordNotifications, sendDiscordNotification } from './notifications.js';
 import { verifyChallenge, setLink, setChallengeTimeout } from './links.js';
+import * as panelLinks from '../../panelLinks.js';
 
 // Import command handler registrations
 import { register as registerStatus } from './handlers/status.js';
@@ -116,34 +117,58 @@ function startChatMonitor(ctx, client) {
       return;
     }
 
-    // Challenge verified — create the link
+    // Challenge verified — branch on source type
     try {
-      await setLink(challenge.discordUserId, playerName, 'self:verified');
-      audit('DISCORD_LINK_VERIFIED', {
-        discordUserId: challenge.discordUserId,
-        minecraftName: playerName,
-      });
+      if (challenge.sourceType === 'panel') {
+        // Panel link verification
+        await panelLinks.setLink(challenge.sourceId, playerName, 'self:verified', true);
+        audit('PANEL_LINK_VERIFIED', {
+          email: challenge.sourceId,
+          minecraftName: playerName,
+        });
 
-      // Try to notify the user in Discord
-      try {
-        const user = await client.users.fetch(challenge.discordUserId);
-        if (user) {
-          await user.send(
-            `Your Discord account has been successfully linked to Minecraft player **${playerName}**. ` +
-              'Your available commands are now based on your server op level. Use `/whoami` to check.',
-          );
+        // Broadcast to WebSocket so the panel UI can update
+        if (ctx.broadcast) {
+          ctx.broadcast({ type: 'panel-link-verified', email: challenge.sourceId, minecraftName: playerName });
         }
-      } catch {
-        // DMs may be disabled — that's fine, the link is still created
-      }
 
-      // Send confirmation in Minecraft chat via RCON
-      try {
-        if (ctx.rconConnected) {
-          await ctx.rconCmd(`tellraw ${playerName} {"text":"Discord account linked successfully!","color":"green"}`);
+        // Send confirmation in Minecraft chat
+        try {
+          if (ctx.rconConnected) {
+            await ctx.rconCmd(`tellraw ${playerName} {"text":"Panel account linked successfully!","color":"green"}`);
+          }
+        } catch {
+          // RCON may not support tellraw — that's fine
         }
-      } catch {
-        // RCON may not support tellraw — that's fine
+      } else {
+        // Discord link verification (existing behavior)
+        await setLink(challenge.sourceId, playerName, 'self:verified');
+        audit('DISCORD_LINK_VERIFIED', {
+          discordUserId: challenge.sourceId,
+          minecraftName: playerName,
+        });
+
+        // Try to notify the user in Discord
+        try {
+          const user = await client.users.fetch(challenge.sourceId);
+          if (user) {
+            await user.send(
+              `Your Discord account has been successfully linked to Minecraft player **${playerName}**. ` +
+                'Your available commands are now based on your server op level. Use `/whoami` to check.',
+            );
+          }
+        } catch {
+          // DMs may be disabled — that's fine, the link is still created
+        }
+
+        // Send confirmation in Minecraft chat via RCON
+        try {
+          if (ctx.rconConnected) {
+            await ctx.rconCmd(`tellraw ${playerName} {"text":"Discord account linked successfully!","color":"green"}`);
+          }
+        } catch {
+          // RCON may not support tellraw — that's fine
+        }
       }
     } catch (err) {
       info(`Failed to create link after challenge verification: ${err.message}`);

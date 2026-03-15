@@ -90,6 +90,15 @@ document.addEventListener('click', async (e) => {
     case 'show-link-instructions':
       show('link-instructions-modal');
       break;
+    case 'start-mc-link':
+      await startMcLink();
+      break;
+    case 'unlink-mc-self':
+      await unlinkMcSelf();
+      break;
+    case 'check-mc-link-status':
+      await checkMcLinkStatus();
+      break;
   }
 });
 
@@ -572,6 +581,13 @@ function connectWs() {
       if (msg.type === 'log') appendConsole(msg.line);
       if (msg.type === 'status') updateDashboard(msg);
       if (msg.type === 'crash') showCrashAlert(msg);
+      if (msg.type === 'panel-link-verified') {
+        // Auto-refresh MC link section if the user profile modal is open
+        const mcContainer = document.getElementById('user-profile-mc-link');
+        if (mcContainer && !$('user-profile-modal').classList.contains('hidden')) {
+          loadUserProfileMcLink();
+        }
+      }
     } catch {
       /* ignore */
     }
@@ -3550,6 +3566,29 @@ function renderPlayerProfile(p, container) {
   }
   html += '</div>';
 
+  // Panel account link
+  html += `
+    <div class="profile-section">
+      <h4>Panel Account</h4>`;
+  if (p.panelUser) {
+    html += `
+      <div class="profile-detail-row">
+        <span class="profile-detail-label">Email</span>
+        <span class="profile-detail-value">${esc(p.panelUser.email)}</span>
+      </div>
+      <div class="profile-detail-row">
+        <span class="profile-detail-label">Verified</span>
+        <span class="profile-detail-value">${p.panelUser.verified ? 'Yes' : 'No'}</span>
+      </div>
+      <div class="profile-detail-row">
+        <span class="profile-detail-label">Linked At</span>
+        <span class="profile-detail-value">${p.panelUser.linkedAt ? new Date(p.panelUser.linkedAt).toLocaleString() : ''}</span>
+      </div>`;
+  } else {
+    html += '<p class="dim" style="font-size:0.85rem">No panel account linked.</p>';
+  }
+  html += '</div>';
+
   container.innerHTML = html;
 }
 
@@ -3613,6 +3652,15 @@ async function openUserProfile() {
       </div>
     </div>`;
 
+  // Minecraft Account section
+  html += `
+    <div class="profile-section">
+      <h4>Minecraft Account</h4>
+      <div id="user-profile-mc-link">
+        <p class="dim" style="font-size:0.85rem">Loading...</p>
+      </div>
+    </div>`;
+
   // Discord links section
   html += `
     <div class="profile-section">
@@ -3641,8 +3689,65 @@ async function openUserProfile() {
     updateUserMenu();
   });
 
-  // Load Discord links
-  await loadUserProfileLinks();
+  // Load MC link + Discord links in parallel
+  await Promise.all([loadUserProfileMcLink(), loadUserProfileLinks()]);
+}
+
+async function loadUserProfileMcLink() {
+  const container = document.getElementById('user-profile-mc-link');
+  if (!container) return;
+
+  try {
+    const identity = await GET('/identity/me');
+    if (identity.minecraft) {
+      const mc = identity.minecraft;
+      const opLabels = { 1: 'Moderator', 2: 'Gamemaster', 3: 'Admin', 4: 'Owner' };
+      const opLabel = mc.opLevel ? `Op Level ${mc.opLevel} (${opLabels[mc.opLevel] || 'Op'})` : '';
+      const verifiedBadge = mc.verified
+        ? '<span class="badge badge-green" style="font-size:0.7rem">Verified</span>'
+        : '';
+      const onlineStatus =
+        mc.online === true
+          ? '<span class="badge badge-green" style="font-size:0.7rem">Online</span>'
+          : mc.online === false
+            ? '<span class="badge badge-dim" style="font-size:0.7rem">Offline</span>'
+            : '';
+      const linkedAt = mc.linkedAt ? new Date(mc.linkedAt).toLocaleDateString() : '';
+
+      container.innerHTML = `
+        <div class="mc-link-info">
+          <div class="mc-link-player">
+            <img src="https://mc-heads.net/avatar/${encodeURIComponent(mc.name)}/32" alt="" class="player-avatar-sm">
+            <strong>${esc(mc.name)}</strong>
+            ${verifiedBadge}
+            ${onlineStatus}
+          </div>
+          <div class="mc-link-details dim" style="font-size:0.8rem; margin-top:4px">
+            ${opLabel ? esc(opLabel) + ' &middot; ' : ''}${mc.whitelisted ? 'Whitelisted &middot; ' : ''}Linked: ${esc(linkedAt)}
+          </div>
+          <button class="btn btn-xs btn-danger" style="margin-top:8px" data-action="unlink-mc-self">Unlink</button>
+        </div>`;
+    } else {
+      container.innerHTML = `
+        <div id="mc-link-flow">
+          <p class="dim" style="font-size:0.85rem; margin-bottom:8px">Not linked to a Minecraft account.</p>
+          <div id="mc-link-start">
+            <div style="display:flex; gap:8px; align-items:center">
+              <input type="text" id="mc-link-name-input" placeholder="Your Minecraft name" style="flex:1; padding:6px 10px; border-radius:6px; border:1px solid var(--border); background:var(--bg-card); color:var(--text)">
+              <button class="btn btn-sm btn-primary" data-action="start-mc-link">Link Account</button>
+            </div>
+          </div>
+          <div id="mc-link-pending" class="hidden">
+            <p class="dim" style="font-size:0.85rem">Join the server as <strong id="mc-link-pending-name"></strong> and type:</p>
+            <pre id="mc-link-pending-code" style="background:var(--bg-card); padding:8px 12px; border-radius:6px; font-size:1rem; margin:6px 0"></pre>
+            <p class="dim" style="font-size:0.75rem">Code expires in <span id="mc-link-pending-expires"></span> minutes.</p>
+            <button class="btn btn-xs btn-ghost" data-action="check-mc-link-status" style="margin-top:4px">Check Status</button>
+          </div>
+        </div>`;
+    }
+  } catch {
+    container.innerHTML = '<p class="dim" style="font-size:0.85rem">Could not load Minecraft link info.</p>';
+  }
 }
 
 async function loadUserProfileLinks() {
@@ -3693,6 +3798,52 @@ async function unlinkFromUserProfile(discordId, playerName) {
     loadPlayerLinkCount();
   } catch (err) {
     alert('Failed to unlink: ' + err.message);
+  }
+}
+
+async function startMcLink() {
+  const input = document.getElementById('mc-link-name-input');
+  const name = input?.value?.trim();
+  if (!name) return alert('Enter your Minecraft player name.');
+  try {
+    const result = await POST('/identity/link', { minecraftName: name });
+    const startDiv = document.getElementById('mc-link-start');
+    const pendingDiv = document.getElementById('mc-link-pending');
+    if (startDiv) startDiv.classList.add('hidden');
+    if (pendingDiv) {
+      pendingDiv.classList.remove('hidden');
+      document.getElementById('mc-link-pending-name').textContent = result.minecraftName;
+      document.getElementById('mc-link-pending-code').textContent = '!link ' + result.code;
+      document.getElementById('mc-link-pending-expires').textContent = result.expiresInMinutes;
+    }
+  } catch (err) {
+    alert('Failed to start link: ' + (err.message || err));
+  }
+}
+
+async function unlinkMcSelf() {
+  if (!confirm('Remove your Minecraft account link?')) return;
+  try {
+    await DEL('/identity/link');
+    await loadUserProfileMcLink();
+  } catch (err) {
+    alert('Failed to unlink: ' + (err.message || err));
+  }
+}
+
+async function checkMcLinkStatus() {
+  try {
+    const status = await GET('/identity/link/status');
+    if (status.linked) {
+      await loadUserProfileMcLink();
+    } else if (status.pending) {
+      alert('Challenge still pending. Type the code in Minecraft chat.');
+    } else {
+      alert('Challenge expired. Please start a new link request.');
+      await loadUserProfileMcLink();
+    }
+  } catch (err) {
+    alert('Failed to check status: ' + (err.message || err));
   }
 }
 

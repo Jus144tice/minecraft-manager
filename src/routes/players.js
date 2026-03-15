@@ -9,6 +9,7 @@ import { audit } from '../audit.js';
 import { isValidMinecraftName, isSafeCommand, sanitizeReason } from '../validate.js';
 import { requireAdmin } from '../middleware.js';
 import { getAllLinks, getLinkByMinecraftName, setLink, removeLink } from '../integrations/discord/links.js';
+import { getLinkByMinecraftName as getPanelLinkByMcName } from '../panelLinks.js';
 
 export default function playerRoutes(ctx) {
   const router = Router();
@@ -289,6 +290,9 @@ export default function playerRoutes(ctx) {
       // Discord link info
       const discordLink = await getLinkByMinecraftName(name);
 
+      // Panel link info
+      const panelLink = await getPanelLinkByMcName(name);
+
       res.json({
         name: op?.name || wl?.name || ban?.name || name,
         uuid: op?.uuid || wl?.uuid || null,
@@ -298,6 +302,9 @@ export default function playerRoutes(ctx) {
         banned: ban ? { reason: ban.reason, created: ban.created, expires: ban.expires } : null,
         discord: discordLink
           ? { discordId: discordLink.discordId, linkedAt: discordLink.linkedAt, linkedBy: discordLink.linkedBy }
+          : null,
+        panelUser: panelLink
+          ? { email: panelLink.email, verified: panelLink.verified, linkedAt: panelLink.linkedAt }
           : null,
       });
     } catch (err) {

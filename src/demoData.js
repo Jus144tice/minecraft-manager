@@ -792,3 +792,21 @@ export async function enrichDemoIcons() {
     }
   }
 }
+
+// --- Panel links (panel user ↔ Minecraft player) ---
+export const DEMO_PANEL_LINKS = [
+  {
+    email: 'admin@example.com',
+    minecraftName: 'SteveAdmin',
+    linkedBy: 'self:verified',
+    verified: true,
+    linkedAt: '2026-03-10T14:30:00Z',
+  },
+  {
+    email: 'viewer@example.com',
+    minecraftName: 'AlexBuilder',
+    linkedBy: 'admin:admin@example.com',
+    verified: false,
+    linkedAt: '2026-03-12T09:15:00Z',
+  },
+];
