@@ -19,7 +19,7 @@ Wants=postgresql.service
 Type=simple
 User=minecraft
 WorkingDirectory=/home/minecraft/minecraft-manager
-ExecStart=/usr/bin/node server.js
+ExecStart=/home/minecraft/.nvm/versions/node/v22.22.1/bin/node --env-file=.env server.js
 Restart=on-failure
 RestartSec=10
 

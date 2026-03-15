@@ -1,6 +1,7 @@
 // /help — list available commands based on the caller's permission level.
 
-import { SlashCommandBuilder, EmbedBuilder } from 'discord.js';
+import pkg from 'discord.js';
+const { SlashCommandBuilder, EmbedBuilder } = pkg;
 import { PermissionLevel } from '../permissions.js';
 import { registerCommand, getCommandsByPermission } from '../registry.js';
 

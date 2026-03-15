@@ -1,6 +1,7 @@
 // /backup — trigger a backup (admin only).
 
-import { SlashCommandBuilder } from 'discord.js';
+import pkg from 'discord.js';
+const { SlashCommandBuilder } = pkg;
 import { PermissionLevel } from '../permissions.js';
 import { registerCommand } from '../registry.js';
 import { createBackup } from '../../../backup.js';

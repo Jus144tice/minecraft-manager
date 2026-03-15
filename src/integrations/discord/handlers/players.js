@@ -1,6 +1,7 @@
 // /players — show online players.
 
-import { SlashCommandBuilder, EmbedBuilder } from 'discord.js';
+import pkg from 'discord.js';
+const { SlashCommandBuilder, EmbedBuilder } = pkg;
 import { PermissionLevel } from '../permissions.js';
 import { registerCommand } from '../registry.js';
 import * as Demo from '../../../demoData.js';

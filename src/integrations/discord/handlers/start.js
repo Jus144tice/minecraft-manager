@@ -1,6 +1,7 @@
 // /start — start the Minecraft server (admin only).
 
-import { SlashCommandBuilder } from 'discord.js';
+import pkg from 'discord.js';
+const { SlashCommandBuilder } = pkg;
 import { PermissionLevel } from '../permissions.js';
 import { registerCommand } from '../registry.js';
 import { audit } from '../../../audit.js';

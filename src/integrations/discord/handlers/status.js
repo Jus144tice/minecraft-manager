@@ -1,6 +1,7 @@
 // /status — show server status, uptime, TPS, player count, health summary.
 
-import { SlashCommandBuilder, EmbedBuilder } from 'discord.js';
+import pkg from 'discord.js';
+const { SlashCommandBuilder, EmbedBuilder } = pkg;
 import { PermissionLevel } from '../permissions.js';
 import { registerCommand } from '../registry.js';
 import { collectMetrics, collectDemoMetrics } from '../../../metrics.js';

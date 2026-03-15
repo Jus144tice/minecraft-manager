@@ -2,7 +2,8 @@
 // Creates, connects, and shuts down the Discord.js client.
 // Registers slash commands with Discord API on startup if configured.
 
-import { Client, GatewayIntentBits, REST, Routes } from 'discord.js';
+import pkg from 'discord.js';
+const { Client, GatewayIntentBits, REST, Routes } = pkg;
 import { info, warn } from '../../audit.js';
 import { handleInteraction } from './commands.js';
 import { getCommandsJSON } from './registry.js';

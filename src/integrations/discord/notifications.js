@@ -2,7 +2,8 @@
 // Sends structured embeds to a configured channel for server events.
 // No-ops safely if Discord is disabled, disconnected, or channel is missing.
 
-import { EmbedBuilder } from 'discord.js';
+import pkg from 'discord.js';
+const { EmbedBuilder } = pkg;
 import { warn } from '../../audit.js';
 
 const COLORS = {
