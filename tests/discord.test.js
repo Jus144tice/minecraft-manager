@@ -215,7 +215,8 @@ import {
   getCommandsByPermission,
   getCommandsJSON,
 } from '../src/integrations/discord/registry.js';
-import { SlashCommandBuilder } from 'discord.js';
+import pkg from 'discord.js';
+const { SlashCommandBuilder } = pkg;
 
 test('Registry: can register and retrieve commands', () => {
   // Registry may have commands from handler imports, so just test our addition
