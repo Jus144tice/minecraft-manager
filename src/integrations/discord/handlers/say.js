@@ -14,7 +14,7 @@ export function register(ctx) {
       .setDescription('Broadcast a message to the Minecraft server')
       .addStringOption((opt) => opt.setName('message').setDescription('Message to broadcast').setRequired(true)),
     handler: async (interaction) => {
-      await interaction.deferReply({ flags: interaction.client._discordConfig?.ephemeralReplies ? 64 : undefined });
+      await interaction.deferReply({ flags: 64 });
 
       const message = interaction.options.getString('message');
 

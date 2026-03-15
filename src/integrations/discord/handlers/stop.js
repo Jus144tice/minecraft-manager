@@ -11,7 +11,7 @@ export function register(ctx) {
     permission: PermissionLevel.ADMIN,
     builder: new SlashCommandBuilder().setName('stop').setDescription('Stop the Minecraft server'),
     handler: async (interaction) => {
-      await interaction.deferReply({ flags: interaction.client._discordConfig?.ephemeralReplies ? 64 : undefined });
+      await interaction.deferReply({ flags: 64 });
 
       const user = interaction.user.tag || interaction.user.username;
 

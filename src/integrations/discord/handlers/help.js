@@ -46,10 +46,7 @@ export function register() {
         embed.setFooter({ text: 'Some commands require an admin role.' });
       }
 
-      await interaction.reply({
-        embeds: [embed],
-        flags: discordConfig?.ephemeralReplies ? 64 : undefined,
-      });
+      await interaction.reply({ embeds: [embed] });
     },
   });
 }

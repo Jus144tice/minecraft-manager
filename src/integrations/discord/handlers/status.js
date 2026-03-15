@@ -12,7 +12,7 @@ export function register(ctx) {
     permission: PermissionLevel.READ_ONLY,
     builder: new SlashCommandBuilder().setName('status').setDescription('Show Minecraft server status'),
     handler: async (interaction) => {
-      await interaction.deferReply({ flags: interaction.client._discordConfig?.ephemeralReplies ? 64 : undefined });
+      await interaction.deferReply();
 
       let data;
       if (ctx.config.demoMode) {

@@ -11,7 +11,7 @@ export function register(ctx) {
     permission: PermissionLevel.READ_ONLY,
     builder: new SlashCommandBuilder().setName('players').setDescription('Show online players'),
     handler: async (interaction) => {
-      await interaction.deferReply({ flags: interaction.client._discordConfig?.ephemeralReplies ? 64 : undefined });
+      await interaction.deferReply();
 
       const embed = new EmbedBuilder().setTitle('Online Players').setTimestamp();
 

@@ -114,6 +114,7 @@ Discord IDs are 17–20 digit numbers called "snowflake IDs". To copy them:
 - If `commandChannelIds` is set, commands only work in those channels.
 - DMs are blocked by default (set `allowDMs: true` to allow read-only commands in DMs).
 - All command usage is audit-logged (user, command, allowed/denied, timestamp).
+- **Visibility**: Read-only commands (`/status`, `/players`, `/help`) reply publicly so everyone can see. Admin commands reply ephemerally (only the caller sees the response).
 
 ## Notifications
 
@@ -142,18 +143,18 @@ These work alongside (not replacing) the existing webhook notification system. B
 
 ### config.json `discord` section (non-secrets)
 
-| Key                         | Type     | Default | Description                                                        |
-| --------------------------- | -------- | ------- | ------------------------------------------------------------------ |
-| `enabled`                   | boolean  | `true`  | Master switch — set `false` to disable even with valid credentials |
-| `applicationId`             | string   | `""`    | Can also be set via env var                                        |
-| `guildId`                   | string   | `""`    | Can also be set via env var                                        |
-| `adminRoleIds`              | string[] | `[]`    | Can also be set via env var                                        |
-| `allowedRoleIds`            | string[] | `[]`    | Can also be set via env var                                        |
-| `notificationChannelId`     | string   | `""`    | Can also be set via env var                                        |
-| `commandChannelIds`         | string[] | `[]`    | Can also be set via env var                                        |
-| `allowDMs`                  | boolean  | `false` | Allow read-only commands in DMs                                    |
-| `ephemeralReplies`          | boolean  | `true`  | Bot replies only visible to the command user                       |
-| `registerCommandsOnStartup` | boolean  | `true`  | Register slash commands with Discord on app start                  |
+| Key                         | Type     | Default | Description                                                                                 |
+| --------------------------- | -------- | ------- | ------------------------------------------------------------------------------------------- |
+| `enabled`                   | boolean  | `true`  | Master switch — set `false` to disable even with valid credentials                          |
+| `applicationId`             | string   | `""`    | Can also be set via env var                                                                 |
+| `guildId`                   | string   | `""`    | Can also be set via env var                                                                 |
+| `adminRoleIds`              | string[] | `[]`    | Can also be set via env var                                                                 |
+| `allowedRoleIds`            | string[] | `[]`    | Can also be set via env var                                                                 |
+| `notificationChannelId`     | string   | `""`    | Can also be set via env var                                                                 |
+| `commandChannelIds`         | string[] | `[]`    | Can also be set via env var                                                                 |
+| `allowDMs`                  | boolean  | `false` | Allow read-only commands in DMs                                                             |
+| `ephemeralReplies`          | boolean  | `true`  | _(deprecated)_ No longer used — read-only commands are public, admin commands are ephemeral |
+| `registerCommandsOnStartup` | boolean  | `true`  | Register slash commands with Discord on app start                                           |
 
 ## Troubleshooting
 
