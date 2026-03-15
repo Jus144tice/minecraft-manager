@@ -40,5 +40,17 @@
       "PLAYER_BAN",
       "PLAYER_KICK"
     ]
+  },
+  "discord": {
+    "enabled": true,
+    "guildId": "",
+    "applicationId": "",
+    "adminRoleIds": [],
+    "allowedRoleIds": [],
+    "notificationChannelId": "",
+    "commandChannelIds": [],
+    "allowDMs": false,
+    "ephemeralReplies": true,
+    "registerCommandsOnStartup": true
   }
 }

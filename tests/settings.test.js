@@ -64,6 +64,7 @@ test('Config redaction: preserves all other fields', () => {
 
 const ALLOWED_KEYS = [
   'serverPath',
+  'serverAddress',
   'rconHost',
   'rconPort',
   'rconPassword',
@@ -82,6 +83,7 @@ const ALLOWED_KEYS = [
   'autoRestart',
   'tpsAlertThreshold',
   'notifications',
+  'discord',
 ];
 
 function filterConfigUpdate(body) {

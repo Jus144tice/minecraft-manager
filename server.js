@@ -26,6 +26,7 @@ import * as Backup from './src/backup.js';
 import { createServices } from './src/services.js';
 import { collectMetrics, collectDemoMetrics } from './src/metrics.js';
 import { initNotifications, onAuditEvent, notifyLagSpike, updateNotificationsConfig } from './src/notify.js';
+import { initDiscord, shutdownDiscord, notifyDiscord } from './src/integrations/discord/index.js';
 
 // Route modules
 import statusRoutes from './src/routes/status.js';
@@ -72,7 +73,11 @@ async function saveConfig(updates) {
 
 // ---- Notifications ----
 initNotifications(config);
-setNotifyHook(onAuditEvent);
+setNotifyHook((action, details) => {
+  onAuditEvent(action, details);
+  // Also forward to Discord bot notifications (no-ops if disabled)
+  notifyDiscord(action, details);
+});
 
 // ============================================================
 // Database
@@ -333,6 +338,14 @@ if (!APP_URL && !config.demoMode) {
   console.warn('           Set APP_URL in your environment for stricter origin validation.\n');
 }
 
+// ============================================================
+// Discord integration — initialize after services are ready
+// ============================================================
+
+initDiscord(config, ctx).catch((err) => {
+  console.warn(`[Discord] Initialization failed: ${err.message}`);
+});
+
 httpServer.listen(PORT, BIND_HOST, () => {
   info('Minecraft Manager started', { port: PORT, bindHost: BIND_HOST, demoMode: !!config.demoMode });
   if (config.demoMode) {
@@ -381,6 +394,9 @@ async function gracefulShutdown(signal) {
   // Stop timers that could fire during shutdown (cron, metrics broadcast)
   clearInterval(metricsInterval);
   Backup.stopBackupSchedule();
+
+  // Disconnect Discord bot
+  await shutdownDiscord().catch(() => {});
 
   // Close WebSocket connections
   for (const ws of wsClients) {

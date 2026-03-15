@@ -17,7 +17,8 @@ A self-hosted web control panel for a Minecraft Forge server running on Linux. B
 - Role-based access — Admin (full control) and Viewer (read-only); first OIDC user auto-promoted to admin
 - WebSocket-based live log streaming
 - Full backup & restore — scheduled nightly (configurable cron), quiesced snapshots via RCON, disk-space preflight checks, concurrent-operation locking. Restore to any point in time from the Backups tab.
-- Discord/webhook notifications — server crashes, auto-restarts, backups, lag spikes, player bans/kicks, and mod changes delivered to Discord or any webhook endpoint
+- **Discord bot integration** — slash commands (`/status`, `/start`, `/stop`, `/restart`, `/backup`, `/players`, `/say`) with role-based permissions, plus automatic notifications for server events. See [DISCORD.md](DISCORD.md) for setup.
+- Webhook notifications — server crashes, auto-restarts, backups, lag spikes, player bans/kicks, and mod changes delivered to Discord webhooks or any HTTP endpoint
 - Ops endpoints — `/healthz`, `/readyz`, and `/metrics` (Prometheus format) for systemd, Nginx, UptimeRobot, or Prometheus/Grafana
 - TPS monitoring with configurable lag-spike alerts and auto-restart on crash
 - Preflight self-checks — Dashboard warns about missing RCON, bad backup path, insecure bind settings, and other common misconfigurations

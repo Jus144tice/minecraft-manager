@@ -13,6 +13,7 @@ import * as Backup from '../backup.js';
 import { audit } from '../audit.js';
 import { runPreflight } from '../preflight.js';
 import { requireAdmin } from '../middleware.js';
+import { getDiscordStatus, testDiscordConnection, testDiscordNotification } from '../integrations/discord/index.js';
 
 export default function settingsRoutes(ctx) {
   const router = Router();
@@ -42,6 +43,11 @@ export default function settingsRoutes(ctx) {
 
   router.get('/config', (req, res) => {
     const { webPassword: _1, rconPassword: _2, ...safe } = ctx.config;
+    // Redact Discord bot token — it comes from env vars, but never echo it
+    if (safe.discord) {
+      safe.discord = { ...safe.discord };
+      delete safe.discord.botToken;
+    }
     res.json(safe);
   });
 
@@ -67,6 +73,7 @@ export default function settingsRoutes(ctx) {
       'autoRestart',
       'tpsAlertThreshold',
       'notifications',
+      'discord',
     ];
     const updates = {};
     for (const k of allowed) {
@@ -100,6 +107,31 @@ export default function settingsRoutes(ctx) {
         ...(Array.isArray(n.events) ? { events: n.events.filter((e) => typeof e === 'string') } : {}),
       };
     }
+    // Sanitize Discord config — never allow botToken to be saved in config.json
+    if (updates.discord) {
+      if (typeof updates.discord !== 'object' || Array.isArray(updates.discord)) {
+        return res.status(400).json({ error: 'discord must be an object.' });
+      }
+      const d = updates.discord;
+      const DISCORD_ALLOWED = [
+        'enabled',
+        'applicationId',
+        'guildId',
+        'adminRoleIds',
+        'allowedRoleIds',
+        'notificationChannelId',
+        'commandChannelIds',
+        'allowDMs',
+        'ephemeralReplies',
+        'registerCommandsOnStartup',
+      ];
+      const sanitized = {};
+      for (const k of DISCORD_ALLOWED) {
+        if (k in d) sanitized[k] = d[k];
+      }
+      // Merge with existing discord config (preserve fields not being updated)
+      updates.discord = { ...(ctx.config.discord || {}), ...sanitized };
+    }
     // Validate cron expression before saving
     if (updates.backupSchedule && !cron.validate(updates.backupSchedule)) {
       return res.status(400).json({
@@ -128,6 +160,22 @@ export default function settingsRoutes(ctx) {
     } catch (err) {
       res.status(500).json({ error: err.message });
     }
+  });
+
+  // --- Discord integration status & testing ---
+
+  router.get('/discord/status', requireAdmin, (_req, res) => {
+    res.json(getDiscordStatus());
+  });
+
+  router.post('/discord/test-connection', requireAdmin, async (_req, res) => {
+    const result = await testDiscordConnection();
+    res.json(result);
+  });
+
+  router.post('/discord/test-notification', requireAdmin, async (_req, res) => {
+    const result = await testDiscordNotification();
+    res.json(result);
   });
 
   // --- Server-side directory browser ---
