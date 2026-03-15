@@ -1016,7 +1016,7 @@ async function loadPlayerLinkCount() {
     return;
   }
   try {
-    const links = await GET('/players/discord-links');
+    const links = await GET('/panel-links');
     const count = Array.isArray(links) ? links.length : 0;
     const el = $('stat-player-links');
     el.textContent = count > 0 ? `${count} Linked` : 'None';
