@@ -2,7 +2,7 @@
 
 import pkg from 'discord.js';
 const { SlashCommandBuilder, EmbedBuilder } = pkg;
-import { PermissionLevel, TIER_NAMES, getEffectiveLevel } from '../permissions.js';
+import { PermissionLevel, TIER_NAMES, getEffectiveLevel, hasBotAdminRole } from '../permissions.js';
 import { registerCommand } from '../registry.js';
 import { getLink } from '../links.js';
 
@@ -32,12 +32,17 @@ export function register(ctx) {
 
       embed.addFields({ name: 'Access Level', value: TIER_NAMES[effective.level] || 'Unknown', inline: true });
 
-      if (effective.source === 'discord-admin-role') {
-        embed.addFields({ name: 'Source', value: 'Discord admin role (full access)', inline: true });
+      if (effective.source === 'owner-override-role') {
+        embed.addFields({ name: 'Source', value: 'Owner override role (emergency bypass)', inline: true });
       } else if (effective.source === 'linked' && effective.opLevel != null) {
         embed.addFields({ name: 'Op Level', value: `${effective.opLevel}`, inline: true });
       } else if (effective.source === 'not-linked') {
         embed.setFooter({ text: 'Use /link to connect your Minecraft account for elevated access.' });
+      }
+
+      // Show bot admin role status if applicable
+      if (hasBotAdminRole(interaction, discordConfig)) {
+        embed.addFields({ name: 'Bot Admin', value: 'Yes (Discord bot management)', inline: true });
       }
 
       await interaction.editReply({ embeds: [embed] });

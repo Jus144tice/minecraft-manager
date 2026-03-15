@@ -1,6 +1,6 @@
 // Tests for the Discord integration module.
 // Covers config validation, permission checks, command routing,
-// account linking, notification no-ops, and handler service delegation.
+// account linking, challenge system, notification no-ops, and handler service delegation.
 // All Discord APIs are mocked — no real Discord connection needed.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
@@ -43,16 +43,17 @@ test('Discord config: enabled with valid token and application ID', () => {
   const result = buildDiscordConfig({
     discord: {
       guildId: '987654321098765432',
-      adminRoleIds: ['111111111111111111'],
+      botAdminRoleIds: ['111111111111111111'],
       notificationChannelId: '222222222222222222',
     },
   });
 
   assert.equal(result.enabled, true);
   assert.equal(result.guildId, '987654321098765432');
-  assert.deepEqual(result.adminRoleIds, ['111111111111111111']);
+  assert.deepEqual(result.botAdminRoleIds, ['111111111111111111']);
   assert.equal(result.notificationChannelId, '222222222222222222');
   assert.equal(result.allowDMs, false); // default
+  assert.deepEqual(result.ownerOverrideRoleIds, []); // default empty
 
   delete process.env.DISCORD_BOT_TOKEN;
   delete process.env.DISCORD_APPLICATION_ID;
@@ -64,7 +65,8 @@ test('Discord config: validates snowflake IDs', () => {
     botToken: 'token',
     applicationId: 'not-a-snowflake',
     guildId: 'also-bad',
-    adminRoleIds: ['bad-role'],
+    botAdminRoleIds: ['bad-role'],
+    ownerOverrideRoleIds: [],
     allowedRoleIds: [],
     notificationChannelId: '123',
     commandChannelIds: [],
@@ -72,7 +74,7 @@ test('Discord config: validates snowflake IDs', () => {
   assert.ok(errors.length >= 3, `Expected at least 3 errors, got ${errors.length}: ${errors.join('; ')}`);
   assert.ok(errors.some((e) => e.includes('applicationId')));
   assert.ok(errors.some((e) => e.includes('guildId')));
-  assert.ok(errors.some((e) => e.includes('admin role')));
+  assert.ok(errors.some((e) => e.includes('bot admin role')));
 });
 
 test('Discord config: no errors for valid config', () => {
@@ -80,7 +82,8 @@ test('Discord config: no errors for valid config', () => {
     botToken: 'valid-token',
     applicationId: '123456789012345678',
     guildId: '987654321098765432',
-    adminRoleIds: ['111111111111111111'],
+    botAdminRoleIds: ['111111111111111111'],
+    ownerOverrideRoleIds: [],
     allowedRoleIds: [],
     notificationChannelId: '222222222222222222',
     commandChannelIds: [],
@@ -93,28 +96,75 @@ test('Discord config: env vars take precedence', () => {
   process.env.DISCORD_BOT_TOKEN = 'env-token';
   process.env.DISCORD_APPLICATION_ID = '123456789012345678';
   process.env.DISCORD_GUILD_ID = '999999999999999999';
-  process.env.DISCORD_ADMIN_ROLE_IDS = '111111111111111111,222222222222222222';
+  process.env.DISCORD_BOT_ADMIN_ROLE_IDS = '111111111111111111,222222222222222222';
 
   const result = buildDiscordConfig({
     discord: {
       guildId: '000000000000000000', // should be overridden by env
-      adminRoleIds: ['333333333333333333'], // should be overridden by env
+      botAdminRoleIds: ['333333333333333333'], // should be overridden by env
     },
   });
 
   assert.equal(result.enabled, true);
   assert.equal(result.guildId, '999999999999999999');
-  assert.deepEqual(result.adminRoleIds, ['111111111111111111', '222222222222222222']);
+  assert.deepEqual(result.botAdminRoleIds, ['111111111111111111', '222222222222222222']);
 
   delete process.env.DISCORD_BOT_TOKEN;
   delete process.env.DISCORD_APPLICATION_ID;
   delete process.env.DISCORD_GUILD_ID;
+  delete process.env.DISCORD_BOT_ADMIN_ROLE_IDS;
+  Object.assign(process.env, saved);
+});
+
+test('Discord config: legacy DISCORD_ADMIN_ROLE_IDS maps to botAdminRoleIds', () => {
+  const saved = { ...process.env };
+  process.env.DISCORD_BOT_TOKEN = 'env-token';
+  process.env.DISCORD_APPLICATION_ID = '123456789012345678';
+  process.env.DISCORD_ADMIN_ROLE_IDS = '444444444444444444';
+
+  const result = buildDiscordConfig({ discord: {} });
+
+  assert.equal(result.enabled, true);
+  assert.deepEqual(result.botAdminRoleIds, ['444444444444444444']);
+
+  delete process.env.DISCORD_BOT_TOKEN;
+  delete process.env.DISCORD_APPLICATION_ID;
   delete process.env.DISCORD_ADMIN_ROLE_IDS;
   Object.assign(process.env, saved);
 });
 
+test('Discord config: ownerOverrideRoleIds from env', () => {
+  const saved = { ...process.env };
+  process.env.DISCORD_BOT_TOKEN = 'env-token';
+  process.env.DISCORD_APPLICATION_ID = '123456789012345678';
+  process.env.DISCORD_OWNER_OVERRIDE_ROLE_IDS = '555555555555555555';
+
+  const result = buildDiscordConfig({ discord: {} });
+
+  assert.equal(result.enabled, true);
+  assert.deepEqual(result.ownerOverrideRoleIds, ['555555555555555555']);
+
+  delete process.env.DISCORD_BOT_TOKEN;
+  delete process.env.DISCORD_APPLICATION_ID;
+  delete process.env.DISCORD_OWNER_OVERRIDE_ROLE_IDS;
+  Object.assign(process.env, saved);
+});
+
+test('Discord config: linkChallengeTimeoutMinutes defaults to 10', () => {
+  const saved = { ...process.env };
+  process.env.DISCORD_BOT_TOKEN = 'env-token';
+  process.env.DISCORD_APPLICATION_ID = '123456789012345678';
+
+  const result = buildDiscordConfig({ discord: {} });
+  assert.equal(result.linkChallengeTimeoutMinutes, 10);
+
+  delete process.env.DISCORD_BOT_TOKEN;
+  delete process.env.DISCORD_APPLICATION_ID;
+  Object.assign(process.env, saved);
+});
+
 // ============================================================
-// Permissions (now async with op-level tiers)
+// Permissions (async with op-level tiers, separated from Discord roles)
 // ============================================================
 
 import { checkPermission, PermissionLevel, TIER_NAMES } from '../src/integrations/discord/permissions.js';
@@ -142,7 +192,8 @@ function mockInteraction({
 
 const baseDiscordConfig = {
   guildId: '456',
-  adminRoleIds: ['admin-role-1'],
+  botAdminRoleIds: ['bot-admin-role-1'],
+  ownerOverrideRoleIds: [],
   allowedRoleIds: [],
   commandChannelIds: [],
   allowDMs: false,
@@ -158,21 +209,43 @@ test('Permissions: READ_ONLY allowed for any guild member', async () => {
   assert.equal(result.allowed, true);
 });
 
-test('Permissions: OWNER denied without admin role or link', async () => {
+test('Permissions: OWNER denied without owner override role or link', async () => {
   const result = await checkPermission(mockInteraction(), PermissionLevel.OWNER, baseDiscordConfig, mockCtx);
   assert.equal(result.allowed, false);
   assert.ok(result.reason.includes('link'));
 });
 
-test('Permissions: OWNER allowed with Discord admin role', async () => {
+test('Permissions: botAdminRoleIds does NOT grant OWNER access', async () => {
   const result = await checkPermission(
-    mockInteraction({ roles: ['admin-role-1'] }),
+    mockInteraction({ roles: ['bot-admin-role-1'] }),
     PermissionLevel.OWNER,
     baseDiscordConfig,
     mockCtx,
   );
+  assert.equal(result.allowed, false);
+  assert.ok(result.reason.includes('link'));
+});
+
+test('Permissions: ownerOverrideRoleIds grants OWNER access when configured', async () => {
+  const config = { ...baseDiscordConfig, ownerOverrideRoleIds: ['override-role-1'] };
+  const result = await checkPermission(
+    mockInteraction({ roles: ['override-role-1'] }),
+    PermissionLevel.OWNER,
+    config,
+    mockCtx,
+  );
   assert.equal(result.allowed, true);
-  assert.equal(result.opLevel, 4); // Admin role grants owner-level
+  assert.equal(result.opLevel, 4);
+});
+
+test('Permissions: ownerOverrideRoleIds has no effect when empty', async () => {
+  const result = await checkPermission(
+    mockInteraction({ roles: ['some-role'] }),
+    PermissionLevel.OWNER,
+    baseDiscordConfig,
+    mockCtx,
+  );
+  assert.equal(result.allowed, false);
 });
 
 test('Permissions: DMs blocked by default', async () => {
@@ -202,8 +275,8 @@ test('Permissions: wrong channel blocked', async () => {
   assert.ok(result.reason.includes('channel'));
 });
 
-test('Permissions: elevated denied when no admin roles and no link', async () => {
-  const config = { ...baseDiscordConfig, adminRoleIds: [] };
+test('Permissions: elevated denied when no override roles and no link', async () => {
+  const config = { ...baseDiscordConfig, ownerOverrideRoleIds: [] };
   const result = await checkPermission(mockInteraction(), PermissionLevel.MODERATOR, config, mockCtx);
   assert.equal(result.allowed, false);
   assert.ok(result.reason.includes('link'));
@@ -240,10 +313,10 @@ test('Links: set and get a link', async () => {
 });
 
 test('Links: overwrite an existing link', async () => {
-  await setLink('discord-user-1', 'Alex', 'discord:Admin#1234');
+  await setLink('discord-user-1', 'Alex', 'self:verified');
   const link = await getLink('discord-user-1');
   assert.equal(link.minecraftName, 'Alex');
-  assert.equal(link.linkedBy, 'discord:Admin#1234');
+  assert.equal(link.linkedBy, 'self:verified');
 });
 
 test('Links: remove a link', async () => {
@@ -268,6 +341,139 @@ test('Links: getAllLinks returns all entries', async () => {
 
 test('Links: getLink returns null for unknown user', async () => {
   assert.equal(await getLink('unknown-user-id'), null);
+});
+
+// ============================================================
+// Challenge system
+// ============================================================
+
+import {
+  createChallenge,
+  verifyChallenge,
+  getPendingChallenge,
+  cancelChallenge,
+  setChallengeTimeout,
+  getPendingChallengeCount,
+  getLinkByMinecraftName,
+} from '../src/integrations/discord/links.js';
+
+test('Challenge: create and retrieve pending challenge', () => {
+  const challenge = createChallenge('challenge-user-1', 'TestPlayer');
+  assert.ok(challenge);
+  assert.equal(challenge.discordUserId, 'challenge-user-1');
+  assert.equal(challenge.minecraftName, 'TestPlayer');
+  assert.ok(challenge.code.match(/^[A-Z0-9]{4}-[A-Z0-9]{4}$/));
+  assert.ok(challenge.expiresAt > Date.now());
+
+  const pending = getPendingChallenge('challenge-user-1');
+  assert.ok(pending);
+  assert.equal(pending.code, challenge.code);
+});
+
+test('Challenge: successful verification with correct player and code', () => {
+  const challenge = createChallenge('challenge-user-2', 'CorrectPlayer');
+  const result = verifyChallenge('CorrectPlayer', challenge.code);
+  assert.ok(result);
+  assert.equal(result.discordUserId, 'challenge-user-2');
+  assert.equal(result.minecraftName, 'CorrectPlayer');
+
+  // Challenge consumed (one-time use)
+  assert.equal(getPendingChallenge('challenge-user-2'), null);
+});
+
+test('Challenge: case-insensitive player name match', () => {
+  const challenge = createChallenge('challenge-user-ci', 'Steve');
+  const result = verifyChallenge('steve', challenge.code);
+  assert.ok(result);
+  assert.equal(result.discordUserId, 'challenge-user-ci');
+});
+
+test('Challenge: case-insensitive code match', () => {
+  const challenge = createChallenge('challenge-user-code-ci', 'Player1');
+  const result = verifyChallenge('Player1', challenge.code.toLowerCase());
+  assert.ok(result);
+});
+
+test('Challenge: rejected for wrong player', () => {
+  const challenge = createChallenge('challenge-user-3', 'RightPlayer');
+  const result = verifyChallenge('WrongPlayer', challenge.code);
+  assert.equal(result, null);
+
+  // Challenge NOT consumed — still available for the right player
+  const pending = getPendingChallenge('challenge-user-3');
+  assert.ok(pending);
+});
+
+test('Challenge: rejected for wrong code', () => {
+  createChallenge('challenge-user-4', 'SomePlayer');
+  const result = verifyChallenge('SomePlayer', 'XXXX-YYYY');
+  assert.equal(result, null);
+});
+
+test('Challenge: expired challenge returns null', () => {
+  // Set very short timeout
+  setChallengeTimeout(1); // 1ms
+  const challenge = createChallenge('challenge-user-5', 'ExpiredPlayer');
+
+  // Wait for expiration
+  const start = Date.now();
+  while (Date.now() - start < 5) { /* spin */ }
+
+  const result = verifyChallenge('ExpiredPlayer', challenge.code);
+  assert.equal(result, null);
+
+  // Also getPendingChallenge returns null for expired
+  assert.equal(getPendingChallenge('challenge-user-5'), null);
+
+  // Restore default timeout
+  setChallengeTimeout(10 * 60 * 1000);
+});
+
+test('Challenge: new challenge replaces old one for same user', () => {
+  const first = createChallenge('challenge-user-6', 'Player1');
+  const second = createChallenge('challenge-user-6', 'Player2');
+
+  assert.notEqual(first.code, second.code);
+  assert.equal(second.minecraftName, 'Player2');
+
+  // Old code no longer works
+  const result1 = verifyChallenge('Player1', first.code);
+  assert.equal(result1, null);
+
+  // New code works
+  const result2 = verifyChallenge('Player2', second.code);
+  assert.ok(result2);
+});
+
+test('Challenge: cancel removes pending challenge', () => {
+  createChallenge('challenge-user-7', 'CancelPlayer');
+  assert.ok(getPendingChallenge('challenge-user-7'));
+
+  cancelChallenge('challenge-user-7');
+  assert.equal(getPendingChallenge('challenge-user-7'), null);
+});
+
+test('Challenge: codes are unique among pending challenges', () => {
+  const codes = new Set();
+  for (let i = 0; i < 20; i++) {
+    const challenge = createChallenge(`unique-test-${i}`, `Player${i}`);
+    assert.ok(!codes.has(challenge.code), `Duplicate code: ${challenge.code}`);
+    codes.add(challenge.code);
+  }
+  // Clean up
+  for (let i = 0; i < 20; i++) {
+    cancelChallenge(`unique-test-${i}`);
+  }
+});
+
+test('Challenge: duplicate MC name blocked', async () => {
+  await setLink('mc-dupe-owner', 'DupePlayer', 'self');
+  const existing = await getLinkByMinecraftName('DupePlayer');
+  assert.ok(existing);
+  assert.equal(existing.discordId, 'mc-dupe-owner');
+
+  // Clean up
+  await removeLink('mc-dupe-owner');
 });
 
 // ============================================================

@@ -1,8 +1,12 @@
 // Discord permission model.
-// Maps Minecraft op levels to Discord command access tiers.
+// Discord roles and Minecraft op levels are clearly separate concepts:
+//   - Discord roles control bot access (allowedRoleIds, botAdminRoleIds)
+//   - Minecraft op levels control server operation permissions (via account linking)
+//   - ownerOverrideRoleIds is an explicit, optional, dangerous escape hatch
+//
 // Read-only commands are available to everyone in the guild.
 // Elevated commands require linking your Discord account to a Minecraft player
-// and having the appropriate op level, OR having a Discord admin role (full override).
+// and having the appropriate op level.
 
 import { audit } from '../../audit.js';
 import { getLink } from './links.js';
@@ -12,7 +16,6 @@ import * as SF from '../../serverFiles.js';
  * Permission levels mapped to Minecraft op levels.
  * READ_ONLY (0) requires no linking.
  * Higher levels require the user's linked MC account to have that op level.
- * Discord admin roles always grant OWNER-level access.
  */
 export const PermissionLevel = Object.freeze({
   READ_ONLY: 0,
@@ -35,10 +38,13 @@ export const TIER_NAMES = Object.freeze({
  * Check whether a Discord interaction has the required permission level.
  * Returns { allowed: true, opLevel?: number } or { allowed: false, reason: string }.
  *
- * @param {object} interaction - Discord interaction
- * @param {number} requiredLevel - PermissionLevel value
- * @param {object} discordConfig - Discord config object
- * @param {object} ctx - App context (for ops.json lookup)
+ * Permission resolution:
+ * 1. DM / guild / channel restrictions
+ * 2. Allowed-role check (if configured)
+ * 3. READ_ONLY → allow everyone
+ * 4. Owner override role → allow (if explicitly configured)
+ * 5. Linked MC account + op level check
+ * 6. Deny
  */
 export async function checkPermission(interaction, requiredLevel, discordConfig, ctx) {
   const userId = interaction.user.id;
@@ -74,8 +80,13 @@ export async function checkPermission(interaction, requiredLevel, discordConfig,
     return { allowed: true };
   }
 
-  // Check Discord admin role — grants full (OWNER-level) access
-  if (hasAdminRole(interaction, discordConfig)) {
+  // Owner override role — explicit, dangerous, off by default
+  if (hasOwnerOverrideRole(interaction, discordConfig)) {
+    audit('DISCORD_OWNER_OVERRIDE', {
+      userId,
+      username,
+      command: commandName,
+    });
     return { allowed: true, opLevel: 4 };
   }
 
@@ -112,14 +123,28 @@ export async function checkPermission(interaction, requiredLevel, discordConfig,
 }
 
 /**
- * Check if the interaction member has a Discord admin role.
+ * Check if the interaction member has an owner override role.
+ * This is an explicit, dangerous escape hatch — off by default.
  */
-function hasAdminRole(interaction, discordConfig) {
-  if (discordConfig.adminRoleIds.length === 0) return false;
+function hasOwnerOverrideRole(interaction, discordConfig) {
+  if (!discordConfig.ownerOverrideRoleIds || discordConfig.ownerOverrideRoleIds.length === 0) return false;
   const member = interaction.member;
   if (!member || !member.roles) return false;
   const memberRoles = member.roles.cache ? [...member.roles.cache.keys()] : [];
-  return discordConfig.adminRoleIds.some((roleId) => memberRoles.includes(roleId));
+  return discordConfig.ownerOverrideRoleIds.some((roleId) => memberRoles.includes(roleId));
+}
+
+/**
+ * Check if the interaction member has a bot admin role.
+ * Bot admin roles grant Discord-side bot management privileges,
+ * NOT Minecraft server authority.
+ */
+export function hasBotAdminRole(interaction, discordConfig) {
+  if (!discordConfig.botAdminRoleIds || discordConfig.botAdminRoleIds.length === 0) return false;
+  const member = interaction.member;
+  if (!member || !member.roles) return false;
+  const memberRoles = member.roles.cache ? [...member.roles.cache.keys()] : [];
+  return discordConfig.botAdminRoleIds.some((roleId) => memberRoles.includes(roleId));
 }
 
 /**
@@ -146,8 +171,9 @@ async function getOpLevel(minecraftName, ctx) {
  * Used by /help and /whoami to show what the user can do.
  */
 export async function getEffectiveLevel(interaction, discordConfig, ctx) {
-  if (hasAdminRole(interaction, discordConfig)) {
-    return { level: PermissionLevel.OWNER, source: 'discord-admin-role' };
+  // Owner override role
+  if (hasOwnerOverrideRole(interaction, discordConfig)) {
+    return { level: PermissionLevel.OWNER, source: 'owner-override-role' };
   }
 
   const link = await getLink(interaction.user.id);

@@ -1,12 +1,14 @@
 // Discord integration entry point.
 // Initializes the bot only when properly configured.
 // Exposes start/stop/notify functions for the main app to call.
+// Monitors Minecraft chat for !link challenge codes.
 
-import { info } from '../../audit.js';
+import { info, audit } from '../../audit.js';
 import { buildDiscordConfig } from './config.js';
 import { connectDiscord, disconnectDiscord, getDiscordClient } from './client.js';
 import { setCommandContext } from './commands.js';
 import { initDiscordNotifications, stopDiscordNotifications, sendDiscordNotification } from './notifications.js';
+import { verifyChallenge, setLink, setChallengeTimeout } from './links.js';
 
 // Import command handler registrations
 import { register as registerStatus } from './handlers/status.js';
@@ -23,6 +25,14 @@ import { register as registerWhoami } from './handlers/whoami.js';
 
 let discordConfig = null;
 
+// Regex to parse Minecraft chat messages from server log lines.
+// Matches: [Server thread/INFO] ... <PlayerName> message
+// The timestamp/prefix format varies, so we match <PlayerName> message anywhere in the line.
+const MC_CHAT_REGEX = /<(\w{3,16})>\s+(.+)/;
+
+// Regex to match the !link command in chat
+const LINK_CMD_REGEX = /^!link\s+([A-Za-z0-9]{4}-[A-Za-z0-9]{4})$/i;
+
 /**
  * Initialize the Discord integration.
  * Call during app startup. No-ops if Discord is not configured.
@@ -36,6 +46,11 @@ export async function initDiscord(appConfig, ctx) {
   if (!discordConfig.enabled) {
     info('Discord integration is disabled');
     return false;
+  }
+
+  // Apply challenge timeout from config
+  if (discordConfig.linkChallengeTimeoutMinutes > 0) {
+    setChallengeTimeout(discordConfig.linkChallengeTimeoutMinutes * 60_000);
   }
 
   // Set app context for permission checks in command router
@@ -66,7 +81,74 @@ export async function initDiscord(appConfig, ctx) {
     initDiscordNotifications(client, discordConfig.notificationChannelId);
   }
 
+  // Start monitoring Minecraft chat for !link challenge codes
+  startChatMonitor(ctx, client);
+
   return true;
+}
+
+/**
+ * Monitor Minecraft server log for !link challenge codes.
+ * Listens for chat messages like: <PlayerName> !link XXXX-XXXX
+ */
+function startChatMonitor(ctx, client) {
+  ctx.mc.on('log', async (entry) => {
+    if (!entry.line) return;
+
+    // Parse chat message
+    const chatMatch = entry.line.match(MC_CHAT_REGEX);
+    if (!chatMatch) return;
+
+    const playerName = chatMatch[1];
+    const message = chatMatch[2].trim();
+
+    // Check if it's a !link command
+    const linkMatch = message.match(LINK_CMD_REGEX);
+    if (!linkMatch) return;
+
+    const code = linkMatch[1].toUpperCase();
+
+    // Verify the challenge
+    const challenge = verifyChallenge(playerName, code);
+    if (!challenge) {
+      // Wrong player, wrong code, or expired — silently ignore
+      // (verifyChallenge logs wrong-player attempts internally)
+      return;
+    }
+
+    // Challenge verified — create the link
+    try {
+      await setLink(challenge.discordUserId, playerName, 'self:verified');
+      audit('DISCORD_LINK_VERIFIED', {
+        discordUserId: challenge.discordUserId,
+        minecraftName: playerName,
+      });
+
+      // Try to notify the user in Discord
+      try {
+        const user = await client.users.fetch(challenge.discordUserId);
+        if (user) {
+          await user.send(
+            `Your Discord account has been successfully linked to Minecraft player **${playerName}**. ` +
+              'Your available commands are now based on your server op level. Use `/whoami` to check.',
+          );
+        }
+      } catch {
+        // DMs may be disabled — that's fine, the link is still created
+      }
+
+      // Send confirmation in Minecraft chat via RCON
+      try {
+        if (ctx.rconConnected) {
+          await ctx.rconCmd(`tellraw ${playerName} {"text":"Discord account linked successfully!","color":"green"}`);
+        }
+      } catch {
+        // RCON may not support tellraw — that's fine
+      }
+    } catch (err) {
+      info(`Failed to create link after challenge verification: ${err.message}`);
+    }
+  });
 }
 
 /**

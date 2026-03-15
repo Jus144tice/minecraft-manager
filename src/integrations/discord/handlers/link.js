@@ -1,14 +1,18 @@
-// /link — link a Discord account to a Minecraft player name.
-// Self-linking requires the player to be online for verification.
-// Discord admins can link any user without the online check.
+// /link — begin a code-based challenge to link your Discord account to a Minecraft player.
+// Self-linking only. No admin-linking of other users.
+//
+// Flow:
+// 1. User runs /link name:PlayerName
+// 2. Bot generates a short challenge code and replies ephemerally
+// 3. User joins the MC server as PlayerName and types: !link CODE
+// 4. The chat monitor (in index.js) detects the message, verifies, and creates the link
 
 import pkg from 'discord.js';
 const { SlashCommandBuilder } = pkg;
 import { PermissionLevel } from '../permissions.js';
 import { registerCommand } from '../registry.js';
-import { setLink, getLinkByMinecraftName } from '../links.js';
+import { getLink, getLinkByMinecraftName, createChallenge, getChallengeTimeout } from '../links.js';
 import { isValidMinecraftName } from '../../../validate.js';
-import * as Demo from '../../../demoData.js';
 
 export function register(ctx) {
   registerCommand('link', {
@@ -18,87 +22,50 @@ export function register(ctx) {
       .setDescription('Link your Discord account to your Minecraft player')
       .addStringOption((opt) =>
         opt.setName('name').setDescription('Your Minecraft player name').setRequired(true),
-      )
-      .addUserOption((opt) =>
-        opt.setName('user').setDescription('(Admin) Discord user to link').setRequired(false),
       ),
     handler: async (interaction) => {
       await interaction.deferReply({ flags: 64 });
 
       const name = interaction.options.getString('name');
-      const targetUser = interaction.options.getUser('user');
       const caller = interaction.user;
-      const callerTag = caller.tag || caller.username;
 
       if (!isValidMinecraftName(name)) {
-        return interaction.editReply('Invalid Minecraft player name.');
+        return interaction.editReply('Invalid Minecraft player name. Names must be 3–16 characters, alphanumeric or underscores.');
       }
 
-      // Determine if this is a self-link or admin-linking-another-user
-      const isAdminLink = targetUser && targetUser.id !== caller.id;
-
-      if (isAdminLink) {
-        // Only Discord admins can link other users
-        const discordConfig = interaction.client._discordConfig;
-        if (!hasAdminRole(interaction, discordConfig)) {
-          return interaction.editReply(
-            'Only Discord admins can link other users. To link yourself, use `/link name:<your_mc_name>`.',
-          );
-        }
-
-        // Admin link — no online verification needed
-        await setLink(targetUser.id, name, `discord:${callerTag}`);
+      // Check if caller already has a link
+      const existingLink = await getLink(caller.id);
+      if (existingLink) {
         return interaction.editReply(
-          `Linked <@${targetUser.id}> to Minecraft player **${name}**.`,
+          `You are already linked to **${existingLink.minecraftName}**. Use \`/unlink\` first to remove the existing link.`,
         );
       }
 
-      // Self-link — verify player is online
-      const onlinePlayers = await getOnlinePlayers(ctx);
-      if (!onlinePlayers.some((p) => p.toLowerCase() === name.toLowerCase())) {
+      // Check if this MC name is already linked to a different Discord user
+      const existingClaim = await getLinkByMinecraftName(name);
+      if (existingClaim && existingClaim.discordId !== caller.id) {
         return interaction.editReply(
-          `Player **${name}** is not currently online. You must be logged into the Minecraft server to link your account.\n\n` +
-            'Log in and try again, or ask a Discord admin to link you.',
+          `The Minecraft account **${name}** is already linked to another Discord user. If this is an error, the other user must \`/unlink\` first.`,
         );
       }
 
-      // Check if this MC name is already linked to someone else
-      const existing = await getLinkByMinecraftName(name);
-      if (existing && existing.discordId !== caller.id) {
+      // Check if the server is online (we need it for the verification step)
+      if (!ctx.config.demoMode && !ctx.mc.running) {
         return interaction.editReply(
-          `**${name}** is already linked to another Discord user. Ask a Discord admin if this is an error.`,
+          'The Minecraft server is currently offline. Start the server first, then try again — you\'ll need to type a verification code in Minecraft chat.',
         );
       }
 
-      await setLink(caller.id, name, 'self');
+      // Create a challenge (replaces any existing pending challenge for this user)
+      const challenge = createChallenge(caller.id, name);
+      const timeoutMinutes = Math.round(getChallengeTimeout() / 60_000);
+
       return interaction.editReply(
-        `Your Discord account is now linked to Minecraft player **${name}**. ` +
-          'Your available commands are based on your server op level.',
+        `Link request created for Minecraft account \`${name}\`.\n\n` +
+          `Join the server as **${name}** and type this in Minecraft chat:\n` +
+          `\`\`\`\n!link ${challenge.code}\n\`\`\`\n` +
+          `This code expires in ${timeoutMinutes} minutes.`,
       );
     },
   });
-}
-
-/** Get list of online player names. */
-async function getOnlinePlayers(ctx) {
-  if (ctx.config.demoMode) {
-    return ctx.demoState.running ? Demo.DEMO_ONLINE_PLAYERS : [];
-  }
-  if (!ctx.mc.running) return [];
-  try {
-    const result = await ctx.rconCmd('list');
-    const m = result.match(/There are \d+ of a max of \d+ players online: (.*)/);
-    return m && m[1].trim() ? m[1].split(', ').map((n) => n.trim()) : [];
-  } catch {
-    return [];
-  }
-}
-
-/** Check if interaction member has Discord admin role. */
-function hasAdminRole(interaction, discordConfig) {
-  if (discordConfig.adminRoleIds.length === 0) return false;
-  const member = interaction.member;
-  if (!member || !member.roles) return false;
-  const memberRoles = member.roles.cache ? [...member.roles.cache.keys()] : [];
-  return discordConfig.adminRoleIds.some((roleId) => memberRoles.includes(roleId));
 }

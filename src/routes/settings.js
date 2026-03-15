@@ -122,13 +122,15 @@ export default function settingsRoutes(ctx) {
         'enabled',
         'applicationId',
         'guildId',
-        'adminRoleIds',
+        'botAdminRoleIds',
+        'adminRoleIds', // legacy key, mapped to botAdminRoleIds
         'allowedRoleIds',
+        'ownerOverrideRoleIds',
         'notificationChannelId',
         'commandChannelIds',
         'allowDMs',
-        'ephemeralReplies',
         'registerCommandsOnStartup',
+        'linkChallengeTimeoutMinutes',
       ];
       const sanitized = {};
       for (const k of DISCORD_ALLOWED) {
@@ -169,7 +171,7 @@ export default function settingsRoutes(ctx) {
 
   // --- Discord integration status & testing ---
 
-  router.get('/discord/status', requireAdmin, (_req, res) => {
+  router.get('/discord/status', (_req, res) => {
     res.json(getDiscordStatus());
   });
 

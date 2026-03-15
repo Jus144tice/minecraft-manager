@@ -460,8 +460,12 @@ async function initApp() {
   // Load preflight checks (non-blocking)
   loadPreflight();
 
-  // Load Discord status (non-blocking, admin only)
+  // Load Discord status (non-blocking)
   loadDiscordStatus();
+
+  // Load dashboard stat cards (non-blocking)
+  loadPlayerLinkCount();
+  loadModCount();
 
   // Apply role-based visibility
   applyRoleVisibility();
@@ -726,6 +730,16 @@ function updateDashboard(s) {
   $('stat-ram').textContent = s.memBytes != null ? formatSize(s.memBytes) : s.running ? 'N/A' : '-';
   $('stat-disk').textContent = s.diskBytes != null ? formatSize(s.diskBytes) : '-';
 
+  // MC Version card
+  const mcVersionEl = $('stat-mc-version');
+  if (s.running && s.minecraftVersion && s.minecraftVersion !== 'unknown') {
+    mcVersionEl.textContent = s.minecraftVersion;
+    mcVersionEl.className = 'stat-value';
+  } else {
+    mcVersionEl.textContent = s.running ? 'Unknown' : 'Not Running';
+    mcVersionEl.className = 'stat-value' + (s.running ? '' : ' text-dim');
+  }
+
   // Lag spike alert
   if (s.lagSpike && s.tps != null) {
     lagAlertDismissed = false; // new spike resets dismiss
@@ -864,9 +878,24 @@ $('btn-say').addEventListener('click', async () => {
 // --- Discord Integration ---
 
 async function loadDiscordStatus() {
-  if (!isAdmin) return;
   try {
     const ds = await GET('/discord/status');
+
+    // Dashboard stat card (visible to all users)
+    const statEl = $('stat-discord');
+    if (!ds.enabled) {
+      statEl.textContent = 'Disabled';
+      statEl.className = 'stat-value text-dim';
+    } else if (ds.connected) {
+      statEl.textContent = 'Connected';
+      statEl.className = 'stat-value text-green';
+    } else {
+      statEl.textContent = 'Disconnected';
+      statEl.className = 'stat-value text-red';
+    }
+
+    // Admin-only Discord panel (below stat cards)
+    if (!isAdmin) return;
     const panel = $('discord-panel');
     if (!ds.enabled) {
       hide(panel);
@@ -891,7 +920,39 @@ async function loadDiscordStatus() {
     // Disable send button if no notification channel
     $('btn-discord-send').disabled = !ds.connected || !ds.notificationChannelId;
   } catch {
-    hide('discord-panel');
+    $('stat-discord').textContent = 'N/A';
+    $('stat-discord').className = 'stat-value text-dim';
+    if (isAdmin) hide('discord-panel');
+  }
+}
+
+async function loadPlayerLinkCount() {
+  if (!isAdmin) {
+    $('stat-player-links').textContent = '-';
+    return;
+  }
+  try {
+    const links = await GET('/players/discord-links');
+    const count = Array.isArray(links) ? links.length : 0;
+    const el = $('stat-player-links');
+    el.textContent = count > 0 ? `${count} Linked` : 'None';
+    el.className = 'stat-value' + (count > 0 ? '' : ' text-dim');
+  } catch {
+    $('stat-player-links').textContent = '-';
+  }
+}
+
+async function loadModCount() {
+  try {
+    const data = await GET('/mods');
+    const mods = data.mods || [];
+    const enabledCount = mods.filter((m) => m.enabled !== false).length;
+    const el = $('stat-mod-count');
+    el.textContent = String(enabledCount);
+    el.className = 'stat-value';
+  } catch {
+    $('stat-mod-count').textContent = '-';
+    $('stat-mod-count').className = 'stat-value text-dim';
   }
 }
 

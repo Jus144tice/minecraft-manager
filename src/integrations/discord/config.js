@@ -1,6 +1,11 @@
 // Discord integration configuration.
 // Reads from environment variables (secrets) and config.json (non-secrets).
 // Returns a validated, frozen config object or null if disabled.
+//
+// Role concepts:
+//   allowedRoleIds      — restricts who may use the bot at all
+//   botAdminRoleIds     — Discord-side bot admin (manage bot features, NOT Minecraft server authority)
+//   ownerOverrideRoleIds — dangerous: bypasses MC op-level checks for server commands (off by default)
 
 import { info, warn } from '../../audit.js';
 
@@ -29,18 +34,23 @@ export function buildDiscordConfig(appConfig) {
     return { enabled: false };
   }
 
+  // Migration: support old DISCORD_ADMIN_ROLE_IDS env var as botAdminRoleIds
+  const botAdminEnv = process.env.DISCORD_BOT_ADMIN_ROLE_IDS || process.env.DISCORD_ADMIN_ROLE_IDS || '';
+  const ownerOverrideEnv = process.env.DISCORD_OWNER_OVERRIDE_ROLE_IDS || '';
+
   const config = {
     enabled: true,
     botToken,
     applicationId,
     guildId: process.env.DISCORD_GUILD_ID || discord.guildId || '',
-    adminRoleIds: parseList(process.env.DISCORD_ADMIN_ROLE_IDS || '') || toArray(discord.adminRoleIds),
+    botAdminRoleIds: parseList(botAdminEnv) || toArray(discord.botAdminRoleIds || discord.adminRoleIds),
     allowedRoleIds: parseList(process.env.DISCORD_ALLOWED_ROLE_IDS || '') || toArray(discord.allowedRoleIds),
+    ownerOverrideRoleIds: parseList(ownerOverrideEnv) || toArray(discord.ownerOverrideRoleIds),
     notificationChannelId: process.env.DISCORD_NOTIFICATION_CHANNEL_ID || discord.notificationChannelId || '',
     commandChannelIds: parseList(process.env.DISCORD_COMMAND_CHANNEL_IDS || '') || toArray(discord.commandChannelIds),
     allowDMs: discord.allowDMs ?? false,
-    ephemeralReplies: discord.ephemeralReplies ?? true,
     registerCommandsOnStartup: discord.registerCommandsOnStartup ?? true,
+    linkChallengeTimeoutMinutes: Number(discord.linkChallengeTimeoutMinutes) || 10,
   };
 
   const errors = validateDiscordConfig(config);
@@ -65,8 +75,11 @@ export function validateDiscordConfig(config) {
   if (config.applicationId && !/^\d{17,20}$/.test(config.applicationId)) {
     errors.push(`applicationId must be a Discord snowflake ID (got "${config.applicationId}")`);
   }
-  for (const id of config.adminRoleIds || []) {
-    if (!/^\d{17,20}$/.test(id)) errors.push(`Invalid admin role ID: "${id}"`);
+  for (const id of config.botAdminRoleIds || []) {
+    if (!/^\d{17,20}$/.test(id)) errors.push(`Invalid bot admin role ID: "${id}"`);
+  }
+  for (const id of config.ownerOverrideRoleIds || []) {
+    if (!/^\d{17,20}$/.test(id)) errors.push(`Invalid owner override role ID: "${id}"`);
   }
   for (const id of config.allowedRoleIds || []) {
     if (!/^\d{17,20}$/.test(id)) errors.push(`Invalid allowed role ID: "${id}"`);
