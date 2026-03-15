@@ -40,6 +40,14 @@ CREATE TABLE IF NOT EXISTS session (
   expire TIMESTAMPTZ NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_session_expire ON session (expire);
+
+CREATE TABLE IF NOT EXISTS discord_links (
+  discord_id     TEXT NOT NULL PRIMARY KEY,
+  minecraft_name TEXT NOT NULL,
+  linked_by      TEXT NOT NULL DEFAULT 'self',
+  linked_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_discord_links_mc_name ON discord_links (minecraft_name);
 `;
 
 // ---- Lifecycle ----
@@ -172,6 +180,55 @@ export async function queryAuditLogs({ action, email, limit = 100, offset = 0 } 
     params,
   );
   return rows;
+}
+
+// ---- Discord link helpers ----
+
+/** Upsert a Discord-to-Minecraft account link. */
+export async function upsertDiscordLink(discordId, minecraftName, linkedBy) {
+  if (!pool) return null;
+  const { rows } = await pool.query(
+    `INSERT INTO discord_links (discord_id, minecraft_name, linked_by, linked_at)
+     VALUES ($1, $2, $3, NOW())
+     ON CONFLICT (discord_id) DO UPDATE
+       SET minecraft_name = EXCLUDED.minecraft_name,
+           linked_by = EXCLUDED.linked_by,
+           linked_at = NOW()
+     RETURNING *`,
+    [discordId, minecraftName, linkedBy],
+  );
+  return rows[0];
+}
+
+/** Get a Discord link by Discord user ID. */
+export async function getDiscordLink(discordId) {
+  if (!pool) return null;
+  const { rows } = await pool.query('SELECT * FROM discord_links WHERE discord_id = $1', [discordId]);
+  return rows[0] || null;
+}
+
+/** Get all Discord links. */
+export async function listDiscordLinks() {
+  if (!pool) return [];
+  const { rows } = await pool.query('SELECT * FROM discord_links ORDER BY linked_at DESC');
+  return rows;
+}
+
+/** Find a Discord link by Minecraft name. */
+export async function getDiscordLinkByMinecraftName(minecraftName) {
+  if (!pool) return null;
+  const { rows } = await pool.query(
+    'SELECT * FROM discord_links WHERE LOWER(minecraft_name) = LOWER($1)',
+    [minecraftName],
+  );
+  return rows[0] || null;
+}
+
+/** Delete a Discord link. Returns true if a row was deleted. */
+export async function deleteDiscordLink(discordId) {
+  if (!pool) return false;
+  const { rowCount } = await pool.query('DELETE FROM discord_links WHERE discord_id = $1', [discordId]);
+  return rowCount > 0;
 }
 
 export async function shutdownDatabase() {

@@ -13,7 +13,12 @@ import * as Backup from '../backup.js';
 import { audit } from '../audit.js';
 import { runPreflight } from '../preflight.js';
 import { requireAdmin } from '../middleware.js';
-import { getDiscordStatus, testDiscordConnection, testDiscordNotification } from '../integrations/discord/index.js';
+import {
+  getDiscordStatus,
+  testDiscordConnection,
+  testDiscordNotification,
+  sendDiscordMessage,
+} from '../integrations/discord/index.js';
 
 export default function settingsRoutes(ctx) {
   const router = Router();
@@ -175,6 +180,18 @@ export default function settingsRoutes(ctx) {
 
   router.post('/discord/test-notification', requireAdmin, async (_req, res) => {
     const result = await testDiscordNotification();
+    res.json(result);
+  });
+
+  router.post('/discord/send-message', requireAdmin, async (req, res) => {
+    const { message } = req.body;
+    if (!message || typeof message !== 'string' || !message.trim()) {
+      return res.status(400).json({ error: 'message is required' });
+    }
+    const result = await sendDiscordMessage(message.trim());
+    if (result.ok) {
+      audit('DISCORD_SEND_MESSAGE', { user: req.session.user.email, ip: req.ip });
+    }
     res.json(result);
   });
 

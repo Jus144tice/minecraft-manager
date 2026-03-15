@@ -1,6 +1,6 @@
 // Tests for the Discord integration module.
 // Covers config validation, permission checks, command routing,
-// notification no-ops, and handler service delegation.
+// account linking, notification no-ops, and handler service delegation.
 // All Discord APIs are mocked — no real Discord connection needed.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
@@ -12,7 +12,6 @@ import assert from 'node:assert/strict';
 import { buildDiscordConfig, validateDiscordConfig } from '../src/integrations/discord/config.js';
 
 test('Discord config: disabled when no bot token', () => {
-  // Clear env vars that might leak from the environment
   const saved = { ...process.env };
   delete process.env.DISCORD_BOT_TOKEN;
   delete process.env.DISCORD_APPLICATION_ID;
@@ -20,7 +19,6 @@ test('Discord config: disabled when no bot token', () => {
   const result = buildDiscordConfig({});
   assert.equal(result.enabled, false);
 
-  // Restore
   Object.assign(process.env, saved);
 });
 
@@ -54,7 +52,6 @@ test('Discord config: enabled with valid token and application ID', () => {
   assert.equal(result.guildId, '987654321098765432');
   assert.deepEqual(result.adminRoleIds, ['111111111111111111']);
   assert.equal(result.notificationChannelId, '222222222222222222');
-  assert.equal(result.ephemeralReplies, true); // default
   assert.equal(result.allowDMs, false); // default
 
   delete process.env.DISCORD_BOT_TOKEN;
@@ -117,10 +114,10 @@ test('Discord config: env vars take precedence', () => {
 });
 
 // ============================================================
-// Permissions
+// Permissions (now async with op-level tiers)
 // ============================================================
 
-import { checkPermission, PermissionLevel } from '../src/integrations/discord/permissions.js';
+import { checkPermission, PermissionLevel, TIER_NAMES } from '../src/integrations/discord/permissions.js';
 
 function mockInteraction({
   userId = '123',
@@ -151,58 +148,126 @@ const baseDiscordConfig = {
   allowDMs: false,
 };
 
-test('Permissions: READ_ONLY allowed for any guild member', () => {
-  const result = checkPermission(mockInteraction(), PermissionLevel.READ_ONLY, baseDiscordConfig);
+// Mock ctx for permission checks (no ops = op level 0)
+const mockCtx = {
+  config: { demoMode: true, serverPath: '' },
+};
+
+test('Permissions: READ_ONLY allowed for any guild member', async () => {
+  const result = await checkPermission(mockInteraction(), PermissionLevel.READ_ONLY, baseDiscordConfig, mockCtx);
   assert.equal(result.allowed, true);
 });
 
-test('Permissions: ADMIN denied without admin role', () => {
-  const result = checkPermission(mockInteraction(), PermissionLevel.ADMIN, baseDiscordConfig);
+test('Permissions: OWNER denied without admin role or link', async () => {
+  const result = await checkPermission(mockInteraction(), PermissionLevel.OWNER, baseDiscordConfig, mockCtx);
   assert.equal(result.allowed, false);
-  assert.ok(result.reason.includes('permission'));
+  assert.ok(result.reason.includes('link'));
 });
 
-test('Permissions: ADMIN allowed with admin role', () => {
-  const result = checkPermission(
+test('Permissions: OWNER allowed with Discord admin role', async () => {
+  const result = await checkPermission(
     mockInteraction({ roles: ['admin-role-1'] }),
-    PermissionLevel.ADMIN,
+    PermissionLevel.OWNER,
     baseDiscordConfig,
+    mockCtx,
   );
   assert.equal(result.allowed, true);
+  assert.equal(result.opLevel, 4); // Admin role grants owner-level
 });
 
-test('Permissions: DMs blocked by default', () => {
-  const result = checkPermission(mockInteraction({ guildId: null }), PermissionLevel.READ_ONLY, baseDiscordConfig);
+test('Permissions: DMs blocked by default', async () => {
+  const result = await checkPermission(mockInteraction({ guildId: null }), PermissionLevel.READ_ONLY, baseDiscordConfig, mockCtx);
   assert.equal(result.allowed, false);
   assert.ok(result.reason.includes('DM'));
 });
 
-test('Permissions: DMs allowed when configured', () => {
-  const result = checkPermission(mockInteraction({ guildId: null }), PermissionLevel.READ_ONLY, {
+test('Permissions: DMs allowed when configured', async () => {
+  const result = await checkPermission(mockInteraction({ guildId: null }), PermissionLevel.READ_ONLY, {
     ...baseDiscordConfig,
     allowDMs: true,
-  });
+  }, mockCtx);
   assert.equal(result.allowed, true);
 });
 
-test('Permissions: wrong guild blocked', () => {
-  const result = checkPermission(mockInteraction({ guildId: '999' }), PermissionLevel.READ_ONLY, baseDiscordConfig);
+test('Permissions: wrong guild blocked', async () => {
+  const result = await checkPermission(mockInteraction({ guildId: '999' }), PermissionLevel.READ_ONLY, baseDiscordConfig, mockCtx);
   assert.equal(result.allowed, false);
   assert.ok(result.reason.includes('not configured'));
 });
 
-test('Permissions: wrong channel blocked', () => {
+test('Permissions: wrong channel blocked', async () => {
   const config = { ...baseDiscordConfig, commandChannelIds: ['allowed-channel'] };
-  const result = checkPermission(mockInteraction({ channelId: '789' }), PermissionLevel.READ_ONLY, config);
+  const result = await checkPermission(mockInteraction({ channelId: '789' }), PermissionLevel.READ_ONLY, config, mockCtx);
   assert.equal(result.allowed, false);
   assert.ok(result.reason.includes('channel'));
 });
 
-test('Permissions: ADMIN denied when no admin roles configured', () => {
+test('Permissions: elevated denied when no admin roles and no link', async () => {
   const config = { ...baseDiscordConfig, adminRoleIds: [] };
-  const result = checkPermission(mockInteraction(), PermissionLevel.ADMIN, config);
+  const result = await checkPermission(mockInteraction(), PermissionLevel.MODERATOR, config, mockCtx);
   assert.equal(result.allowed, false);
-  assert.ok(result.reason.includes('No admin roles'));
+  assert.ok(result.reason.includes('link'));
+});
+
+test('Permissions: TIER_NAMES covers all levels', () => {
+  assert.equal(TIER_NAMES[PermissionLevel.READ_ONLY], 'Everyone');
+  assert.equal(TIER_NAMES[PermissionLevel.MODERATOR], 'Moderator (Op 1+)');
+  assert.equal(TIER_NAMES[PermissionLevel.GAME_MASTER], 'Game Master (Op 2+)');
+  assert.equal(TIER_NAMES[PermissionLevel.ADMIN], 'Admin (Op 3+)');
+  assert.equal(TIER_NAMES[PermissionLevel.OWNER], 'Owner (Op 4)');
+});
+
+test('Permissions: numeric levels are ordered correctly', () => {
+  assert.ok(PermissionLevel.READ_ONLY < PermissionLevel.MODERATOR);
+  assert.ok(PermissionLevel.MODERATOR < PermissionLevel.GAME_MASTER);
+  assert.ok(PermissionLevel.GAME_MASTER < PermissionLevel.ADMIN);
+  assert.ok(PermissionLevel.ADMIN < PermissionLevel.OWNER);
+});
+
+// ============================================================
+// Account linking
+// ============================================================
+
+import { setLink, removeLink, getLink, getAllLinks } from '../src/integrations/discord/links.js';
+
+test('Links: set and get a link', async () => {
+  await setLink('discord-user-1', 'Steve', 'self');
+  const link = await getLink('discord-user-1');
+  assert.ok(link);
+  assert.equal(link.minecraftName, 'Steve');
+  assert.equal(link.linkedBy, 'self');
+  assert.ok(link.linkedAt);
+});
+
+test('Links: overwrite an existing link', async () => {
+  await setLink('discord-user-1', 'Alex', 'discord:Admin#1234');
+  const link = await getLink('discord-user-1');
+  assert.equal(link.minecraftName, 'Alex');
+  assert.equal(link.linkedBy, 'discord:Admin#1234');
+});
+
+test('Links: remove a link', async () => {
+  await setLink('discord-user-2', 'Notch', 'self');
+  const removed = await removeLink('discord-user-2');
+  assert.equal(removed, true);
+  assert.equal(await getLink('discord-user-2'), null);
+});
+
+test('Links: remove non-existent link returns false', async () => {
+  const removed = await removeLink('no-such-user');
+  assert.equal(removed, false);
+});
+
+test('Links: getAllLinks returns all entries', async () => {
+  await setLink('link-test-a', 'PlayerA', 'self');
+  await setLink('link-test-b', 'PlayerB', 'self');
+  const all = await getAllLinks();
+  assert.ok(all.some((l) => l.discordId === 'link-test-a' && l.minecraftName === 'PlayerA'));
+  assert.ok(all.some((l) => l.discordId === 'link-test-b' && l.minecraftName === 'PlayerB'));
+});
+
+test('Links: getLink returns null for unknown user', async () => {
+  assert.equal(await getLink('unknown-user-id'), null);
 });
 
 // ============================================================
@@ -219,7 +284,6 @@ import pkg from 'discord.js';
 const { SlashCommandBuilder } = pkg;
 
 test('Registry: can register and retrieve commands', () => {
-  // Registry may have commands from handler imports, so just test our addition
   const testBuilder = new SlashCommandBuilder().setName('test-cmd').setDescription('Test');
   registerCommand('test-cmd', {
     permission: PermissionLevel.READ_ONLY,
@@ -232,32 +296,41 @@ test('Registry: can register and retrieve commands', () => {
   assert.equal(cmds.get('test-cmd').permission, PermissionLevel.READ_ONLY);
 });
 
-test('Registry: getCommandsByPermission filters correctly', () => {
+test('Registry: getCommandsByPermission filters by numeric level', () => {
   registerCommand('test-read', {
     permission: PermissionLevel.READ_ONLY,
     builder: new SlashCommandBuilder().setName('test-read').setDescription('Read'),
     handler: async () => {},
   });
-  registerCommand('test-admin', {
-    permission: PermissionLevel.ADMIN,
-    builder: new SlashCommandBuilder().setName('test-admin').setDescription('Admin'),
+  registerCommand('test-mod', {
+    permission: PermissionLevel.MODERATOR,
+    builder: new SlashCommandBuilder().setName('test-mod').setDescription('Mod'),
+    handler: async () => {},
+  });
+  registerCommand('test-owner', {
+    permission: PermissionLevel.OWNER,
+    builder: new SlashCommandBuilder().setName('test-owner').setDescription('Owner'),
     handler: async () => {},
   });
 
   const readCmds = getCommandsByPermission(PermissionLevel.READ_ONLY);
-  const adminCmds = getCommandsByPermission(PermissionLevel.ADMIN);
+  const modCmds = getCommandsByPermission(PermissionLevel.MODERATOR);
+  const ownerCmds = getCommandsByPermission(PermissionLevel.OWNER);
 
-  // READ_ONLY filter should only include read-only commands
+  // READ_ONLY should only get level-0 commands
   assert.ok(readCmds.every((c) => c.permission === PermissionLevel.READ_ONLY));
-  // ADMIN filter should include both
-  assert.ok(adminCmds.length >= readCmds.length);
+  // MODERATOR should get read + moderator commands
+  assert.ok(modCmds.some((c) => c.permission === PermissionLevel.MODERATOR));
+  assert.ok(modCmds.some((c) => c.permission === PermissionLevel.READ_ONLY));
+  assert.ok(!modCmds.some((c) => c.permission === PermissionLevel.OWNER));
+  // OWNER should get everything
+  assert.ok(ownerCmds.length >= modCmds.length);
 });
 
 test('Registry: getCommandsJSON returns valid JSON array', () => {
   const json = getCommandsJSON();
   assert.ok(Array.isArray(json));
   assert.ok(json.length > 0);
-  // Each entry should have a name
   for (const cmd of json) {
     assert.ok(typeof cmd.name === 'string');
     assert.ok(cmd.name.length > 0);
@@ -299,10 +372,10 @@ test('Command router: dispatches to registered handler', async () => {
   assert.ok(handlerCalled, 'Handler should have been called');
 });
 
-test('Command router: denies admin command without role', async () => {
-  registerCommand('test-admin-deny', {
-    permission: PermissionLevel.ADMIN,
-    builder: new SlashCommandBuilder().setName('test-admin-deny').setDescription('Admin deny test'),
+test('Command router: denies elevated command without link or role', async () => {
+  registerCommand('test-owner-deny', {
+    permission: PermissionLevel.OWNER,
+    builder: new SlashCommandBuilder().setName('test-owner-deny').setDescription('Owner deny test'),
     handler: async () => {
       assert.fail('Handler should not be called');
     },
@@ -311,8 +384,8 @@ test('Command router: denies admin command without role', async () => {
   let replyContent = '';
   const interaction = {
     isChatInputCommand: () => true,
-    commandName: 'test-admin-deny',
-    user: { id: '123', tag: 'user#0001', username: 'user' },
+    commandName: 'test-owner-deny',
+    user: { id: '999', tag: 'user#0001', username: 'user' },
     guildId: '456',
     channelId: '789',
     member: { roles: { cache: new Map() } },
@@ -326,7 +399,7 @@ test('Command router: denies admin command without role', async () => {
   };
 
   await handleInteraction(interaction);
-  assert.ok(replyContent.includes('permission'), `Expected permission denied message, got: "${replyContent}"`);
+  assert.ok(replyContent.includes('link'), `Expected link prompt, got: "${replyContent}"`);
 });
 
 test('Command router: ignores non-chat-input interactions', async () => {
@@ -334,7 +407,6 @@ test('Command router: ignores non-chat-input interactions', async () => {
     isChatInputCommand: () => false,
     commandName: 'anything',
   };
-  // Should not throw
   await handleInteraction(interaction);
 });
 
@@ -351,7 +423,6 @@ import {
 
 test('Notifications: no-op when not initialized', async () => {
   stopDiscordNotifications();
-  // Should not throw
   await sendDiscordNotification('SERVER_START', { user: 'test' });
 });
 
@@ -414,7 +485,6 @@ test('Notifications: handles missing channel gracefully', async () => {
   };
 
   initDiscordNotifications(mockClient, '222222222222222222');
-  // Should not throw
   await sendDiscordNotification('SERVER_START', { user: 'test' });
   stopDiscordNotifications();
 });

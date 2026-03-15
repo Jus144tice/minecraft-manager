@@ -8,7 +8,7 @@ import { isSafeCommand } from '../../../validate.js';
 
 export function register(ctx) {
   registerCommand('say', {
-    permission: PermissionLevel.ADMIN,
+    permission: PermissionLevel.MODERATOR,
     builder: new SlashCommandBuilder()
       .setName('say')
       .setDescription('Broadcast a message to the Minecraft server')

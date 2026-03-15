@@ -6,6 +6,13 @@ import { audit, warn } from '../../audit.js';
 import { checkPermission } from './permissions.js';
 import { getCommands } from './registry.js';
 
+let _ctx = null;
+
+/** Set the app context for permission checks (called during init). */
+export function setCommandContext(ctx) {
+  _ctx = ctx;
+}
+
 /**
  * Handle an incoming interaction (called from client interactionCreate event).
  */
@@ -22,8 +29,8 @@ export async function handleInteraction(interaction) {
   const guildId = interaction.guildId || 'DM';
   const channelId = interaction.channelId || 'DM';
 
-  // Central permission check
-  const perm = checkPermission(interaction, def.permission, discordConfig);
+  // Central permission check (async — looks up op levels)
+  const perm = await checkPermission(interaction, def.permission, discordConfig, _ctx);
   if (!perm.allowed) {
     try {
       await interaction.reply({ content: perm.reason, flags: 64 }); // ephemeral

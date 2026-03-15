@@ -56,7 +56,6 @@ In `config.json`, add or update the `discord` section:
 {
   "discord": {
     "enabled": true,
-    "ephemeralReplies": true,
     "allowDMs": false,
     "registerCommandsOnStartup": true
   }
@@ -87,34 +86,93 @@ Discord IDs are 17–20 digit numbers called "snowflake IDs". To copy them:
 | Channel ID        | Right-click a text channel → Copy Channel ID                |
 | Role ID           | Server Settings → Roles → right-click a role → Copy Role ID |
 
+## Account Linking
+
+Discord permissions are tied to Minecraft server op levels through **account linking**. This maps each Discord user to their Minecraft player name, and the bot checks their op level to determine what commands they can use.
+
+### How to Link
+
+**Self-linking** — any Discord user can link their own account:
+
+```
+/link name:YourMinecraftName
+```
+
+You must be **logged into the Minecraft server** when you run this command. The bot verifies you're online to confirm identity.
+
+**Admin-linking** — Discord admins can link any user without the online check:
+
+```
+/link name:PlayerName user:@DiscordUser
+```
+
+### Managing Links
+
+| Command                         | Description                                 |
+| ------------------------------- | ------------------------------------------- |
+| `/link name:<mc_name>`          | Link yourself (must be online in-game)      |
+| `/link name:<mc_name> user:@x`  | Admin: link another user                    |
+| `/unlink`                       | Remove your own link                        |
+| `/unlink user:@x`              | Admin: remove another user's link           |
+| `/whoami`                       | Show your linked account and access level   |
+
+Links are stored in `discord-links.json` and persist across restarts.
+
+## Permission Tiers
+
+Commands are gated by **Minecraft op levels**. Read-only commands are always available to everyone — no linking required. Elevated commands require linking your Discord account to a Minecraft player who has the appropriate op level.
+
+| Level | Tier Name    | MC Op Level | Commands                                  |
+| ----- | ------------ | ----------- | ----------------------------------------- |
+| 0     | Everyone     | —           | `/status`, `/players`, `/help`, `/link`, `/unlink`, `/whoami` |
+| 1     | Moderator    | 1+          | `/say`                                    |
+| 2     | Game Master  | 2+          | *(reserved for future commands)*          |
+| 3     | Admin        | 3+          | *(reserved for future commands)*          |
+| 4     | Owner        | 4           | `/start`, `/stop`, `/restart`, `/backup`  |
+
+**Discord admin roles** (configured via `DISCORD_ADMIN_ROLE_IDS`) always grant **Owner-level** access, regardless of linking status. This serves as a fallback for server operators who may not have a Minecraft account.
+
+### Permission Resolution Order
+
+1. Guild/channel/DM checks (same as before)
+2. If the command is read-only → allow
+3. If the user has a Discord admin role → allow (full owner access)
+4. Look up linked Minecraft name → check op level in `ops.json` → allow if sufficient
+5. Deny with a message explaining what's needed
+
 ## Commands
 
-### Read-Only (everyone)
+### Read-Only (everyone, no link needed)
 
 | Command    | Description                                                   |
 | ---------- | ------------------------------------------------------------- |
 | `/status`  | Server status: online/offline, uptime, TPS, players, CPU, RAM |
 | `/players` | List online players                                           |
-| `/help`    | Show available commands based on your role                    |
+| `/help`    | Show available commands based on your access level            |
+| `/link`    | Link your Discord account to a Minecraft player               |
+| `/unlink`  | Remove your account link                                      |
+| `/whoami`  | Show your linked account and permission level                 |
 
-### Admin (requires configured admin role)
+### Moderator (Op 1+)
+
+| Command          | Description                 |
+| ---------------- | --------------------------- |
+| `/say message`   | Broadcast a message in-game |
+
+### Owner (Op 4 or Discord admin role)
 
 | Command          | Description                 |
 | ---------------- | --------------------------- |
 | `/start`         | Start the Minecraft server  |
 | `/stop`          | Gracefully stop the server  |
 | `/restart`       | Restart the server          |
-| `/say message`   | Broadcast a message in-game |
 | `/backup [note]` | Create a server backup      |
 
-## Permissions
+## Visibility
 
-- **Everyone** in the Discord server can use read-only commands (`/status`, `/players`, `/help`).
-- **Admin commands** require the user to have one of the roles listed in `DISCORD_ADMIN_ROLE_IDS`.
-- If `commandChannelIds` is set, commands only work in those channels.
-- DMs are blocked by default (set `allowDMs: true` to allow read-only commands in DMs).
-- All command usage is audit-logged (user, command, allowed/denied, timestamp).
-- **Visibility**: Read-only commands (`/status`, `/players`, `/help`) reply publicly so everyone can see. Admin commands reply ephemerally (only the caller sees the response).
+- **Read-only commands** (`/status`, `/players`, `/help`) reply **publicly** so everyone can see.
+- **Account management commands** (`/link`, `/unlink`, `/whoami`) reply **ephemerally** (only you can see).
+- **Elevated commands** (`/say`, `/start`, `/stop`, `/restart`, `/backup`) reply **ephemerally**.
 
 ## Notifications
 
@@ -137,24 +195,23 @@ These work alongside (not replacing) the existing webhook notification system. B
 | `DISCORD_APPLICATION_ID`          | Yes      | Application ID                                                    |
 | `DISCORD_GUILD_ID`                | No       | Restricts bot to one server; enables instant command registration |
 | `DISCORD_NOTIFICATION_CHANNEL_ID` | No       | Channel for event notifications                                   |
-| `DISCORD_ADMIN_ROLE_IDS`          | No       | Comma-separated role IDs for admin commands                       |
+| `DISCORD_ADMIN_ROLE_IDS`          | No       | Comma-separated role IDs for full owner-level access              |
 | `DISCORD_ALLOWED_ROLE_IDS`        | No       | Comma-separated role IDs (restricts all commands)                 |
 | `DISCORD_COMMAND_CHANNEL_IDS`     | No       | Comma-separated channel IDs (restricts where commands work)       |
 
 ### config.json `discord` section (non-secrets)
 
-| Key                         | Type     | Default | Description                                                                                 |
-| --------------------------- | -------- | ------- | ------------------------------------------------------------------------------------------- |
-| `enabled`                   | boolean  | `true`  | Master switch — set `false` to disable even with valid credentials                          |
-| `applicationId`             | string   | `""`    | Can also be set via env var                                                                 |
-| `guildId`                   | string   | `""`    | Can also be set via env var                                                                 |
-| `adminRoleIds`              | string[] | `[]`    | Can also be set via env var                                                                 |
-| `allowedRoleIds`            | string[] | `[]`    | Can also be set via env var                                                                 |
-| `notificationChannelId`     | string   | `""`    | Can also be set via env var                                                                 |
-| `commandChannelIds`         | string[] | `[]`    | Can also be set via env var                                                                 |
-| `allowDMs`                  | boolean  | `false` | Allow read-only commands in DMs                                                             |
-| `ephemeralReplies`          | boolean  | `true`  | _(deprecated)_ No longer used — read-only commands are public, admin commands are ephemeral |
-| `registerCommandsOnStartup` | boolean  | `true`  | Register slash commands with Discord on app start                                           |
+| Key                         | Type     | Default | Description                                                                    |
+| --------------------------- | -------- | ------- | ------------------------------------------------------------------------------ |
+| `enabled`                   | boolean  | `true`  | Master switch — set `false` to disable even with valid credentials             |
+| `applicationId`             | string   | `""`    | Can also be set via env var                                                    |
+| `guildId`                   | string   | `""`    | Can also be set via env var                                                    |
+| `adminRoleIds`              | string[] | `[]`    | Can also be set via env var                                                    |
+| `allowedRoleIds`            | string[] | `[]`    | Can also be set via env var                                                    |
+| `notificationChannelId`     | string   | `""`    | Can also be set via env var                                                    |
+| `commandChannelIds`         | string[] | `[]`    | Can also be set via env var                                                    |
+| `allowDMs`                  | boolean  | `false` | Allow read-only commands in DMs                                                |
+| `registerCommandsOnStartup` | boolean  | `true`  | Register slash commands with Discord on app start                              |
 
 ## Troubleshooting
 
@@ -163,9 +220,19 @@ These work alongside (not replacing) the existing webhook notification system. B
 - Slash commands may take up to 1 hour to propagate globally. Set `DISCORD_GUILD_ID` for instant registration.
 - Check that the bot was invited with the `applications.commands` scope.
 
+**"You need to link your Minecraft account" error:**
+
+- Use `/link name:YourMinecraftName` while logged into the Minecraft server.
+- Or ask a Discord admin to link you with `/link name:YourName user:@You`.
+
+**"Your linked account has op level 0" error:**
+
+- Your Minecraft account needs to be an operator. Ask the server owner to `/op` you in-game or through the Manager web UI.
+- Use `/whoami` to check your current access level.
+
 **"You do not have permission" error:**
 
-- Make sure your Discord role ID is in `DISCORD_ADMIN_ROLE_IDS`.
+- Make sure your Discord role ID is in `DISCORD_ADMIN_ROLE_IDS`, or link your account and ensure your Minecraft player has the required op level.
 - Role IDs are different from role names — use Developer Mode to copy the ID.
 
 **Notifications not posting:**

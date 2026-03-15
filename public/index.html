@@ -182,6 +182,41 @@
           </div>
         </div>
 
+        <!-- Discord Integration (admin only, shown when Discord is enabled) -->
+        <div id="discord-panel" class="control-section admin-only hidden">
+          <h3>Discord Bot</h3>
+          <div class="discord-status-grid">
+            <div class="discord-stat">
+              <span class="discord-stat-label">Status</span>
+              <span class="discord-stat-value" id="discord-status">-</span>
+            </div>
+            <div class="discord-stat">
+              <span class="discord-stat-label">Bot</span>
+              <span class="discord-stat-value" id="discord-bot-name">-</span>
+            </div>
+            <div class="discord-stat">
+              <span class="discord-stat-label">Server</span>
+              <span class="discord-stat-value" id="discord-guild">-</span>
+            </div>
+            <div class="discord-stat">
+              <span class="discord-stat-label">Channel</span>
+              <span class="discord-stat-value" id="discord-channel">-</span>
+            </div>
+            <div class="discord-stat">
+              <span class="discord-stat-label">Members</span>
+              <span class="discord-stat-value" id="discord-members">-</span>
+            </div>
+          </div>
+          <div class="discord-message-section">
+            <h4>Send to Discord</h4>
+            <div class="input-row">
+              <input type="text" id="discord-msg-input" placeholder="Message to send to Discord channel..." />
+              <button class="btn btn-primary" id="btn-discord-send">Send</button>
+            </div>
+            <p id="discord-msg-status" class="control-msg"></p>
+          </div>
+        </div>
+
         <!-- Preflight checks (shown when issues detected) -->
         <div id="preflight-panel" class="control-section preflight-panel hidden">
           <h3>Setup Checks</h3>

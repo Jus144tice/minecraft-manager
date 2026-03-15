@@ -1,19 +1,46 @@
 // Discord permission model.
-// Centralizes all permission checks so command handlers stay clean.
-// Two tiers: READ_ONLY (anyone in guild) and ADMIN (configured admin roles).
+// Maps Minecraft op levels to Discord command access tiers.
+// Read-only commands are available to everyone in the guild.
+// Elevated commands require linking your Discord account to a Minecraft player
+// and having the appropriate op level, OR having a Discord admin role (full override).
 
 import { audit } from '../../audit.js';
+import { getLink } from './links.js';
+import * as SF from '../../serverFiles.js';
 
+/**
+ * Permission levels mapped to Minecraft op levels.
+ * READ_ONLY (0) requires no linking.
+ * Higher levels require the user's linked MC account to have that op level.
+ * Discord admin roles always grant OWNER-level access.
+ */
 export const PermissionLevel = Object.freeze({
-  READ_ONLY: 'READ_ONLY',
-  ADMIN: 'ADMIN',
+  READ_ONLY: 0,
+  MODERATOR: 1,
+  GAME_MASTER: 2,
+  ADMIN: 3,
+  OWNER: 4,
+});
+
+/** Human-readable names for each tier. */
+export const TIER_NAMES = Object.freeze({
+  [PermissionLevel.READ_ONLY]: 'Everyone',
+  [PermissionLevel.MODERATOR]: 'Moderator (Op 1+)',
+  [PermissionLevel.GAME_MASTER]: 'Game Master (Op 2+)',
+  [PermissionLevel.ADMIN]: 'Admin (Op 3+)',
+  [PermissionLevel.OWNER]: 'Owner (Op 4)',
 });
 
 /**
  * Check whether a Discord interaction has the required permission level.
- * Returns { allowed: true } or { allowed: false, reason: string }.
+ * Returns { allowed: true, opLevel?: number } or { allowed: false, reason: string }.
+ *
+ * @param {object} interaction - Discord interaction
+ * @param {number} requiredLevel - PermissionLevel value
+ * @param {object} discordConfig - Discord config object
+ * @param {object} ctx - App context (for ops.json lookup)
  */
-export function checkPermission(interaction, requiredLevel, discordConfig) {
+export async function checkPermission(interaction, requiredLevel, discordConfig, ctx) {
   const userId = interaction.user.id;
   const username = interaction.user.tag || interaction.user.username;
   const guildId = interaction.guildId;
@@ -47,37 +74,93 @@ export function checkPermission(interaction, requiredLevel, discordConfig) {
     return { allowed: true };
   }
 
-  // ADMIN — check role membership
-  if (requiredLevel === PermissionLevel.ADMIN) {
-    if (discordConfig.adminRoleIds.length === 0) {
-      logDenied({ userId, username, guildId, channelId, commandName, reason: 'no admin roles configured' });
-      return {
-        allowed: false,
-        reason: 'No admin roles are configured. An administrator must set up Discord admin role IDs.',
-      };
-    }
-
-    const member = interaction.member;
-    if (!member || !member.roles) {
-      logDenied({ userId, username, guildId, channelId, commandName, reason: 'no member/roles data (possibly a DM)' });
-      return { allowed: false, reason: 'Cannot verify your roles. Admin commands must be used in a server.' };
-    }
-
-    const memberRoles = member.roles.cache ? [...member.roles.cache.keys()] : [];
-    const hasAdminRole = discordConfig.adminRoleIds.some((roleId) => memberRoles.includes(roleId));
-
-    if (!hasAdminRole) {
-      logDenied({ userId, username, guildId, channelId, commandName, reason: 'missing admin role' });
-      return { allowed: false, reason: 'You do not have permission to use this command. An admin role is required.' };
-    }
-
-    return { allowed: true };
+  // Check Discord admin role — grants full (OWNER-level) access
+  if (hasAdminRole(interaction, discordConfig)) {
+    return { allowed: true, opLevel: 4 };
   }
 
-  return { allowed: false, reason: 'Unknown permission level.' };
+  // For elevated commands, look up linked Minecraft account + op level
+  const link = await getLink(userId);
+  if (!link) {
+    logDenied({ userId, username, guildId, channelId, commandName, reason: 'no linked Minecraft account' });
+    return {
+      allowed: false,
+      reason:
+        'You need to link your Minecraft account to use this command. Use `/link` to get started.',
+    };
+  }
+
+  const opLevel = await getOpLevel(link.minecraftName, ctx);
+
+  if (opLevel >= requiredLevel) {
+    return { allowed: true, opLevel };
+  }
+
+  logDenied({
+    userId,
+    username,
+    guildId,
+    channelId,
+    commandName,
+    reason: `op level ${opLevel} < required ${requiredLevel}`,
+    minecraftName: link.minecraftName,
+  });
+  return {
+    allowed: false,
+    reason: `This command requires **${TIER_NAMES[requiredLevel]}** access. Your linked account (${link.minecraftName}) has op level ${opLevel}.`,
+  };
 }
 
-function logDenied({ userId, username, guildId, channelId, commandName, reason }) {
+/**
+ * Check if the interaction member has a Discord admin role.
+ */
+function hasAdminRole(interaction, discordConfig) {
+  if (discordConfig.adminRoleIds.length === 0) return false;
+  const member = interaction.member;
+  if (!member || !member.roles) return false;
+  const memberRoles = member.roles.cache ? [...member.roles.cache.keys()] : [];
+  return discordConfig.adminRoleIds.some((roleId) => memberRoles.includes(roleId));
+}
+
+/**
+ * Look up a Minecraft player's op level from ops.json.
+ * Returns 0 if not an operator.
+ */
+async function getOpLevel(minecraftName, ctx) {
+  try {
+    if (ctx.config.demoMode) {
+      const { DEMO_OPS } = await import('../../demoData.js');
+      const op = DEMO_OPS.find((o) => o.name.toLowerCase() === minecraftName.toLowerCase());
+      return op ? op.level : 0;
+    }
+    const ops = await SF.getOps(ctx.config.serverPath);
+    const op = ops.find((o) => o.name.toLowerCase() === minecraftName.toLowerCase());
+    return op ? op.level : 0;
+  } catch {
+    return 0;
+  }
+}
+
+/**
+ * Get the effective permission level for a Discord user.
+ * Used by /help and /whoami to show what the user can do.
+ */
+export async function getEffectiveLevel(interaction, discordConfig, ctx) {
+  if (hasAdminRole(interaction, discordConfig)) {
+    return { level: PermissionLevel.OWNER, source: 'discord-admin-role' };
+  }
+
+  const link = await getLink(interaction.user.id);
+  if (!link) {
+    return { level: PermissionLevel.READ_ONLY, source: 'not-linked' };
+  }
+
+  const opLevel = await getOpLevel(link.minecraftName, ctx);
+  const level = Math.min(opLevel, PermissionLevel.OWNER);
+  return { level, source: 'linked', minecraftName: link.minecraftName, opLevel };
+}
+
+function logDenied({ userId, username, guildId, channelId, commandName, reason, minecraftName }) {
   audit('DISCORD_CMD_DENIED', {
     userId,
     username,
@@ -85,5 +168,6 @@ function logDenied({ userId, username, guildId, channelId, commandName, reason }
     channelId: channelId || 'DM',
     command: commandName,
     reason,
+    ...(minecraftName ? { minecraftName } : {}),
   });
 }

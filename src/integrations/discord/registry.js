@@ -2,8 +2,6 @@
 // Defines all Discord slash commands with metadata, permission levels, and builders.
 // Keeps command definitions separate from handler logic.
 
-import { PermissionLevel } from './permissions.js';
-
 const commands = new Map();
 
 /**
@@ -18,11 +16,11 @@ export function getCommands() {
   return commands;
 }
 
-/** Get commands filtered by permission level. */
+/** Get commands filtered by the caller's effective permission level. */
 export function getCommandsByPermission(level) {
   const result = [];
   for (const [name, def] of commands) {
-    if (level === PermissionLevel.ADMIN || def.permission === PermissionLevel.READ_ONLY) {
+    if (level >= def.permission) {
       result.push({ name, permission: def.permission });
     }
   }

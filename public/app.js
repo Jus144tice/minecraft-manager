@@ -454,6 +454,9 @@ async function initApp() {
   // Load preflight checks (non-blocking)
   loadPreflight();
 
+  // Load Discord status (non-blocking, admin only)
+  loadDiscordStatus();
+
   // Apply role-based visibility
   applyRoleVisibility();
 }
@@ -849,6 +852,60 @@ $('btn-say').addEventListener('click', async () => {
   } catch (err) {
     flash('control-msg', err.message, true);
   }
+});
+
+// --- Discord Integration ---
+
+async function loadDiscordStatus() {
+  if (!isAdmin) return;
+  try {
+    const ds = await GET('/discord/status');
+    const panel = $('discord-panel');
+    if (!ds.enabled) {
+      hide(panel);
+      return;
+    }
+    show(panel);
+
+    const statusEl = $('discord-status');
+    if (ds.connected) {
+      statusEl.textContent = 'Connected';
+      statusEl.className = 'discord-stat-value text-green';
+    } else {
+      statusEl.textContent = 'Disconnected';
+      statusEl.className = 'discord-stat-value text-red';
+    }
+
+    $('discord-bot-name').textContent = ds.username || '-';
+    $('discord-guild').textContent = ds.guildName || '-';
+    $('discord-channel').textContent = ds.notificationChannelName || 'Not configured';
+    $('discord-members').textContent = ds.memberCount != null ? String(ds.memberCount) : '-';
+
+    // Disable send button if no notification channel
+    $('btn-discord-send').disabled = !ds.connected || !ds.notificationChannelId;
+  } catch {
+    hide('discord-panel');
+  }
+}
+
+$('btn-discord-send').addEventListener('click', async () => {
+  const msg = $('discord-msg-input').value.trim();
+  if (!msg) return;
+  try {
+    const result = await POST('/discord/send-message', { message: msg });
+    if (result.ok) {
+      $('discord-msg-input').value = '';
+      flash('discord-msg-status', 'Message sent to Discord!');
+    } else {
+      flash('discord-msg-status', result.error || 'Failed to send', true);
+    }
+  } catch (err) {
+    flash('discord-msg-status', err.message, true);
+  }
+});
+
+$('discord-msg-input').addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') $('btn-discord-send').click();
 });
 
 // --- Mods ---

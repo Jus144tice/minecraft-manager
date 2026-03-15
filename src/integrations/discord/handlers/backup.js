@@ -8,7 +8,7 @@ import { createBackup } from '../../../backup.js';
 
 export function register(ctx) {
   registerCommand('backup', {
-    permission: PermissionLevel.ADMIN,
+    permission: PermissionLevel.OWNER,
     builder: new SlashCommandBuilder()
       .setName('backup')
       .setDescription('Create a server backup')

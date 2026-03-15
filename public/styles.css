@@ -401,6 +401,39 @@ html {
   margin-top: 0.15rem;
 }
 
+/* --- Discord panel --- */
+.discord-status-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+  gap: 0.5rem 1rem;
+  margin-bottom: 1rem;
+}
+.discord-stat {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+}
+.discord-stat-label {
+  font-size: 0.75rem;
+  color: var(--text-dim);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.discord-stat-value {
+  font-size: 0.9rem;
+  font-weight: 500;
+}
+.discord-message-section {
+  border-top: 1px solid var(--border);
+  padding-top: 0.75rem;
+  margin-top: 0.5rem;
+}
+.discord-message-section h4 {
+  font-size: 0.85rem;
+  font-weight: 600;
+  margin-bottom: 0.5rem;
+}
+
 /* --- Control sections --- */
 .control-section {
   background: var(--surface);

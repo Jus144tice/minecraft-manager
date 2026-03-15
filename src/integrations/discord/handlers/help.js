@@ -2,29 +2,26 @@
 
 import pkg from 'discord.js';
 const { SlashCommandBuilder, EmbedBuilder } = pkg;
-import { PermissionLevel } from '../permissions.js';
+import { PermissionLevel, TIER_NAMES, getEffectiveLevel } from '../permissions.js';
 import { registerCommand, getCommandsByPermission } from '../registry.js';
 
-export function register() {
+export function register(ctx) {
   registerCommand('help', {
     permission: PermissionLevel.READ_ONLY,
     builder: new SlashCommandBuilder().setName('help').setDescription('Show available commands'),
     handler: async (interaction) => {
-      // Determine caller's effective permission level
+      await interaction.deferReply();
+
       const discordConfig = interaction.client._discordConfig;
-      const member = interaction.member;
-      let level = PermissionLevel.READ_ONLY;
+      const effective = await getEffectiveLevel(interaction, discordConfig, ctx);
+      const cmds = getCommandsByPermission(effective.level);
 
-      if (member && member.roles && discordConfig.adminRoleIds.length > 0) {
-        const memberRoles = member.roles.cache ? [...member.roles.cache.keys()] : [];
-        if (discordConfig.adminRoleIds.some((roleId) => memberRoles.includes(roleId))) {
-          level = PermissionLevel.ADMIN;
-        }
-      }
-
-      const cmds = getCommandsByPermission(level);
+      // Group commands by permission tier
       const readOnly = cmds.filter((c) => c.permission === PermissionLevel.READ_ONLY);
+      const moderator = cmds.filter((c) => c.permission === PermissionLevel.MODERATOR);
+      const gameMaster = cmds.filter((c) => c.permission === PermissionLevel.GAME_MASTER);
       const admin = cmds.filter((c) => c.permission === PermissionLevel.ADMIN);
+      const owner = cmds.filter((c) => c.permission === PermissionLevel.OWNER);
 
       const embed = new EmbedBuilder().setTitle('Minecraft Manager — Commands').setColor(0x3498db).setTimestamp();
 
@@ -35,18 +32,38 @@ export function register() {
         });
       }
 
+      if (moderator.length > 0) {
+        embed.addFields({
+          name: 'Moderator Commands (Op 1+)',
+          value: moderator.map((c) => `\`/${c.name}\``).join(', '),
+        });
+      }
+
+      if (gameMaster.length > 0) {
+        embed.addFields({
+          name: 'Game Master Commands (Op 2+)',
+          value: gameMaster.map((c) => `\`/${c.name}\``).join(', '),
+        });
+      }
+
       if (admin.length > 0) {
         embed.addFields({
-          name: 'Admin Commands',
+          name: 'Admin Commands (Op 3+)',
           value: admin.map((c) => `\`/${c.name}\``).join(', '),
         });
       }
 
-      if (level === PermissionLevel.READ_ONLY && discordConfig.adminRoleIds.length > 0) {
-        embed.setFooter({ text: 'Some commands require an admin role.' });
+      if (owner.length > 0) {
+        embed.addFields({
+          name: 'Owner Commands (Op 4)',
+          value: owner.map((c) => `\`/${c.name}\``).join(', '),
+        });
       }
 
-      await interaction.reply({ embeds: [embed] });
+      const tierName = TIER_NAMES[effective.level] || 'Unknown';
+      embed.setFooter({ text: `Your access level: ${tierName}` });
+
+      await interaction.editReply({ embeds: [embed] });
     },
   });
 }
