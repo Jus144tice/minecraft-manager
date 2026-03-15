@@ -3809,8 +3809,7 @@ async function loadUserProfileLinks() {
         '<p class="dim" style="font-size:0.85rem">No Discord account linked. Use <code>/link</code> in Discord to link your account.</p>';
     }
   } catch {
-    container.innerHTML =
-      '<p class="dim" style="font-size:0.85rem">Could not load Discord link info.</p>';
+    container.innerHTML = '<p class="dim" style="font-size:0.85rem">Could not load Discord link info.</p>';
   }
 }
 
