@@ -214,9 +214,7 @@ export function getDiscordStatus() {
 
   // Add guild info if connected
   if (connected && client.guilds?.cache?.size > 0) {
-    const guild = discordConfig?.guildId
-      ? client.guilds.cache.get(discordConfig.guildId)
-      : client.guilds.cache.first();
+    const guild = discordConfig?.guildId ? client.guilds.cache.get(discordConfig.guildId) : client.guilds.cache.first();
     if (guild) {
       status.guildName = guild.name;
       status.memberCount = guild.memberCount;

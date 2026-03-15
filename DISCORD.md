@@ -103,6 +103,7 @@ Linking uses a **code-based challenge flow** to verify account ownership:
 This proves you control both the Discord account and the Minecraft account. The challenge code expires after 10 minutes (configurable via `linkChallengeTimeoutMinutes`).
 
 **Important constraints:**
+
 - You can only link **your own** account — no one can link on your behalf via Discord commands
 - The code only works if typed by the **exact player name** you specified
 - Each Minecraft account can only be linked to **one** Discord account at a time
@@ -132,13 +133,13 @@ Discord roles do **not** automatically grant Minecraft server authority.
 
 Commands are gated by **Minecraft op levels**. Read-only commands are always available to everyone — no linking required. Elevated commands require linking your Discord account to a Minecraft player who has the appropriate op level.
 
-| Level | Tier Name    | MC Op Level | Commands                                             |
-| ----- | ------------ | ----------- | ---------------------------------------------------- |
-| 0     | Everyone     | —           | `/status`, `/players`, `/help`, `/link`, `/unlink`, `/whoami` |
-| 1     | Moderator    | 1+          | `/say`                                               |
-| 2     | Game Master  | 2+          | *(reserved for future commands)*                     |
-| 3     | Admin        | 3+          | *(reserved for future commands)*                     |
-| 4     | Owner        | 4           | `/start`, `/stop`, `/restart`, `/backup`             |
+| Level | Tier Name   | MC Op Level | Commands                                                      |
+| ----- | ----------- | ----------- | ------------------------------------------------------------- |
+| 0     | Everyone    | —           | `/status`, `/players`, `/help`, `/link`, `/unlink`, `/whoami` |
+| 1     | Moderator   | 1+          | `/say`                                                        |
+| 2     | Game Master | 2+          | _(reserved for future commands)_                              |
+| 3     | Admin       | 3+          | _(reserved for future commands)_                              |
+| 4     | Owner       | 4           | `/start`, `/stop`, `/restart`, `/backup`                      |
 
 ### Permission Resolution Order
 
@@ -160,6 +161,7 @@ DISCORD_OWNER_OVERRIDE_ROLE_IDS=111111111111111111
 ```
 
 Or in `config.json`:
+
 ```json
 {
   "discord": {
@@ -183,18 +185,18 @@ Or in `config.json`:
 
 ### Moderator (Op 1+)
 
-| Command          | Description                 |
-| ---------------- | --------------------------- |
-| `/say message`   | Broadcast a message in-game |
+| Command        | Description                 |
+| -------------- | --------------------------- |
+| `/say message` | Broadcast a message in-game |
 
 ### Owner (Op 4)
 
-| Command          | Description                 |
-| ---------------- | --------------------------- |
-| `/start`         | Start the Minecraft server  |
-| `/stop`          | Gracefully stop the server  |
-| `/restart`       | Restart the server          |
-| `/backup [note]` | Create a server backup      |
+| Command          | Description                |
+| ---------------- | -------------------------- |
+| `/start`         | Start the Minecraft server |
+| `/stop`          | Gracefully stop the server |
+| `/restart`       | Restart the server         |
+| `/backup [note]` | Create a server backup     |
 
 ## Visibility
 
@@ -217,34 +219,34 @@ These work alongside (not replacing) the existing webhook notification system. B
 
 ### Environment Variables (secrets + overrides)
 
-| Variable                            | Required | Description                                                          |
-| ----------------------------------- | -------- | -------------------------------------------------------------------- |
-| `DISCORD_BOT_TOKEN`                 | Yes      | Bot token from Discord Developer Portal                              |
-| `DISCORD_APPLICATION_ID`            | Yes      | Application ID                                                       |
-| `DISCORD_GUILD_ID`                  | No       | Restricts bot to one server; enables instant command registration    |
-| `DISCORD_NOTIFICATION_CHANNEL_ID`   | No       | Channel for event notifications                                      |
-| `DISCORD_BOT_ADMIN_ROLE_IDS`        | No       | Comma-separated role IDs for Discord bot management                  |
-| `DISCORD_ALLOWED_ROLE_IDS`          | No       | Comma-separated role IDs (restricts all commands)                    |
-| `DISCORD_COMMAND_CHANNEL_IDS`       | No       | Comma-separated channel IDs (restricts where commands work)          |
-| `DISCORD_OWNER_OVERRIDE_ROLE_IDS`   | No       | Comma-separated role IDs that bypass MC op checks (**dangerous**)    |
+| Variable                          | Required | Description                                                       |
+| --------------------------------- | -------- | ----------------------------------------------------------------- |
+| `DISCORD_BOT_TOKEN`               | Yes      | Bot token from Discord Developer Portal                           |
+| `DISCORD_APPLICATION_ID`          | Yes      | Application ID                                                    |
+| `DISCORD_GUILD_ID`                | No       | Restricts bot to one server; enables instant command registration |
+| `DISCORD_NOTIFICATION_CHANNEL_ID` | No       | Channel for event notifications                                   |
+| `DISCORD_BOT_ADMIN_ROLE_IDS`      | No       | Comma-separated role IDs for Discord bot management               |
+| `DISCORD_ALLOWED_ROLE_IDS`        | No       | Comma-separated role IDs (restricts all commands)                 |
+| `DISCORD_COMMAND_CHANNEL_IDS`     | No       | Comma-separated channel IDs (restricts where commands work)       |
+| `DISCORD_OWNER_OVERRIDE_ROLE_IDS` | No       | Comma-separated role IDs that bypass MC op checks (**dangerous**) |
 
 > **Migration note:** The old `DISCORD_ADMIN_ROLE_IDS` env var is still accepted as an alias for `DISCORD_BOT_ADMIN_ROLE_IDS`. It no longer grants Minecraft server authority — only bot admin privileges. Rename to `DISCORD_BOT_ADMIN_ROLE_IDS` when convenient.
 
 ### config.json `discord` section (non-secrets)
 
-| Key                            | Type     | Default | Description                                                                    |
-| ------------------------------ | -------- | ------- | ------------------------------------------------------------------------------ |
-| `enabled`                      | boolean  | `true`  | Master switch — set `false` to disable even with valid credentials             |
-| `applicationId`                | string   | `""`    | Can also be set via env var                                                    |
-| `guildId`                      | string   | `""`    | Can also be set via env var                                                    |
-| `botAdminRoleIds`              | string[] | `[]`    | Discord bot management roles (not MC authority)                                |
-| `allowedRoleIds`               | string[] | `[]`    | Can also be set via env var                                                    |
-| `ownerOverrideRoleIds`         | string[] | `[]`    | Dangerous: bypasses MC op checks (**off by default**)                          |
-| `notificationChannelId`        | string   | `""`    | Can also be set via env var                                                    |
-| `commandChannelIds`            | string[] | `[]`    | Can also be set via env var                                                    |
-| `allowDMs`                     | boolean  | `false` | Allow read-only commands in DMs                                                |
-| `registerCommandsOnStartup`    | boolean  | `true`  | Register slash commands with Discord on app start                              |
-| `linkChallengeTimeoutMinutes`  | number   | `10`    | How long a `!link` challenge code remains valid                                |
+| Key                           | Type     | Default | Description                                                        |
+| ----------------------------- | -------- | ------- | ------------------------------------------------------------------ |
+| `enabled`                     | boolean  | `true`  | Master switch — set `false` to disable even with valid credentials |
+| `applicationId`               | string   | `""`    | Can also be set via env var                                        |
+| `guildId`                     | string   | `""`    | Can also be set via env var                                        |
+| `botAdminRoleIds`             | string[] | `[]`    | Discord bot management roles (not MC authority)                    |
+| `allowedRoleIds`              | string[] | `[]`    | Can also be set via env var                                        |
+| `ownerOverrideRoleIds`        | string[] | `[]`    | Dangerous: bypasses MC op checks (**off by default**)              |
+| `notificationChannelId`       | string   | `""`    | Can also be set via env var                                        |
+| `commandChannelIds`           | string[] | `[]`    | Can also be set via env var                                        |
+| `allowDMs`                    | boolean  | `false` | Allow read-only commands in DMs                                    |
+| `registerCommandsOnStartup`   | boolean  | `true`  | Register slash commands with Discord on app start                  |
+| `linkChallengeTimeoutMinutes` | number   | `10`    | How long a `!link` challenge code remains valid                    |
 
 ## Troubleshooting
 

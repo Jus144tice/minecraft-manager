@@ -8,12 +8,7 @@ import * as Demo from '../demoData.js';
 import { audit } from '../audit.js';
 import { isValidMinecraftName, isSafeCommand, sanitizeReason } from '../validate.js';
 import { requireAdmin } from '../middleware.js';
-import {
-  getAllLinks,
-  getLinkByMinecraftName,
-  setLink,
-  removeLink,
-} from '../integrations/discord/links.js';
+import { getAllLinks, getLinkByMinecraftName, setLink, removeLink } from '../integrations/discord/links.js';
 
 export default function playerRoutes(ctx) {
   const router = Router();

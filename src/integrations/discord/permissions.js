@@ -96,8 +96,7 @@ export async function checkPermission(interaction, requiredLevel, discordConfig,
     logDenied({ userId, username, guildId, channelId, commandName, reason: 'no linked Minecraft account' });
     return {
       allowed: false,
-      reason:
-        'You need to link your Minecraft account to use this command. Use `/link` to get started.',
+      reason: 'You need to link your Minecraft account to use this command. Use `/link` to get started.',
     };
   }
 

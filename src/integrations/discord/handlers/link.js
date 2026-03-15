@@ -20,9 +20,7 @@ export function register(ctx) {
     builder: new SlashCommandBuilder()
       .setName('link')
       .setDescription('Link your Discord account to your Minecraft player')
-      .addStringOption((opt) =>
-        opt.setName('name').setDescription('Your Minecraft player name').setRequired(true),
-      ),
+      .addStringOption((opt) => opt.setName('name').setDescription('Your Minecraft player name').setRequired(true)),
     handler: async (interaction) => {
       await interaction.deferReply({ flags: 64 });
 
@@ -30,7 +28,9 @@ export function register(ctx) {
       const caller = interaction.user;
 
       if (!isValidMinecraftName(name)) {
-        return interaction.editReply('Invalid Minecraft player name. Names must be 3–16 characters, alphanumeric or underscores.');
+        return interaction.editReply(
+          'Invalid Minecraft player name. Names must be 3–16 characters, alphanumeric or underscores.',
+        );
       }
 
       // Check if caller already has a link
@@ -52,7 +52,7 @@ export function register(ctx) {
       // Check if the server is online (we need it for the verification step)
       if (!ctx.config.demoMode && !ctx.mc.running) {
         return interaction.editReply(
-          'The Minecraft server is currently offline. Start the server first, then try again — you\'ll need to type a verification code in Minecraft chat.',
+          "The Minecraft server is currently offline. Start the server first, then try again — you'll need to type a verification code in Minecraft chat.",
         );
       }
 

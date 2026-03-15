@@ -217,10 +217,9 @@ export async function listDiscordLinks() {
 /** Find a Discord link by Minecraft name. */
 export async function getDiscordLinkByMinecraftName(minecraftName) {
   if (!pool) return null;
-  const { rows } = await pool.query(
-    'SELECT * FROM discord_links WHERE LOWER(minecraft_name) = LOWER($1)',
-    [minecraftName],
-  );
+  const { rows } = await pool.query('SELECT * FROM discord_links WHERE LOWER(minecraft_name) = LOWER($1)', [
+    minecraftName,
+  ]);
   return rows[0] || null;
 }
 

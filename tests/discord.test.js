@@ -249,28 +249,48 @@ test('Permissions: ownerOverrideRoleIds has no effect when empty', async () => {
 });
 
 test('Permissions: DMs blocked by default', async () => {
-  const result = await checkPermission(mockInteraction({ guildId: null }), PermissionLevel.READ_ONLY, baseDiscordConfig, mockCtx);
+  const result = await checkPermission(
+    mockInteraction({ guildId: null }),
+    PermissionLevel.READ_ONLY,
+    baseDiscordConfig,
+    mockCtx,
+  );
   assert.equal(result.allowed, false);
   assert.ok(result.reason.includes('DM'));
 });
 
 test('Permissions: DMs allowed when configured', async () => {
-  const result = await checkPermission(mockInteraction({ guildId: null }), PermissionLevel.READ_ONLY, {
-    ...baseDiscordConfig,
-    allowDMs: true,
-  }, mockCtx);
+  const result = await checkPermission(
+    mockInteraction({ guildId: null }),
+    PermissionLevel.READ_ONLY,
+    {
+      ...baseDiscordConfig,
+      allowDMs: true,
+    },
+    mockCtx,
+  );
   assert.equal(result.allowed, true);
 });
 
 test('Permissions: wrong guild blocked', async () => {
-  const result = await checkPermission(mockInteraction({ guildId: '999' }), PermissionLevel.READ_ONLY, baseDiscordConfig, mockCtx);
+  const result = await checkPermission(
+    mockInteraction({ guildId: '999' }),
+    PermissionLevel.READ_ONLY,
+    baseDiscordConfig,
+    mockCtx,
+  );
   assert.equal(result.allowed, false);
   assert.ok(result.reason.includes('not configured'));
 });
 
 test('Permissions: wrong channel blocked', async () => {
   const config = { ...baseDiscordConfig, commandChannelIds: ['allowed-channel'] };
-  const result = await checkPermission(mockInteraction({ channelId: '789' }), PermissionLevel.READ_ONLY, config, mockCtx);
+  const result = await checkPermission(
+    mockInteraction({ channelId: '789' }),
+    PermissionLevel.READ_ONLY,
+    config,
+    mockCtx,
+  );
   assert.equal(result.allowed, false);
   assert.ok(result.reason.includes('channel'));
 });
@@ -353,7 +373,6 @@ import {
   getPendingChallenge,
   cancelChallenge,
   setChallengeTimeout,
-  getPendingChallengeCount,
   getLinkByMinecraftName,
 } from '../src/integrations/discord/links.js';
 
@@ -417,7 +436,9 @@ test('Challenge: expired challenge returns null', () => {
 
   // Wait for expiration
   const start = Date.now();
-  while (Date.now() - start < 5) { /* spin */ }
+  while (Date.now() - start < 5) {
+    /* spin */
+  }
 
   const result = verifyChallenge('ExpiredPlayer', challenge.code);
   assert.equal(result, null);

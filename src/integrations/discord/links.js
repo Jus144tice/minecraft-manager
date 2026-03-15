@@ -125,7 +125,12 @@ export async function getLinkByMinecraftName(minecraftName) {
   if (isConnected()) {
     const row = await getDiscordLinkByMinecraftName(minecraftName);
     if (!row) return null;
-    return { discordId: row.discord_id, minecraftName: row.minecraft_name, linkedBy: row.linked_by, linkedAt: row.linked_at };
+    return {
+      discordId: row.discord_id,
+      minecraftName: row.minecraft_name,
+      linkedBy: row.linked_by,
+      linkedAt: row.linked_at,
+    };
   }
   for (const [discordId, entry] of memoryLinks) {
     if (entry.minecraftName.toLowerCase() === minecraftName.toLowerCase()) {

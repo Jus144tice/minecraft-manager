@@ -3247,9 +3247,7 @@ async function openPlayerProfile(name) {
 }
 
 function renderPlayerProfile(p, container) {
-  const avatarUrl = p.uuid
-    ? `https://mc-heads.net/avatar/${p.uuid}/64`
-    : `https://mc-heads.net/avatar/${p.name}/64`;
+  const avatarUrl = p.uuid ? `https://mc-heads.net/avatar/${p.uuid}/64` : `https://mc-heads.net/avatar/${p.name}/64`;
 
   // Badges
   const badges = [];
@@ -3294,10 +3292,14 @@ function renderPlayerProfile(p, container) {
         <span class="profile-detail-label">Reason</span>
         <span class="profile-detail-value">${esc(p.banned.reason || 'No reason given')}</span>
       </div>
-      ${p.banned.created ? `<div class="profile-detail-row">
+      ${
+        p.banned.created
+          ? `<div class="profile-detail-row">
         <span class="profile-detail-label">Banned On</span>
         <span class="profile-detail-value">${new Date(p.banned.created).toLocaleDateString()}</span>
-      </div>` : ''}
+      </div>`
+          : ''
+      }
       <div class="profile-detail-row">
         <span class="profile-detail-label">Expires</span>
         <span class="profile-detail-value">${esc(p.banned.expires || 'Never')}</span>
