@@ -66,6 +66,12 @@ document.addEventListener('click', async (e) => {
     case 'server-cmd-prompt':
       await runServerActionPrompt(el);
       break;
+    case 'player-profile':
+      openPlayerProfile(el.dataset.name);
+      break;
+    case 'unlink-discord':
+      await unlinkDiscordFromProfile(el.dataset.discordId, el.dataset.name);
+      break;
   }
 });
 
@@ -780,11 +786,12 @@ function renderOnlinePlayers(players) {
   el.innerHTML = players
     .map(
       (name) =>
-        `<span class="chip">${esc(name)}${isAdmin ? `<button class="chip-kick" data-name="${esc(name)}" title="Kick">&#10005;</button>` : ''}</span>`,
+        `<span class="chip clickable" data-action="player-profile" data-name="${esc(name)}">${esc(name)}${isAdmin ? `<button class="chip-kick" data-name="${esc(name)}" title="Kick">&#10005;</button>` : ''}</span>`,
     )
     .join('');
   el.querySelectorAll('.chip-kick').forEach((btn) => {
-    btn.addEventListener('click', async () => {
+    btn.addEventListener('click', async (e) => {
+      e.stopPropagation(); // don't open profile when kicking
       if (!confirm(`Kick ${btn.dataset.name}?`)) return;
       try {
         await POST('/players/kick', { name: btn.dataset.name });
@@ -1528,7 +1535,7 @@ async function loadOps() {
         .map(
           (op) => `
         <tr>
-          <td><strong>${esc(op.name)}</strong></td>
+          <td><strong class="player-name-link" data-action="player-profile" data-name="${esc(op.name)}">${esc(op.name)}</strong></td>
           <td><span class="level-badge level-${op.level}">Level ${op.level}</span></td>
           <td class="dim small">${esc(op.uuid || '-')}</td>
           ${isAdmin ? `<td><button class="btn btn-sm btn-danger" data-action="remove-op" data-name="${esc(op.name)}">Remove</button></td>` : ''}
@@ -1580,7 +1587,7 @@ async function loadWhitelist() {
         .map(
           (e) => `
         <tr>
-          <td><strong>${esc(e.name)}</strong></td>
+          <td><strong class="player-name-link" data-action="player-profile" data-name="${esc(e.name)}">${esc(e.name)}</strong></td>
           <td class="dim small">${esc(e.uuid || '-')}</td>
           ${isAdmin ? `<td><button class="btn btn-sm btn-danger" data-action="remove-wl" data-name="${esc(e.name)}">Remove</button></td>` : ''}
         </tr>`,
@@ -1631,7 +1638,7 @@ async function loadBans() {
         .map(
           (e) => `
         <tr>
-          <td><strong>${esc(e.name)}</strong></td>
+          <td><strong class="player-name-link" data-action="player-profile" data-name="${esc(e.name)}">${esc(e.name)}</strong></td>
           <td class="dim">${esc(e.reason || '-')}</td>
           ${isAdmin ? `<td><button class="btn btn-sm btn-success" data-action="unban-player" data-name="${esc(e.name)}">Unban</button></td>` : ''}
         </tr>`,
@@ -3157,4 +3164,131 @@ $('cmd-help-modal').addEventListener('click', (e) => {
 // Live search
 $('cmd-help-search').addEventListener('input', (e) => {
   renderCmdHelp(e.target.value);
+});
+
+// --- Player Profile Modal ---
+
+const OP_LEVEL_NAMES = { 1: 'Spawn Protection Bypass', 2: 'Game Master', 3: 'Admin', 4: 'Owner' };
+
+async function openPlayerProfile(name) {
+  if (!name) return;
+  const content = $('player-profile-content');
+  $('player-profile-title').textContent = name;
+  content.innerHTML = '<p class="dim">Loading player profile...</p>';
+  show('player-profile-modal');
+
+  try {
+    const p = await GET(`/players/profile/${encodeURIComponent(name)}`);
+    renderPlayerProfile(p, content);
+  } catch (err) {
+    content.innerHTML = `<p class="error-msg">${esc(err.message)}</p>`;
+  }
+}
+
+function renderPlayerProfile(p, container) {
+  const avatarUrl = p.uuid
+    ? `https://mc-heads.net/avatar/${p.uuid}/64`
+    : `https://mc-heads.net/avatar/${p.name}/64`;
+
+  // Badges
+  const badges = [];
+  if (p.online === true) badges.push('<span class="profile-badge online">Online</span>');
+  else if (p.online === false) badges.push('<span class="profile-badge offline">Offline</span>');
+  if (p.op) badges.push(`<span class="profile-badge op">Op Level ${p.op.level}</span>`);
+  if (p.whitelisted) badges.push('<span class="profile-badge whitelisted">Whitelisted</span>');
+  if (p.banned) badges.push('<span class="profile-badge banned">Banned</span>');
+
+  let html = `
+    <div class="player-profile-header">
+      <img class="player-profile-avatar" src="${avatarUrl}" alt="${esc(p.name)}" onerror="this.style.display='none'">
+      <div>
+        <div class="player-profile-name">${esc(p.name)}</div>
+        ${p.uuid ? `<div class="player-profile-uuid">${esc(p.uuid)}</div>` : ''}
+      </div>
+    </div>
+    <div class="profile-badges">${badges.join('')}</div>`;
+
+  // Op details
+  if (p.op) {
+    html += `
+    <div class="profile-section">
+      <h4>Operator</h4>
+      <div class="profile-detail-row">
+        <span class="profile-detail-label">Level</span>
+        <span class="profile-detail-value">${p.op.level} &mdash; ${OP_LEVEL_NAMES[p.op.level] || 'Unknown'}</span>
+      </div>
+      <div class="profile-detail-row">
+        <span class="profile-detail-label">Bypasses Player Limit</span>
+        <span class="profile-detail-value">${p.op.bypassesPlayerLimit ? 'Yes' : 'No'}</span>
+      </div>
+    </div>`;
+  }
+
+  // Ban details
+  if (p.banned) {
+    html += `
+    <div class="profile-section">
+      <h4>Ban Info</h4>
+      <div class="profile-detail-row">
+        <span class="profile-detail-label">Reason</span>
+        <span class="profile-detail-value">${esc(p.banned.reason || 'No reason given')}</span>
+      </div>
+      ${p.banned.created ? `<div class="profile-detail-row">
+        <span class="profile-detail-label">Banned On</span>
+        <span class="profile-detail-value">${new Date(p.banned.created).toLocaleDateString()}</span>
+      </div>` : ''}
+      <div class="profile-detail-row">
+        <span class="profile-detail-label">Expires</span>
+        <span class="profile-detail-value">${esc(p.banned.expires || 'Never')}</span>
+      </div>
+    </div>`;
+  }
+
+  // Discord linking
+  html += `
+    <div class="profile-section">
+      <h4>Discord Link</h4>`;
+  if (p.discord) {
+    html += `
+      <div class="profile-detail-row">
+        <span class="profile-detail-label">Discord ID</span>
+        <span class="profile-detail-value profile-discord-id">${esc(p.discord.discordId)}</span>
+      </div>
+      <div class="profile-detail-row">
+        <span class="profile-detail-label">Linked By</span>
+        <span class="profile-detail-value">${esc(p.discord.linkedBy)}</span>
+      </div>
+      <div class="profile-detail-row">
+        <span class="profile-detail-label">Linked At</span>
+        <span class="profile-detail-value">${new Date(p.discord.linkedAt).toLocaleString()}</span>
+      </div>`;
+    if (isAdmin) {
+      html += `
+      <div class="profile-detail-row" style="margin-top:0.5rem">
+        <span></span>
+        <button class="btn btn-sm btn-danger" data-action="unlink-discord" data-discord-id="${esc(p.discord.discordId)}" data-name="${esc(p.name)}">Unlink Discord</button>
+      </div>`;
+    }
+  } else {
+    html += '<p class="dim" style="font-size:0.85rem">No Discord account linked.</p>';
+  }
+  html += '</div>';
+
+  container.innerHTML = html;
+}
+
+async function unlinkDiscordFromProfile(discordId, playerName) {
+  if (!confirm(`Unlink Discord account from ${playerName}?`)) return;
+  try {
+    await DEL(`/players/discord-link/${encodeURIComponent(discordId)}`);
+    // Refresh the profile
+    openPlayerProfile(playerName);
+  } catch (err) {
+    alert('Failed to unlink: ' + err.message);
+  }
+}
+
+$('player-profile-close').addEventListener('click', () => hide('player-profile-modal'));
+$('player-profile-modal').addEventListener('click', (e) => {
+  if (e.target === $('player-profile-modal')) hide('player-profile-modal');
 });

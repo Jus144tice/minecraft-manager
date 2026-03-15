@@ -8,6 +8,12 @@ import * as Demo from '../demoData.js';
 import { audit } from '../audit.js';
 import { isValidMinecraftName, isSafeCommand, sanitizeReason } from '../validate.js';
 import { requireAdmin } from '../middleware.js';
+import {
+  getAllLinks,
+  getLinkByMinecraftName,
+  setLink,
+  removeLink,
+} from '../integrations/discord/links.js';
 
 export default function playerRoutes(ctx) {
   const router = Router();
@@ -238,6 +244,95 @@ export default function playerRoutes(ctx) {
       res.json({ ok: true });
     } catch (err) {
       res.status(503).json({ error: err.message });
+    }
+  });
+
+  // --- Player profile: aggregated view ---
+  router.get('/players/profile/:name', async (req, res) => {
+    const { name } = req.params;
+    if (!isValidMinecraftName(name)) return res.status(400).json({ error: 'Invalid player name' });
+
+    try {
+      let ops, whitelist, bans, onlinePlayers;
+
+      if (ctx.config.demoMode) {
+        ops = Demo.DEMO_OPS;
+        whitelist = Demo.DEMO_WHITELIST;
+        bans = Demo.DEMO_BANS;
+        onlinePlayers = ctx.demoState.running ? Demo.DEMO_ONLINE_PLAYERS : [];
+      } else {
+        [ops, whitelist, bans] = await Promise.all([
+          SF.getOps(ctx.config.serverPath),
+          SF.getWhitelist(ctx.config.serverPath),
+          SF.getBannedPlayers(ctx.config.serverPath),
+        ]);
+        // Try to get online players, but don't fail the whole request
+        try {
+          const result = await ctx.rconCmd('list');
+          const m = result.match(/There are \d+ of a max of \d+ players online: (.*)/);
+          onlinePlayers = m && m[1].trim() ? m[1].split(', ').map((n) => n.trim()) : [];
+        } catch {
+          onlinePlayers = null; // unknown — server may be offline
+        }
+      }
+
+      const lowerName = name.toLowerCase();
+      const op = ops.find((o) => o.name.toLowerCase() === lowerName);
+      const wl = whitelist.find((e) => e.name.toLowerCase() === lowerName);
+      const ban = (bans.players || bans).find((e) => e.name.toLowerCase() === lowerName);
+      const online = onlinePlayers === null ? null : onlinePlayers.some((n) => n.toLowerCase() === lowerName);
+
+      // Discord link info
+      const discordLink = await getLinkByMinecraftName(name);
+
+      res.json({
+        name: op?.name || wl?.name || ban?.name || name,
+        uuid: op?.uuid || wl?.uuid || null,
+        online,
+        op: op ? { level: op.level, bypassesPlayerLimit: op.bypassesPlayerLimit } : null,
+        whitelisted: !!wl,
+        banned: ban ? { reason: ban.reason, created: ban.created, expires: ban.expires } : null,
+        discord: discordLink
+          ? { discordId: discordLink.discordId, linkedAt: discordLink.linkedAt, linkedBy: discordLink.linkedBy }
+          : null,
+      });
+    } catch (err) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // --- Discord link management from web UI (admin only) ---
+  router.get('/players/discord-links', requireAdmin, async (_req, res) => {
+    try {
+      res.json(await getAllLinks());
+    } catch (err) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  router.post('/players/discord-link', requireAdmin, async (req, res) => {
+    const { discordId, minecraftName } = req.body;
+    if (!discordId || !minecraftName) return res.status(400).json({ error: 'discordId and minecraftName required' });
+    if (!isValidMinecraftName(minecraftName)) return res.status(400).json({ error: 'Invalid player name' });
+    try {
+      await setLink(discordId, minecraftName, `web:${req.session.user.email}`);
+      audit('DISCORD_LINK_WEB', { user: req.session.user.email, discordId, minecraftName, ip: req.ip });
+      res.json({ ok: true });
+    } catch (err) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  router.delete('/players/discord-link/:discordId', requireAdmin, async (req, res) => {
+    const { discordId } = req.params;
+    try {
+      const existed = await removeLink(discordId);
+      if (existed) {
+        audit('DISCORD_UNLINK_WEB', { user: req.session.user.email, discordId, ip: req.ip });
+      }
+      res.json({ ok: true, existed });
+    } catch (err) {
+      res.status(500).json({ error: err.message });
     }
   });
 

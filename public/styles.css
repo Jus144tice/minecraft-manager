@@ -434,6 +434,123 @@ html {
   margin-bottom: 0.5rem;
 }
 
+/* --- Player profile modal --- */
+.player-profile-modal {
+  max-width: 480px;
+}
+.player-profile-header {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  margin-bottom: 1rem;
+}
+.player-profile-avatar {
+  width: 64px;
+  height: 64px;
+  border-radius: var(--radius);
+  image-rendering: pixelated;
+  background: var(--surface2);
+}
+.player-profile-name {
+  font-size: 1.25rem;
+  font-weight: 700;
+}
+.player-profile-uuid {
+  font-size: 0.75rem;
+  color: var(--text-dim);
+  word-break: break-all;
+}
+.profile-badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  margin-bottom: 1rem;
+}
+.profile-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+  padding: 0.2rem 0.6rem;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--surface2);
+}
+.profile-badge.online {
+  background: rgba(46, 204, 113, 0.15);
+  border-color: var(--success);
+  color: var(--success);
+}
+.profile-badge.offline {
+  color: var(--text-dim);
+}
+.profile-badge.op {
+  background: rgba(52, 152, 219, 0.15);
+  border-color: #3498db;
+  color: #3498db;
+}
+.profile-badge.banned {
+  background: rgba(231, 76, 60, 0.15);
+  border-color: var(--danger);
+  color: var(--danger);
+}
+.profile-badge.whitelisted {
+  background: rgba(46, 204, 113, 0.1);
+  border-color: var(--success);
+  color: var(--success);
+}
+.profile-section {
+  border-top: 1px solid var(--border);
+  padding-top: 0.75rem;
+  margin-top: 0.75rem;
+}
+.profile-section h4 {
+  font-size: 0.85rem;
+  font-weight: 600;
+  margin-bottom: 0.5rem;
+  color: var(--text-dim);
+}
+.profile-detail-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.3rem 0;
+  font-size: 0.85rem;
+}
+.profile-detail-label {
+  color: var(--text-dim);
+}
+.profile-detail-value {
+  font-weight: 500;
+}
+.profile-discord-linked {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+.profile-discord-id {
+  font-family: var(--font-mono);
+  font-size: 0.8rem;
+  color: var(--text-dim);
+}
+.player-name-link {
+  cursor: pointer;
+  text-decoration: underline;
+  text-decoration-style: dotted;
+  text-underline-offset: 2px;
+}
+.player-name-link:hover {
+  color: var(--primary);
+}
+.chip.clickable {
+  cursor: pointer;
+}
+.chip.clickable:hover {
+  border-color: var(--primary);
+  color: var(--primary);
+}
+
 /* --- Control sections --- */
 .control-section {
   background: var(--surface);
