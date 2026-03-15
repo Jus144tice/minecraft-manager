@@ -649,7 +649,6 @@
             <button class="btn btn-sm btn-ghost admin-only" id="btn-export-modpack">Export Modpack</button>
             <button class="btn btn-sm btn-ghost admin-only" id="btn-import-modpack">Import Modpack</button>
             <input type="file" id="modpack-file-input" accept=".json" class="hidden" />
-            <button class="btn btn-sm btn-ghost" id="btn-lookup-mods">Identify Mods (Modrinth)</button>
             <button class="btn btn-sm btn-ghost" id="btn-refresh-mods">Refresh List</button>
           </div>
         </div>
@@ -681,10 +680,6 @@
               <input type="checkbox" id="mod-show-disabled" checked />
               Show disabled
             </label>
-          </div>
-          <div id="mod-lookup-progress" class="hidden">
-            <div class="progress-bar"><div class="progress-fill" id="lookup-progress-fill"></div></div>
-            <p class="dim">Looking up mods on Modrinth...</p>
           </div>
           <div id="mods-list" class="mods-list">
             <p class="dim">Loading...</p>

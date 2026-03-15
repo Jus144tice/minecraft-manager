@@ -455,8 +455,6 @@ async function initApp() {
     if (cfg.demoMode) {
       show('demo-banner');
       window._demoMode = true;
-      // In demo mode the identify button is unnecessary — mods come pre-identified
-      hide('btn-lookup-mods');
     } else {
       window._demoMode = false;
     }
@@ -992,14 +990,31 @@ async function loadMods() {
   try {
     const data = await GET('/mods');
     allMods = data.mods;
+    let needsLookup = false;
     for (const mod of allMods) {
       if (mod.modrinthData) {
         currentModData[mod.filename] = { modrinth: mod.modrinthData, enabled: mod.enabled };
+      } else {
+        needsLookup = true;
       }
     }
     renderMods();
+    // Auto-enrich mods that lack Modrinth metadata
+    if (needsLookup && allMods.length > 0) {
+      enrichInstalledMods();
+    }
   } catch (err) {
     $('mods-list').innerHTML = `<p class="error-msg">${esc(err.message)}</p>`;
+  }
+}
+
+async function enrichInstalledMods() {
+  try {
+    const data = await GET('/mods/lookup');
+    currentModData = data;
+    renderMods();
+  } catch {
+    /* best-effort — silently skip if lookup fails */
   }
 }
 
@@ -1148,21 +1163,6 @@ $('mod-show-disabled').addEventListener('change', () => {
   renderMods();
 });
 $('btn-refresh-mods').addEventListener('click', loadMods);
-
-$('btn-lookup-mods').addEventListener('click', async () => {
-  show('mod-lookup-progress');
-  $('lookup-progress-fill').style.width = '30%';
-  try {
-    const data = await GET('/mods/lookup');
-    currentModData = data;
-    $('lookup-progress-fill').style.width = '100%';
-    renderMods();
-    setTimeout(() => hide('mod-lookup-progress'), 1000);
-  } catch (err) {
-    alert('Lookup failed: ' + err.message);
-    hide('mod-lookup-progress');
-  }
-});
 
 // --- Browse Modrinth ---
 let browseLoaded = false;
