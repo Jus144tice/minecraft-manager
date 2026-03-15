@@ -1645,6 +1645,13 @@ function discordLinkCell(name, linksMap) {
   return '<span class="dim">-</span>';
 }
 
+function linkInstructionButtons() {
+  return `<div style="margin-top:0.75rem;text-align:center;display:flex;gap:0.5rem;justify-content:center;flex-wrap:wrap">
+    <button class="btn btn-sm btn-ghost" data-action="show-link-instructions">How to Link Discord</button>
+    <button class="btn btn-sm btn-ghost" data-action="show-panel-link-instructions">How to Link Panel Account</button>
+  </div>`;
+}
+
 async function loadOnlinePlayers() {
   const el = $('online-list');
   try {
@@ -1680,7 +1687,8 @@ async function loadOnlinePlayers() {
         )
         .join('')}
       </tbody>
-    </table>`;
+    </table>
+    ${linkInstructionButtons()}`;
   } catch (err) {
     el.innerHTML = `<p class="error-msg">${esc(err.message)}</p>`;
   }
@@ -1760,9 +1768,7 @@ async function loadAllPlayers() {
         .join('')}
       </tbody>
     </table>
-    <div style="margin-top:0.75rem;text-align:center">
-      <button class="btn btn-sm btn-ghost" data-action="show-link-instructions">How to Link Discord</button>
-    </div>`;
+    ${linkInstructionButtons()}`;
   } catch (err) {
     el.innerHTML = `<p class="error-msg">${esc(err.message)}</p>`;
   }
