@@ -3790,39 +3790,27 @@ async function loadUserProfileLinks() {
   const container = document.getElementById('user-profile-links');
   if (!container) return;
 
-  if (!isAdmin) {
-    container.innerHTML =
-      '<p class="dim" style="font-size:0.85rem">Discord account linking is managed through the Discord bot using the <code>/link</code> command.</p>';
-    return;
-  }
-
   try {
-    const links = await GET('/players/discord-links');
-    if (!Array.isArray(links) || links.length === 0) {
-      container.innerHTML = '<p class="dim" style="font-size:0.85rem">No Discord accounts are linked.</p>';
-      return;
-    }
-
-    let html = `<div class="user-profile-links-list">`;
-    for (const link of links) {
-      const linkedAt = link.linkedAt ? new Date(link.linkedAt).toLocaleDateString() : '';
-      html += `
+    const identity = await GET('/identity/me');
+    if (identity.discord) {
+      const linkedAt = identity.discord.linkedAt ? new Date(identity.discord.linkedAt).toLocaleDateString() : '';
+      container.innerHTML = `
         <div class="user-profile-link-row">
           <div class="user-profile-link-info">
-            <span class="user-profile-link-mc">${esc(link.minecraftName)}</span>
-            <span class="dim" style="font-size:0.75rem">${esc(link.discordId)}</span>
+            <span class="user-profile-link-mc">${esc(identity.minecraft?.name || '')}</span>
+            <span class="dim" style="font-size:0.75rem">Discord ID: ${esc(identity.discord.discordId)}</span>
           </div>
           <div class="user-profile-link-meta">
             <span class="dim" style="font-size:0.75rem">${esc(linkedAt)}</span>
-            <button class="btn btn-xs btn-danger" data-action="unlink-from-profile" data-discord-id="${esc(link.discordId)}" data-name="${esc(link.minecraftName)}">Unlink</button>
           </div>
         </div>`;
+    } else {
+      container.innerHTML =
+        '<p class="dim" style="font-size:0.85rem">No Discord account linked. Use <code>/link</code> in Discord to link your account.</p>';
     }
-    html += '</div>';
-    container.innerHTML = html;
   } catch {
     container.innerHTML =
-      '<p class="dim" style="font-size:0.85rem">Discord account linking is managed through the Discord bot using the <code>/link</code> command.</p>';
+      '<p class="dim" style="font-size:0.85rem">Could not load Discord link info.</p>';
   }
 }
 
