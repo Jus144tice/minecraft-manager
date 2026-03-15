@@ -31,6 +31,15 @@ export default function playerRoutes(ctx) {
     }
   });
 
+  router.get('/players/all', async (req, res) => {
+    if (ctx.config.demoMode) return res.json(Demo.DEMO_USERCACHE);
+    try {
+      res.json(await SF.getUsercache(ctx.config.serverPath));
+    } catch (err) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
   router.get('/players/ops', async (req, res) => {
     if (ctx.config.demoMode) return res.json(Demo.DEMO_OPS);
     res.json(await SF.getOps(ctx.config.serverPath));

@@ -40,6 +40,10 @@ export async function setWhitelist(serverPath, list) {
   await writeJson(path.join(serverPath, 'whitelist.json'), list);
 }
 
+export async function getUsercache(serverPath) {
+  return readJson(path.join(serverPath, 'usercache.json'));
+}
+
 export async function getBannedPlayers(serverPath) {
   return readJson(path.join(serverPath, 'banned-players.json'));
 }

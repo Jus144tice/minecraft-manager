@@ -75,6 +75,21 @@ document.addEventListener('click', async (e) => {
     case 'unlink-from-profile':
       await unlinkFromUserProfile(el.dataset.discordId, el.dataset.name);
       break;
+    case 'kick-player':
+      await kickPlayerFromList(el.dataset.name);
+      break;
+    case 'ban-from-list':
+      await banPlayerFromList(el.dataset.name);
+      break;
+    case 'op-from-list':
+      await opPlayerFromList(el.dataset.name);
+      break;
+    case 'whitelist-from-list':
+      await whitelistPlayerFromList(el.dataset.name);
+      break;
+    case 'show-link-instructions':
+      show('link-instructions-modal');
+      break;
   }
 });
 
@@ -401,9 +416,7 @@ document.querySelectorAll('.subtab-btn').forEach((btn) => {
 function onTabActivate(tab) {
   if (tab === 'mods') loadMods();
   if (tab === 'players') {
-    loadOps();
-    loadWhitelist();
-    loadBans();
+    loadOnlinePlayers();
   }
   if (tab === 'backups') {
     loadBackups();
@@ -418,6 +431,8 @@ function onTabActivate(tab) {
 let activeModsSubtab = 'installed';
 
 function onSubtabActivate(subtab) {
+  if (subtab === 'online') loadOnlinePlayers();
+  if (subtab === 'all-players') loadAllPlayers();
   if (subtab === 'ops') loadOps();
   if (subtab === 'whitelist') loadWhitelist();
   if (subtab === 'bans') loadBans();
@@ -1589,6 +1604,195 @@ window.downloadMod = async function (btn) {
     alert('Download failed: ' + err.message);
   }
 };
+
+// --- Players: Online ---
+async function fetchDiscordLinks() {
+  if (!isAdmin) return {};
+  try {
+    const links = await GET('/players/discord-links');
+    const map = {};
+    for (const l of links) map[l.minecraftName.toLowerCase()] = l;
+    return map;
+  } catch {
+    return {};
+  }
+}
+
+function discordLinkCell(name, linksMap) {
+  const link = linksMap[name.toLowerCase()];
+  if (link) {
+    return `<span class="discord-linked-badge" title="Discord ID: ${esc(link.discordId)}">Linked</span>`;
+  }
+  return '<span class="dim">-</span>';
+}
+
+async function loadOnlinePlayers() {
+  const el = $('online-list');
+  try {
+    const [data, linksMap] = await Promise.all([GET('/players/online'), fetchDiscordLinks()]);
+
+    const players = data.players || [];
+    if (!players.length) {
+      el.innerHTML = '<p class="dim">No players online.</p>';
+      return;
+    }
+    el.innerHTML = `<table class="player-table">
+      <thead><tr><th>Player</th><th>Discord</th>${isAdmin ? '<th>Actions</th>' : ''}</tr></thead>
+      <tbody>${players
+        .map(
+          (name) => `
+        <tr>
+          <td>
+            <div class="player-cell">
+              <img class="player-avatar-sm" src="https://mc-heads.net/avatar/${esc(name)}/24" alt="" onerror="this.style.display='none'">
+              <strong class="player-name-link" data-action="player-profile" data-name="${esc(name)}">${esc(name)}</strong>
+            </div>
+          </td>
+          <td>${discordLinkCell(name, linksMap)}</td>
+          ${
+            isAdmin
+              ? `<td class="action-cell">
+            <button class="btn btn-xs btn-warning" data-action="kick-player" data-name="${esc(name)}">Kick</button>
+            <button class="btn btn-xs btn-danger" data-action="ban-from-list" data-name="${esc(name)}">Ban</button>
+          </td>`
+              : ''
+          }
+        </tr>`,
+        )
+        .join('')}
+      </tbody>
+    </table>`;
+  } catch (err) {
+    el.innerHTML = `<p class="error-msg">${esc(err.message)}</p>`;
+  }
+}
+
+// --- Players: All ---
+async function loadAllPlayers() {
+  const el = $('all-players-list');
+  try {
+    const [usercache, onlineData, ops, whitelist, bansData, linksMap] = await Promise.all([
+      GET('/players/all'),
+      GET('/players/online').catch(() => ({ players: [] })),
+      GET('/players/ops'),
+      GET('/players/whitelist'),
+      GET('/players/banned').catch(() => ({ players: [] })),
+      fetchDiscordLinks(),
+    ]);
+
+    if (!usercache.length) {
+      el.innerHTML = '<p class="dim">No players have joined the server yet.</p>';
+      return;
+    }
+
+    const onlineSet = new Set((onlineData.players || []).map((n) => n.toLowerCase()));
+    const opMap = {};
+    for (const o of ops) opMap[o.name.toLowerCase()] = o;
+    const wlSet = new Set(whitelist.map((e) => e.name.toLowerCase()));
+    const banSet = new Set((bansData.players || []).map((e) => e.name.toLowerCase()));
+
+    // Sort: online first, then alphabetical
+    const sorted = [...usercache].sort((a, b) => {
+      const aOn = onlineSet.has(a.name.toLowerCase()) ? 0 : 1;
+      const bOn = onlineSet.has(b.name.toLowerCase()) ? 0 : 1;
+      if (aOn !== bOn) return aOn - bOn;
+      return a.name.localeCompare(b.name);
+    });
+
+    el.innerHTML = `<table class="player-table">
+      <thead><tr><th>Player</th><th>Status</th><th>Discord</th>${isAdmin ? '<th>Actions</th>' : ''}</tr></thead>
+      <tbody>${sorted
+        .map((p) => {
+          const lower = p.name.toLowerCase();
+          const online = onlineSet.has(lower);
+          const op = opMap[lower];
+          const wl = wlSet.has(lower);
+          const banned = banSet.has(lower);
+
+          const badges = [];
+          if (online) badges.push('<span class="profile-badge online">Online</span>');
+          if (op) badges.push(`<span class="profile-badge op">Op ${op.level}</span>`);
+          if (wl) badges.push('<span class="profile-badge whitelisted">WL</span>');
+          if (banned) badges.push('<span class="profile-badge banned">Banned</span>');
+          if (!online && !badges.length) badges.push('<span class="profile-badge offline">Offline</span>');
+
+          return `
+        <tr>
+          <td>
+            <div class="player-cell">
+              <img class="player-avatar-sm" src="https://mc-heads.net/avatar/${esc(p.uuid || p.name)}/24" alt="" onerror="this.style.display='none'">
+              <strong class="player-name-link" data-action="player-profile" data-name="${esc(p.name)}">${esc(p.name)}</strong>
+            </div>
+          </td>
+          <td><div class="badge-row">${badges.join('')}</div></td>
+          <td>${discordLinkCell(p.name, linksMap)}</td>
+          ${
+            isAdmin
+              ? `<td class="action-cell">
+            ${online ? `<button class="btn btn-xs btn-warning" data-action="kick-player" data-name="${esc(p.name)}">Kick</button>` : ''}
+            ${!banned ? `<button class="btn btn-xs btn-danger" data-action="ban-from-list" data-name="${esc(p.name)}">Ban</button>` : ''}
+            ${!op ? `<button class="btn btn-xs btn-ghost" data-action="op-from-list" data-name="${esc(p.name)}">Op</button>` : ''}
+            ${!wl ? `<button class="btn btn-xs btn-ghost" data-action="whitelist-from-list" data-name="${esc(p.name)}">WL</button>` : ''}
+          </td>`
+              : ''
+          }
+        </tr>`;
+        })
+        .join('')}
+      </tbody>
+    </table>
+    <div style="margin-top:0.75rem;text-align:center">
+      <button class="btn btn-sm btn-ghost" data-action="show-link-instructions">How to Link Discord</button>
+    </div>`;
+  } catch (err) {
+    el.innerHTML = `<p class="error-msg">${esc(err.message)}</p>`;
+  }
+}
+
+// --- Players: Quick actions from lists ---
+async function kickPlayerFromList(name) {
+  const reason = prompt(`Kick ${name}? Enter reason (optional):`, 'Kicked by admin');
+  if (reason === null) return;
+  try {
+    await POST('/players/kick', { name, reason: reason || 'Kicked by admin' });
+    loadOnlinePlayers();
+  } catch (err) {
+    alert('Kick failed: ' + err.message);
+  }
+}
+
+async function banPlayerFromList(name) {
+  const reason = prompt(`Ban ${name}? Enter reason:`, 'Banned by admin');
+  if (reason === null) return;
+  try {
+    await POST('/players/ban', { name, reason: reason || 'Banned by admin' });
+    loadOnlinePlayers();
+    loadBans();
+  } catch (err) {
+    alert('Ban failed: ' + err.message);
+  }
+}
+
+async function opPlayerFromList(name) {
+  if (!confirm(`Make ${name} an operator?`)) return;
+  try {
+    await POST('/players/op', { name, level: 1 });
+    loadAllPlayers();
+    loadOps();
+  } catch (err) {
+    alert('Op failed: ' + err.message);
+  }
+}
+
+async function whitelistPlayerFromList(name) {
+  try {
+    await POST('/players/whitelist', { name });
+    loadAllPlayers();
+    loadWhitelist();
+  } catch (err) {
+    alert('Whitelist failed: ' + err.message);
+  }
+}
 
 // --- Players: Ops ---
 async function loadOps() {
@@ -3495,4 +3699,9 @@ async function unlinkFromUserProfile(discordId, playerName) {
 $('user-profile-close').addEventListener('click', () => hide('user-profile-modal'));
 $('user-profile-modal').addEventListener('click', (e) => {
   if (e.target === $('user-profile-modal')) hide('user-profile-modal');
+});
+
+$('link-instructions-close').addEventListener('click', () => hide('link-instructions-modal'));
+$('link-instructions-modal').addEventListener('click', (e) => {
+  if (e.target === $('link-instructions-modal')) hide('link-instructions-modal');
 });

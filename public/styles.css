@@ -596,6 +596,54 @@ html {
   padding: 0.15rem 0.4rem;
 }
 
+/* Player list cells */
+.player-cell {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+.player-avatar-sm {
+  width: 24px;
+  height: 24px;
+  border-radius: 3px;
+  image-rendering: pixelated;
+  background: var(--surface2);
+}
+.badge-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem;
+}
+.action-cell {
+  display: flex;
+  gap: 0.25rem;
+  flex-wrap: wrap;
+}
+.discord-linked-badge {
+  display: inline-block;
+  font-size: 0.72rem;
+  font-weight: 600;
+  padding: 0.1rem 0.45rem;
+  border-radius: 999px;
+  background: rgba(88, 101, 242, 0.15);
+  color: #7289da;
+  border: 1px solid rgba(88, 101, 242, 0.3);
+}
+.link-instructions-steps {
+  padding-left: 1.2rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  font-size: 0.9rem;
+  line-height: 1.5;
+}
+.link-instructions-steps code {
+  background: var(--surface2);
+  padding: 0.1rem 0.35rem;
+  border-radius: 3px;
+  font-size: 0.85em;
+}
+
 .player-name-link {
   cursor: pointer;
   text-decoration: underline;

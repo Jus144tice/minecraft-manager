@@ -729,13 +729,29 @@
           <h2>Player Management</h2>
         </div>
         <div class="subtab-nav">
-          <button class="subtab-btn active" data-subtab="ops">Operators</button>
+          <button class="subtab-btn active" data-subtab="online">Online</button>
+          <button class="subtab-btn" data-subtab="all-players">All Players</button>
+          <button class="subtab-btn" data-subtab="ops">Operators</button>
           <button class="subtab-btn" data-subtab="whitelist">Whitelist</button>
           <button class="subtab-btn" data-subtab="bans">Bans</button>
         </div>
 
+        <!-- Online -->
+        <div id="subtab-online" class="subtab-content">
+          <div id="online-list" class="player-table-wrap">
+            <p class="dim">Loading...</p>
+          </div>
+        </div>
+
+        <!-- All Players -->
+        <div id="subtab-all-players" class="subtab-content hidden">
+          <div id="all-players-list" class="player-table-wrap">
+            <p class="dim">Loading...</p>
+          </div>
+        </div>
+
         <!-- Ops -->
-        <div id="subtab-ops" class="subtab-content">
+        <div id="subtab-ops" class="subtab-content hidden">
           <div class="legend-box">
             <strong>Op Levels:</strong>
             Level 1 = bypass spawn protection &nbsp;|&nbsp; Level 2 = most commands &nbsp;|&nbsp; Level 3 = /kick, /ban,
@@ -916,6 +932,28 @@
             <div id="player-profile-content">
               <p class="dim">Loading...</p>
             </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Discord link instructions modal -->
+      <div id="link-instructions-modal" class="modal-overlay hidden">
+        <div class="modal" style="max-width: 480px">
+          <div class="modal-header">
+            <h3>Link Your Discord Account</h3>
+            <button class="btn btn-ghost btn-sm" id="link-instructions-close">&times;</button>
+          </div>
+          <div class="modal-body">
+            <ol class="link-instructions-steps">
+              <li>Open Discord and go to the server where the bot is active.</li>
+              <li>Type <code>/link name:YourMinecraftName</code> in any allowed channel.</li>
+              <li>The bot will reply with a verification code (e.g. <code>ABCD-EF12</code>).</li>
+              <li>Join the Minecraft server as that player and type in chat:<br /><code>!link ABCD-EF12</code></li>
+              <li>You'll receive a confirmation in both Discord and Minecraft.</li>
+            </ol>
+            <p class="dim" style="font-size: 0.82rem; margin-top: 0.75rem">
+              To unlink, use <code>/unlink</code> in Discord. Admins can also unlink from the player profile.
+            </p>
           </div>
         </div>
       </div>

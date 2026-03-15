@@ -41,6 +41,18 @@ export const DEMO_WHITELIST = [
   { uuid: 'e5f6a7b8-c9d0-1234-efab-345678901234', name: 'NightOwl_MC' },
 ];
 
+// --- Usercache (all players who have ever joined) ---
+export const DEMO_USERCACHE = [
+  { name: 'Steve', uuid: 'a1b2c3d4-e5f6-7890-abcd-ef1234567890', expiresOn: '2027-01-15 10:30:00 +0000' },
+  { name: 'Alex', uuid: 'b2c3d4e5-f6a7-8901-bcde-f12345678901', expiresOn: '2027-01-14 08:15:00 +0000' },
+  { name: 'CreeperSlayer99', uuid: 'c3d4e5f6-a7b8-9012-cdef-123456789012', expiresOn: '2027-01-13 22:45:00 +0000' },
+  { name: 'DiamondDigger', uuid: 'd4e5f6a7-b8c9-0123-defa-234567890123', expiresOn: '2027-01-10 16:00:00 +0000' },
+  { name: 'NightOwl_MC', uuid: 'e5f6a7b8-c9d0-1234-efab-345678901234', expiresOn: '2027-01-08 03:20:00 +0000' },
+  { name: 'Griefer99', uuid: 'f6a7b8c9-d0e1-2345-fabc-456789012345', expiresOn: '2026-06-01 14:22:00 +0000' },
+  { name: 'BuilderBob', uuid: '12345678-abcd-ef01-2345-6789abcdef01', expiresOn: '2026-12-20 11:00:00 +0000' },
+  { name: 'RedstoneQueen', uuid: '23456789-bcde-f012-3456-789abcdef012', expiresOn: '2026-11-05 19:30:00 +0000' },
+];
+
 // --- Bans ---
 export const DEMO_BANS = {
   players: [
