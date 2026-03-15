@@ -916,6 +916,12 @@ $('btn-regenerate-world').addEventListener('click', async () => {
     )
   )
     return;
+  const typed = prompt('To confirm, type DELETE MY WORLD below:');
+  if (typed !== 'DELETE MY WORLD') {
+    if (typed !== null)
+      flash('quick-action-msg', 'World regeneration cancelled — confirmation text did not match.', true);
+    return;
+  }
   try {
     const r = await POST('/server/regenerate-world');
     flash('quick-action-msg', r.message || 'World deleted.');
