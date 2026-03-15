@@ -1645,6 +1645,26 @@ function discordLinkCell(name, linksMap) {
   return '<span class="dim">-</span>';
 }
 
+async function fetchPanelLinks() {
+  if (!isAdmin) return {};
+  try {
+    const links = await GET('/panel-links');
+    const map = {};
+    for (const l of links) map[l.minecraftName.toLowerCase()] = l;
+    return map;
+  } catch {
+    return {};
+  }
+}
+
+function panelLinkCell(name, panelMap) {
+  const link = panelMap[name.toLowerCase()];
+  if (link) {
+    return `<span class="panel-linked-badge" title="${esc(link.email)}">${esc(link.email)}</span>`;
+  }
+  return '<span class="dim">-</span>';
+}
+
 function linkInstructionButtons() {
   return `<div style="margin-top:0.75rem;text-align:center;display:flex;gap:0.5rem;justify-content:center;flex-wrap:wrap">
     <button class="btn btn-sm btn-ghost" data-action="show-link-instructions">How to Link Discord</button>
@@ -1655,7 +1675,11 @@ function linkInstructionButtons() {
 async function loadOnlinePlayers() {
   const el = $('online-list');
   try {
-    const [data, linksMap] = await Promise.all([GET('/players/online'), fetchDiscordLinks()]);
+    const [data, linksMap, panelMap] = await Promise.all([
+      GET('/players/online'),
+      fetchDiscordLinks(),
+      fetchPanelLinks(),
+    ]);
 
     const players = data.players || [];
     if (!players.length) {
@@ -1663,7 +1687,7 @@ async function loadOnlinePlayers() {
       return;
     }
     el.innerHTML = `<table class="player-table">
-      <thead><tr><th>Player</th><th>Discord</th>${isAdmin ? '<th>Actions</th>' : ''}</tr></thead>
+      <thead><tr><th>Player</th><th>Discord</th><th>Panel</th>${isAdmin ? '<th>Actions</th>' : ''}</tr></thead>
       <tbody>${players
         .map(
           (name) => `
@@ -1675,6 +1699,7 @@ async function loadOnlinePlayers() {
             </div>
           </td>
           <td>${discordLinkCell(name, linksMap)}</td>
+          <td>${panelLinkCell(name, panelMap)}</td>
           ${
             isAdmin
               ? `<td class="action-cell">
@@ -1698,13 +1723,14 @@ async function loadOnlinePlayers() {
 async function loadAllPlayers() {
   const el = $('all-players-list');
   try {
-    const [usercache, onlineData, ops, whitelist, bansData, linksMap] = await Promise.all([
+    const [usercache, onlineData, ops, whitelist, bansData, linksMap, panelMap] = await Promise.all([
       GET('/players/all'),
       GET('/players/online').catch(() => ({ players: [] })),
       GET('/players/ops'),
       GET('/players/whitelist'),
       GET('/players/banned').catch(() => ({ players: [] })),
       fetchDiscordLinks(),
+      fetchPanelLinks(),
     ]);
 
     if (!usercache.length) {
@@ -1727,7 +1753,7 @@ async function loadAllPlayers() {
     });
 
     el.innerHTML = `<table class="player-table">
-      <thead><tr><th>Player</th><th>Status</th><th>Discord</th>${isAdmin ? '<th>Actions</th>' : ''}</tr></thead>
+      <thead><tr><th>Player</th><th>Status</th><th>Discord</th><th>Panel</th>${isAdmin ? '<th>Actions</th>' : ''}</tr></thead>
       <tbody>${sorted
         .map((p) => {
           const lower = p.name.toLowerCase();
@@ -1753,6 +1779,7 @@ async function loadAllPlayers() {
           </td>
           <td><div class="badge-row">${badges.join('')}</div></td>
           <td>${discordLinkCell(p.name, linksMap)}</td>
+          <td>${panelLinkCell(p.name, panelMap)}</td>
           ${
             isAdmin
               ? `<td class="action-cell">

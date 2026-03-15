@@ -643,6 +643,20 @@ html {
   color: #7289da;
   border: 1px solid rgba(88, 101, 242, 0.3);
 }
+.panel-linked-badge {
+  display: inline-block;
+  font-size: 0.72rem;
+  font-weight: 600;
+  padding: 0.1rem 0.45rem;
+  border-radius: 999px;
+  background: rgba(76, 175, 80, 0.15);
+  color: #4caf50;
+  border: 1px solid rgba(76, 175, 80, 0.3);
+  max-width: 120px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 .link-instructions-steps {
   padding-left: 1.2rem;
   display: flex;
