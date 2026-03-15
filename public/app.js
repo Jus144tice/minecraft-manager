@@ -72,6 +72,9 @@ document.addEventListener('click', async (e) => {
     case 'unlink-discord':
       await unlinkDiscordFromProfile(el.dataset.discordId, el.dataset.name);
       break;
+    case 'unlink-from-profile':
+      await unlinkFromUserProfile(el.dataset.discordId, el.dataset.name);
+      break;
   }
 });
 
@@ -330,11 +333,17 @@ async function refreshSession() {
       isAdmin = (session.adminLevel || 0) >= 1;
       window._userName = session.name;
       window._userEmail = session.email;
+      window._userProvider = session.provider || null;
+      window._userAdminLevel = session.adminLevel || 0;
+      window._userLoginAt = session.loginAt || null;
     } else {
       isLoggedIn = false;
       isAdmin = false;
       window._userName = null;
       window._userEmail = null;
+      window._userProvider = null;
+      window._userAdminLevel = 0;
+      window._userLoginAt = null;
     }
   } catch {
     isLoggedIn = false;
@@ -3354,4 +3363,136 @@ async function unlinkDiscordFromProfile(discordId, playerName) {
 $('player-profile-close').addEventListener('click', () => hide('player-profile-modal'));
 $('player-profile-modal').addEventListener('click', (e) => {
   if (e.target === $('player-profile-modal')) hide('player-profile-modal');
+});
+
+// --- User Profile Modal ---
+
+$('btn-view-profile').addEventListener('click', () => {
+  hideUserMenu();
+  openUserProfile();
+});
+
+async function openUserProfile() {
+  const content = $('user-profile-content');
+  content.innerHTML = '<p class="dim">Loading profile...</p>';
+  show('user-profile-modal');
+
+  const providerLabels = { google: 'Google', microsoft: 'Microsoft', local: 'Local' };
+  const provider = providerLabels[window._userProvider] || window._userProvider || 'Unknown';
+  const role = window._userAdminLevel >= 1 ? 'Admin' : 'Viewer';
+  const roleCls = window._userAdminLevel >= 1 ? 'text-green' : '';
+  const loginAt = window._userLoginAt ? new Date(window._userLoginAt).toLocaleString() : 'Unknown';
+
+  let html = `
+    <div class="user-profile-account">
+      <div class="user-profile-avatar-row">
+        <div class="user-profile-icon">&#9787;</div>
+        <div>
+          <div class="user-profile-name">${esc(window._userName || 'User')}</div>
+          <div class="user-profile-email">${esc(window._userEmail || '')}</div>
+        </div>
+      </div>
+      <div class="profile-section">
+        <h4>Account</h4>
+        <div class="profile-detail-row">
+          <span class="profile-detail-label">Sign-in Method</span>
+          <span class="profile-detail-value">${esc(provider)}</span>
+        </div>
+        <div class="profile-detail-row">
+          <span class="profile-detail-label">Role</span>
+          <span class="profile-detail-value ${roleCls}">${esc(role)}</span>
+        </div>
+        <div class="profile-detail-row">
+          <span class="profile-detail-label">Session Started</span>
+          <span class="profile-detail-value">${loginAt}</span>
+        </div>
+      </div>
+    </div>`;
+
+  // Discord links section
+  html += `
+    <div class="profile-section">
+      <h4>Discord Links</h4>
+      <div id="user-profile-links">
+        <p class="dim" style="font-size:0.85rem">Loading links...</p>
+      </div>
+    </div>`;
+
+  // Logout
+  html += `
+    <div class="profile-section" style="text-align:center">
+      <button class="btn btn-sm btn-danger" id="user-profile-logout">Log Out</button>
+    </div>`;
+
+  content.innerHTML = html;
+
+  // Wire up logout button inside profile
+  document.getElementById('user-profile-logout').addEventListener('click', async () => {
+    await fetch('/auth/logout', { method: 'POST' }).catch(() => {});
+    isLoggedIn = false;
+    isAdmin = false;
+    csrfToken = '';
+    hide('user-profile-modal');
+    applyRoleVisibility();
+    updateUserMenu();
+  });
+
+  // Load Discord links
+  await loadUserProfileLinks();
+}
+
+async function loadUserProfileLinks() {
+  const container = document.getElementById('user-profile-links');
+  if (!container) return;
+
+  if (!isAdmin) {
+    container.innerHTML =
+      '<p class="dim" style="font-size:0.85rem">Discord account linking is managed through the Discord bot using the <code>/link</code> command.</p>';
+    return;
+  }
+
+  try {
+    const links = await GET('/players/discord-links');
+    if (!Array.isArray(links) || links.length === 0) {
+      container.innerHTML = '<p class="dim" style="font-size:0.85rem">No Discord accounts are linked.</p>';
+      return;
+    }
+
+    let html = `<div class="user-profile-links-list">`;
+    for (const link of links) {
+      const linkedAt = link.linkedAt ? new Date(link.linkedAt).toLocaleDateString() : '';
+      html += `
+        <div class="user-profile-link-row">
+          <div class="user-profile-link-info">
+            <span class="user-profile-link-mc">${esc(link.minecraftName)}</span>
+            <span class="dim" style="font-size:0.75rem">${esc(link.discordId)}</span>
+          </div>
+          <div class="user-profile-link-meta">
+            <span class="dim" style="font-size:0.75rem">${esc(linkedAt)}</span>
+            <button class="btn btn-xs btn-danger" data-action="unlink-from-profile" data-discord-id="${esc(link.discordId)}" data-name="${esc(link.minecraftName)}">Unlink</button>
+          </div>
+        </div>`;
+    }
+    html += '</div>';
+    container.innerHTML = html;
+  } catch {
+    container.innerHTML =
+      '<p class="dim" style="font-size:0.85rem">Discord account linking is managed through the Discord bot using the <code>/link</code> command.</p>';
+  }
+}
+
+async function unlinkFromUserProfile(discordId, playerName) {
+  if (!confirm(`Unlink Discord account from ${playerName}?`)) return;
+  try {
+    await DEL(`/players/discord-link/${encodeURIComponent(discordId)}`);
+    await loadUserProfileLinks();
+    loadPlayerLinkCount();
+  } catch (err) {
+    alert('Failed to unlink: ' + err.message);
+  }
+}
+
+$('user-profile-close').addEventListener('click', () => hide('user-profile-modal'));
+$('user-profile-modal').addEventListener('click', (e) => {
+  if (e.target === $('user-profile-modal')) hide('user-profile-modal');
 });

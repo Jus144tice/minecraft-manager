@@ -90,6 +90,7 @@
                 <span class="user-menu-label" id="user-menu-email"></span>
                 <span id="role-badge" class="badge badge-role"></span>
                 <hr class="hr-subtle" />
+                <button class="btn btn-sm btn-ghost btn-full" id="btn-view-profile">View Profile</button>
                 <button class="btn btn-sm btn-ghost btn-full" id="logout-btn">Log Out</button>
               </div>
             </div>
@@ -918,6 +919,21 @@
           </div>
           <div class="modal-body">
             <div id="player-profile-content">
+              <p class="dim">Loading...</p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- User profile modal -->
+      <div id="user-profile-modal" class="modal-overlay hidden">
+        <div class="modal user-profile-modal">
+          <div class="modal-header">
+            <h3>My Profile</h3>
+            <button class="btn btn-ghost btn-sm" id="user-profile-close">&times;</button>
+          </div>
+          <div class="modal-body">
+            <div id="user-profile-content">
               <p class="dim">Loading...</p>
             </div>
           </div>
