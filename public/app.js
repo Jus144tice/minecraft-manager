@@ -90,6 +90,9 @@ document.addEventListener('click', async (e) => {
     case 'show-link-instructions':
       show('link-instructions-modal');
       break;
+    case 'show-panel-link-instructions':
+      show('panel-link-instructions-modal');
+      break;
     case 'start-mc-link':
       await startMcLink();
       break;
@@ -3564,7 +3567,7 @@ function renderPlayerProfile(p, container) {
   } else {
     html += '<p class="dim" style="font-size:0.85rem">No Discord account linked.</p>';
   }
-  html += '</div>';
+  html += `<div style="margin-top:6px"><button class="btn btn-xs btn-ghost" data-action="show-link-instructions">How to link Discord</button></div></div>`;
 
   // Panel account link
   html += `
@@ -3587,7 +3590,7 @@ function renderPlayerProfile(p, container) {
   } else {
     html += '<p class="dim" style="font-size:0.85rem">No panel account linked.</p>';
   }
-  html += '</div>';
+  html += `<div style="margin-top:6px"><button class="btn btn-xs btn-ghost" data-action="show-panel-link-instructions">How to link Panel Account</button></div></div>`;
 
   container.innerHTML = html;
 }
@@ -3855,4 +3858,9 @@ $('user-profile-modal').addEventListener('click', (e) => {
 $('link-instructions-close').addEventListener('click', () => hide('link-instructions-modal'));
 $('link-instructions-modal').addEventListener('click', (e) => {
   if (e.target === $('link-instructions-modal')) hide('link-instructions-modal');
+});
+
+$('panel-link-instructions-close').addEventListener('click', () => hide('panel-link-instructions-modal'));
+$('panel-link-instructions-modal').addEventListener('click', (e) => {
+  if (e.target === $('panel-link-instructions-modal')) hide('panel-link-instructions-modal');
 });

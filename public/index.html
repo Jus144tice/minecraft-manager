@@ -958,6 +958,35 @@
         </div>
       </div>
 
+      <!-- Panel link instructions modal -->
+      <div id="panel-link-instructions-modal" class="modal-overlay hidden">
+        <div class="modal" style="max-width: 480px">
+          <div class="modal-header">
+            <h3>Link Your Panel Account</h3>
+            <button class="btn btn-ghost btn-sm" id="panel-link-instructions-close">&times;</button>
+          </div>
+          <div class="modal-body">
+            <ol class="link-instructions-steps">
+              <li>Sign in to the Minecraft Manager panel.</li>
+              <li>Click your name in the top-right corner and select <strong>View Profile</strong>.</li>
+              <li>
+                In the <strong>Minecraft Account</strong> section, enter your Minecraft player name and click
+                <strong>Link Account</strong>.
+              </li>
+              <li>
+                You'll receive a verification code (e.g. <code>ABCD-EF12</code>). Join the Minecraft server as that
+                player and type in chat:<br /><code>!link ABCD-EF12</code>
+              </li>
+              <li>The panel will confirm the link automatically.</li>
+            </ol>
+            <p class="dim" style="font-size: 0.82rem; margin-top: 0.75rem">
+              To unlink, go to your profile and click <strong>Unlink</strong> in the Minecraft Account section. Admins
+              can also manage links from the identity settings.
+            </p>
+          </div>
+        </div>
+      </div>
+
       <!-- User profile modal -->
       <div id="user-profile-modal" class="modal-overlay hidden">
         <div class="modal user-profile-modal">
