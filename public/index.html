@@ -1036,6 +1036,7 @@
         <div class="subtab-nav">
           <button class="subtab-btn active" data-subtab="app-cfg">App Config</button>
           <button class="subtab-btn" data-subtab="server-props">server.properties</button>
+          <button class="subtab-btn" data-subtab="jvm-args">JVM Arguments</button>
         </div>
 
         <!-- App config -->
@@ -1159,6 +1160,27 @@
               <button type="submit" class="btn btn-primary">Save server.properties</button>
             </div>
             <p id="props-msg" class="control-msg"></p>
+          </form>
+        </div>
+
+        <!-- JVM Arguments -->
+        <div id="subtab-jvm-args" class="subtab-content hidden">
+          <p class="legend-box">
+            JVM arguments passed to the Minecraft server process (user_jvm_args.txt). Controls memory allocation,
+            garbage collection tuning, and other JVM flags. <strong>Restart the Minecraft server</strong> after saving
+            changes.
+          </p>
+          <form id="jvm-args-form" class="settings-form">
+            <div class="form-group">
+              <textarea id="jvm-args-content" rows="20" spellcheck="false" class="monospace-textarea"></textarea>
+            </div>
+            <div class="btn-row">
+              <button type="submit" class="btn btn-primary admin-only">Save JVM Arguments</button>
+              <button type="button" class="btn btn-warning admin-only" id="btn-jvm-save-restart">
+                Save &amp; Restart Server
+              </button>
+            </div>
+            <p id="jvm-args-msg" class="control-msg"></p>
           </form>
         </div>
       </section>

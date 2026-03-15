@@ -3,7 +3,7 @@
 // GET /config redacts rconPassword and webPassword before responding.
 
 import { Router } from 'express';
-import { readdir, stat, mkdir } from 'fs/promises';
+import { readFile, writeFile, readdir, stat, mkdir } from 'fs/promises';
 import path from 'path';
 import os from 'os';
 import * as SF from '../serverFiles.js';
@@ -40,6 +40,51 @@ export default function settingsRoutes(ctx) {
     try {
       await SF.setServerProperties(ctx.config.serverPath, req.body);
       audit('PROPS_SAVE', { user: req.session.user.email, ip: req.ip });
+      res.json({ ok: true });
+    } catch (err) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // --- JVM arguments (user_jvm_args.txt) ---
+
+  const JVM_ARGS_FILE = 'user_jvm_args.txt';
+
+  router.get('/settings/jvm-args', async (req, res) => {
+    if (ctx.config.demoMode) {
+      return res.json({
+        content: [
+          '# Memory allocation',
+          '-Xms4G',
+          '-Xmx8G',
+          '',
+          '# Garbage Collector',
+          '-XX:+UseG1GC',
+          '-XX:+ParallelRefProcEnabled',
+          '-XX:MaxGCPauseMillis=200',
+        ].join('\n'),
+      });
+    }
+    try {
+      const filePath = path.join(ctx.config.serverPath, JVM_ARGS_FILE);
+      const content = await readFile(filePath, 'utf8');
+      res.json({ content });
+    } catch (err) {
+      if (err.code === 'ENOENT') return res.json({ content: null });
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  router.post('/settings/jvm-args', requireAdmin, async (req, res) => {
+    const { content } = req.body;
+    if (typeof content !== 'string') {
+      return res.status(400).json({ error: 'content must be a string' });
+    }
+    if (ctx.config.demoMode) return res.json({ ok: true, demo: true });
+    try {
+      const filePath = path.join(ctx.config.serverPath, JVM_ARGS_FILE);
+      await writeFile(filePath, content, 'utf8');
+      audit('JVM_ARGS_SAVE', { user: req.session.user.email, ip: req.ip });
       res.json({ ok: true });
     } catch (err) {
       res.status(500).json({ error: err.message });

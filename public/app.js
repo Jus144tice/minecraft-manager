@@ -437,6 +437,7 @@ function onTabActivate(tab) {
   if (tab === 'settings') {
     loadAppConfig();
     loadServerProps();
+    loadJvmArgs();
   }
 }
 
@@ -2224,6 +2225,51 @@ $('props-form').addEventListener('submit', async (e) => {
     flash('props-msg', 'server.properties saved! Restart the Minecraft server to apply changes.');
   } catch (err) {
     flash('props-msg', err.message, true);
+  }
+});
+
+// --- Settings: JVM Arguments ---
+
+async function loadJvmArgs() {
+  const textarea = $('jvm-args-content');
+  try {
+    const data = await GET('/settings/jvm-args');
+    if (data.content === null) {
+      textarea.value = '';
+      textarea.placeholder = 'No user_jvm_args.txt found in the server directory.';
+    } else {
+      textarea.value = data.content;
+    }
+    textarea.readOnly = !isAdmin;
+  } catch (err) {
+    textarea.value = '';
+    textarea.placeholder = 'Could not load JVM arguments: ' + err.message;
+  }
+}
+
+async function saveJvmArgs() {
+  const content = $('jvm-args-content').value;
+  await POST('/settings/jvm-args', { content });
+}
+
+$('jvm-args-form').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  try {
+    await saveJvmArgs();
+    flash('jvm-args-msg', 'JVM arguments saved! Restart the Minecraft server to apply changes.');
+  } catch (err) {
+    flash('jvm-args-msg', err.message, true);
+  }
+});
+
+$('btn-jvm-save-restart').addEventListener('click', async () => {
+  if (!confirm('Save JVM arguments and restart the Minecraft server?')) return;
+  try {
+    await saveJvmArgs();
+    await POST('/server/restart');
+    flash('jvm-args-msg', 'JVM arguments saved. Server is restarting...');
+  } catch (err) {
+    flash('jvm-args-msg', err.message, true);
   }
 });
 

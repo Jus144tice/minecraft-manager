@@ -999,6 +999,14 @@ textarea:focus {
   border-color: var(--primary);
   outline: none;
 }
+.monospace-textarea {
+  font-family: 'Consolas', 'Monaco', monospace;
+  font-size: 0.82rem;
+  line-height: 1.5;
+  white-space: pre;
+  tab-size: 2;
+  resize: vertical;
+}
 .hint {
   font-size: 0.78rem;
   color: var(--text-dim);
