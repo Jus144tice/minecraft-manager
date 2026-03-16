@@ -3,12 +3,12 @@
 
 import { Router } from 'express';
 import { queryAuditLogs } from '../db.js';
-import { requireAdmin } from '../middleware.js';
+import { requireCapability } from '../middleware.js';
 
 export default function auditRoutes() {
   const router = Router();
 
-  router.get('/audit-logs', requireAdmin, async (req, res) => {
+  router.get('/audit-logs', requireCapability('audit.view'), async (req, res) => {
     const limit = Math.min(parseInt(req.query.limit) || 100, 500);
     const offset = Math.max(parseInt(req.query.offset) || 0, 0);
     const action = req.query.action || undefined;

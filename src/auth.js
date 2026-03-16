@@ -21,7 +21,8 @@ import connectPgSimple from 'connect-pg-simple';
 import { Issuer, generators } from 'openid-client';
 import crypto from 'crypto';
 import { audit } from './audit.js';
-import { getPool, upsertUser, countAdmins, setAdminLevel } from './db.js';
+import { getPool, upsertUser, countAdmins, setUserRole } from './db.js';
+import { getCapabilitiesForRole, roleToAdminLevel, adminLevelToRole } from './permissions.js';
 
 const SESSION_MAX_AGE = 30 * 24 * 60 * 60 * 1000; // 30 days
 
@@ -177,19 +178,24 @@ export async function buildAuthRouter(config) {
     req.session.regenerate(async (err) => {
       if (err) return onDone(err);
 
-      // Upsert user in DB and attach their admin level to the session
+      // Upsert user in DB and determine their role
+      let role = 'viewer';
       let adminLevel = 0;
       try {
         const dbUser = await upsertUser(userInfo.email, userInfo.name, userInfo.provider);
-        if (dbUser) adminLevel = dbUser.admin_level;
+        if (dbUser) {
+          // Use the role column if present, otherwise derive from admin_level
+          role = dbUser.role || adminLevelToRole(dbUser.admin_level);
+          adminLevel = dbUser.admin_level;
+        }
 
-        // Auto-promote the first user to admin when no admins exist yet
+        // Auto-promote the first user to owner when no admins exist yet
         if (autoPromote && dbUser && adminLevel === 0) {
           const admins = await countAdmins();
           if (admins === 0) {
-            await setAdminLevel(userInfo.email, 1);
-            adminLevel = 1;
-            audit('AUTO_PROMOTE_ADMIN', { email: userInfo.email, reason: 'first user' });
+            await setUserRole(userInfo.email, 'owner');
+            role = 'owner';
+            audit('AUTO_PROMOTE_ADMIN', { email: userInfo.email, reason: 'first user', role: 'owner' });
           }
         }
       } catch (e) {
@@ -197,14 +203,24 @@ export async function buildAuthRouter(config) {
         console.error('[Auth] Failed to upsert user in DB:', e.message);
       }
 
-      if (forceAdmin) adminLevel = 1;
+      if (forceAdmin) {
+        role = 'owner';
+      }
 
-      req.session.user = { ...userInfo, adminLevel, loginAt: Date.now() };
+      // Compute capabilities from role and attach to session
+      const capabilities = [...getCapabilitiesForRole(role)];
+      req.session.user = {
+        ...userInfo,
+        role,
+        adminLevel: roleToAdminLevel(role), // legacy compat — derived from role
+        capabilities,
+        loginAt: Date.now(),
+      };
       // Generate a fresh CSRF token bound to this session.
       req.session.csrfToken = crypto.randomBytes(32).toString('hex');
       req.session.save((saveErr) => {
         if (saveErr) return onDone(saveErr);
-        audit('LOGIN', { email: userInfo.email, provider: userInfo.provider, ip: req.ip });
+        audit('LOGIN', { email: userInfo.email, provider: userInfo.provider, role, ip: req.ip });
         onDone(null);
       });
     });

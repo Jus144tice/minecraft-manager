@@ -153,8 +153,14 @@ const modsPager = createPagination({
 });
 const browsePager = modsPager; // same object; alias makes call-sites self-documenting
 let csrfToken = ''; // fetched after login; sent as X-CSRF-Token on all mutating requests
-let isAdmin = false; // true when logged-in user has adminLevel >= 1
 let isLoggedIn = false; // true when a valid session exists
+let userRole = 'viewer'; // current user's role name
+let userCapabilities = new Set(); // current user's capability set
+
+/** Check if the current user has a specific capability. */
+function can(capability) {
+  return userCapabilities.has(capability);
+}
 
 // --- API helpers ---
 // Session cookie is sent automatically by the browser (same-origin, httpOnly).
@@ -177,7 +183,6 @@ async function api(method, path, body) {
 }
 const GET = (path) => api('GET', path);
 const POST = (path, body) => api('POST', path, body);
-// eslint-disable-next-line no-unused-vars -- reserved for future routes
 const PUT = (path, body) => api('PUT', path, body);
 const DEL = (path) => api('DELETE', path);
 
@@ -314,7 +319,8 @@ async function login() {
 $('logout-btn').addEventListener('click', async () => {
   await fetch('/auth/logout', { method: 'POST' }).catch(() => {});
   isLoggedIn = false;
-  isAdmin = false;
+  userRole = 'viewer';
+  userCapabilities = new Set();
   csrfToken = '';
   hideUserMenu();
   applyRoleVisibility();
@@ -357,24 +363,29 @@ async function refreshSession() {
     const session = await fetch('/api/session').then((r) => r.json());
     if (session.loggedIn) {
       isLoggedIn = true;
-      isAdmin = (session.adminLevel || 0) >= 1;
+      userRole = session.role || 'viewer';
+      userCapabilities = new Set(session.capabilities || []);
       window._userName = session.name;
       window._userEmail = session.email;
       window._userProvider = session.provider || null;
       window._userAdminLevel = session.adminLevel || 0;
+      window._userRole = userRole;
       window._userLoginAt = session.loginAt || null;
     } else {
       isLoggedIn = false;
-      isAdmin = false;
+      userRole = 'viewer';
+      userCapabilities = new Set();
       window._userName = null;
       window._userEmail = null;
       window._userProvider = null;
       window._userAdminLevel = 0;
+      window._userRole = 'viewer';
       window._userLoginAt = null;
     }
   } catch {
     isLoggedIn = false;
-    isAdmin = false;
+    userRole = 'viewer';
+    userCapabilities = new Set();
   }
 }
 
@@ -438,7 +449,7 @@ function onTabActivate(tab) {
     loadAppConfig();
     loadServerProps();
     loadJvmArgs();
-    if (isAdmin) loadPanelUsers();
+    if (can('panel.manage_users')) loadPanelUsers();
   }
 }
 
@@ -550,21 +561,42 @@ function renderPreflight(result) {
 }
 
 // --- Role-based visibility ---
+const ROLE_NAMES = { viewer: 'Viewer', operator: 'Operator', moderator: 'Moderator', admin: 'Admin', owner: 'Owner' };
+const ROLE_LEVELS = { viewer: 0, operator: 1, moderator: 2, admin: 3, owner: 4 };
+
 function applyRoleVisibility() {
-  // Show/hide all elements marked admin-only
+  const level = ROLE_LEVELS[userRole] || 0;
+
+  // admin-only: visible for admin role (level 3+) — preserves legacy behavior
   document.querySelectorAll('.admin-only').forEach((el) => {
-    if (isAdmin) {
-      el.classList.remove('hidden');
-    } else {
-      el.classList.add('hidden');
-    }
+    el.classList.toggle('hidden', level < 3);
+  });
+
+  // Operator-level elements (visible for operator+)
+  document.querySelectorAll('.operator-up').forEach((el) => {
+    el.classList.toggle('hidden', level < 1);
+  });
+
+  // Moderator-level elements (visible for moderator+)
+  document.querySelectorAll('.moderator-up').forEach((el) => {
+    el.classList.toggle('hidden', level < 2);
+  });
+
+  // Owner-only elements (visible for owner only)
+  document.querySelectorAll('.owner-only').forEach((el) => {
+    el.classList.toggle('hidden', level < 4);
+  });
+
+  // Capability-specific elements: data-cap="capability.name"
+  document.querySelectorAll('[data-cap]').forEach((el) => {
+    el.classList.toggle('hidden', !can(el.dataset.cap));
   });
 
   // Role badge in user menu dropdown
   const badge = $('role-badge');
   if (badge && isLoggedIn) {
-    badge.textContent = isAdmin ? 'Admin' : 'Viewer';
-    badge.className = 'badge ' + (isAdmin ? 'badge-admin' : 'badge-viewer');
+    badge.textContent = ROLE_NAMES[userRole] || 'Viewer';
+    badge.className = 'badge badge-role-' + userRole;
   }
 }
 
@@ -846,7 +878,7 @@ function renderOnlinePlayers(players) {
   el.innerHTML = players
     .map(
       (name) =>
-        `<span class="chip clickable" data-action="player-profile" data-name="${esc(name)}">${esc(name)}${isAdmin ? `<button class="chip-kick" data-name="${esc(name)}" title="Kick">&#10005;</button>` : ''}</span>`,
+        `<span class="chip clickable" data-action="player-profile" data-name="${esc(name)}">${esc(name)}${can('players.manage_bans') ? `<button class="chip-kick" data-name="${esc(name)}" title="Kick">&#10005;</button>` : ''}</span>`,
     )
     .join('');
   el.querySelectorAll('.chip-kick').forEach((btn) => {
@@ -962,8 +994,8 @@ async function loadDiscordStatus() {
       statEl.className = 'stat-value text-red';
     }
 
-    // Admin-only Discord panel (below stat cards)
-    if (!isAdmin) return;
+    // Discord panel (below stat cards) — requires discord.manage capability
+    if (!can('discord.manage')) return;
     const panel = $('discord-panel');
     if (!ds.enabled) {
       hide(panel);
@@ -1014,12 +1046,12 @@ async function loadDiscordStatus() {
   } catch {
     $('stat-discord').textContent = 'N/A';
     $('stat-discord').className = 'stat-value text-dim';
-    if (isAdmin) hide('discord-panel');
+    if (can('discord.manage')) hide('discord-panel');
   }
 }
 
 async function loadPlayerLinkCount() {
-  if (!isAdmin) {
+  if (!can('identity.view_links')) {
     $('stat-player-links').textContent = '-';
     return;
   }
@@ -1191,7 +1223,7 @@ function renderMods() {
         </div>
       </div>
       ${
-        isAdmin
+        can('server.manage_mods')
           ? `<div class="mod-actions">
         <button class="btn btn-sm ${mod.enabled ? 'btn-warning' : 'btn-success'}"
           data-action="toggle-mod" data-filename="${esc(mod.filename)}" data-enable="${!mod.enabled}">
@@ -1411,7 +1443,7 @@ function renderBrowseResults(hits) {
         </div>
       </div>
       ${
-        isAdmin
+        can('server.manage_mods')
           ? `<div class="mod-actions">
         ${
           isInstalled
@@ -1550,8 +1582,8 @@ function renderModDetail(project, context = {}) {
     (a, b) => (b.featured ? 1 : 0) - (a.featured ? 1 : 0) || (a.ordering || 0) - (b.ordering || 0),
   );
 
-  // Action buttons (admin only)
-  const actionBtns = !isAdmin
+  // Action buttons (requires server.manage_mods capability)
+  const actionBtns = !can('server.manage_mods')
     ? ''
     : isInstalled
       ? `<button class="btn ${installedMod.enabled ? 'btn-warning' : 'btn-success'}"
@@ -1677,7 +1709,7 @@ window.downloadMod = async function (btn) {
 
 // --- Players: Online ---
 async function fetchDiscordLinks() {
-  if (!isAdmin) return {};
+  if (!can('identity.view_links')) return {};
   try {
     const links = await GET('/players/discord-links');
     const map = {};
@@ -1697,7 +1729,7 @@ function discordLinkCell(name, linksMap) {
 }
 
 async function fetchPanelLinks() {
-  if (!isAdmin) return {};
+  if (!can('identity.view_links')) return {};
   try {
     const links = await GET('/panel-links');
     const map = {};
@@ -1737,8 +1769,9 @@ async function loadOnlinePlayers() {
       el.innerHTML = '<p class="dim">No players online.</p>';
       return;
     }
+    const canKickBan = can('players.manage_bans');
     el.innerHTML = `<table class="player-table">
-      <thead><tr><th>Player</th><th>Discord</th><th>Panel</th>${isAdmin ? '<th>Actions</th>' : ''}</tr></thead>
+      <thead><tr><th>Player</th><th>Discord</th><th>Panel</th>${canKickBan ? '<th>Actions</th>' : ''}</tr></thead>
       <tbody>${players
         .map(
           (name) => `
@@ -1752,7 +1785,7 @@ async function loadOnlinePlayers() {
           <td>${discordLinkCell(name, linksMap)}</td>
           <td>${panelLinkCell(name, panelMap)}</td>
           ${
-            isAdmin
+            canKickBan
               ? `<td class="action-cell">
             <button class="btn btn-xs btn-warning" data-action="kick-player" data-name="${esc(name)}">Kick</button>
             <button class="btn btn-xs btn-danger" data-action="ban-from-list" data-name="${esc(name)}">Ban</button>
@@ -1803,8 +1836,12 @@ async function loadAllPlayers() {
       return a.name.localeCompare(b.name);
     });
 
+    const canBan = can('players.manage_bans');
+    const canOp = can('players.manage_ops');
+    const canWl = can('players.manage_whitelist');
+    const canManagePlayers = canBan || canOp || canWl;
     el.innerHTML = `<table class="player-table">
-      <thead><tr><th>Player</th><th>Status</th><th>Discord</th><th>Panel</th>${isAdmin ? '<th>Actions</th>' : ''}</tr></thead>
+      <thead><tr><th>Player</th><th>Status</th><th>Discord</th><th>Panel</th>${canManagePlayers ? '<th>Actions</th>' : ''}</tr></thead>
       <tbody>${sorted
         .map((p) => {
           const lower = p.name.toLowerCase();
@@ -1820,6 +1857,24 @@ async function loadAllPlayers() {
           if (banned) badges.push('<span class="profile-badge banned">Banned</span>');
           if (!online && !badges.length) badges.push('<span class="profile-badge offline">Offline</span>');
 
+          const actions = [];
+          if (canBan && online)
+            actions.push(
+              `<button class="btn btn-xs btn-warning" data-action="kick-player" data-name="${esc(p.name)}">Kick</button>`,
+            );
+          if (canBan && !banned)
+            actions.push(
+              `<button class="btn btn-xs btn-danger" data-action="ban-from-list" data-name="${esc(p.name)}">Ban</button>`,
+            );
+          if (canOp && !op)
+            actions.push(
+              `<button class="btn btn-xs btn-ghost" data-action="op-from-list" data-name="${esc(p.name)}">Op</button>`,
+            );
+          if (canWl && !wl)
+            actions.push(
+              `<button class="btn btn-xs btn-ghost" data-action="whitelist-from-list" data-name="${esc(p.name)}">WL</button>`,
+            );
+
           return `
         <tr>
           <td>
@@ -1831,16 +1886,7 @@ async function loadAllPlayers() {
           <td><div class="badge-row">${badges.join('')}</div></td>
           <td>${discordLinkCell(p.name, linksMap)}</td>
           <td>${panelLinkCell(p.name, panelMap)}</td>
-          ${
-            isAdmin
-              ? `<td class="action-cell">
-            ${online ? `<button class="btn btn-xs btn-warning" data-action="kick-player" data-name="${esc(p.name)}">Kick</button>` : ''}
-            ${!banned ? `<button class="btn btn-xs btn-danger" data-action="ban-from-list" data-name="${esc(p.name)}">Ban</button>` : ''}
-            ${!op ? `<button class="btn btn-xs btn-ghost" data-action="op-from-list" data-name="${esc(p.name)}">Op</button>` : ''}
-            ${!wl ? `<button class="btn btn-xs btn-ghost" data-action="whitelist-from-list" data-name="${esc(p.name)}">WL</button>` : ''}
-          </td>`
-              : ''
-          }
+          ${canManagePlayers ? `<td class="action-cell">${actions.join('')}</td>` : ''}
         </tr>`;
         })
         .join('')}
@@ -1906,8 +1952,9 @@ async function loadOps() {
       el.innerHTML = '<p class="dim">No operators set.</p>';
       return;
     }
+    const canManageOps = can('players.manage_ops');
     el.innerHTML = `<table class="player-table">
-      <thead><tr><th>Name</th><th>Level</th><th>UUID</th>${isAdmin ? '<th>Actions</th>' : ''}</tr></thead>
+      <thead><tr><th>Name</th><th>Level</th><th>UUID</th>${canManageOps ? '<th>Actions</th>' : ''}</tr></thead>
       <tbody>${ops
         .map(
           (op) => `
@@ -1915,7 +1962,7 @@ async function loadOps() {
           <td><strong class="player-name-link" data-action="player-profile" data-name="${esc(op.name)}">${esc(op.name)}</strong></td>
           <td><span class="level-badge level-${op.level}">Level ${op.level}</span></td>
           <td class="dim small">${esc(op.uuid || '-')}</td>
-          ${isAdmin ? `<td><button class="btn btn-sm btn-danger" data-action="remove-op" data-name="${esc(op.name)}">Remove</button></td>` : ''}
+          ${canManageOps ? `<td><button class="btn btn-sm btn-danger" data-action="remove-op" data-name="${esc(op.name)}">Remove</button></td>` : ''}
         </tr>`,
         )
         .join('')}
@@ -1958,15 +2005,16 @@ async function loadWhitelist() {
       el.innerHTML = '<p class="dim">Whitelist is empty.</p>';
       return;
     }
+    const canManageWl = can('players.manage_whitelist');
     el.innerHTML = `<table class="player-table">
-      <thead><tr><th>Name</th><th>UUID</th>${isAdmin ? '<th>Actions</th>' : ''}</tr></thead>
+      <thead><tr><th>Name</th><th>UUID</th>${canManageWl ? '<th>Actions</th>' : ''}</tr></thead>
       <tbody>${list
         .map(
           (e) => `
         <tr>
           <td><strong class="player-name-link" data-action="player-profile" data-name="${esc(e.name)}">${esc(e.name)}</strong></td>
           <td class="dim small">${esc(e.uuid || '-')}</td>
-          ${isAdmin ? `<td><button class="btn btn-sm btn-danger" data-action="remove-wl" data-name="${esc(e.name)}">Remove</button></td>` : ''}
+          ${canManageWl ? `<td><button class="btn btn-sm btn-danger" data-action="remove-wl" data-name="${esc(e.name)}">Remove</button></td>` : ''}
         </tr>`,
         )
         .join('')}
@@ -2009,15 +2057,16 @@ async function loadBans() {
       el.innerHTML = '<p class="dim">No banned players.</p>';
       return;
     }
+    const canManageBans = can('players.manage_bans');
     el.innerHTML = `<table class="player-table">
-      <thead><tr><th>Name</th><th>Reason</th>${isAdmin ? '<th>Actions</th>' : ''}</tr></thead>
+      <thead><tr><th>Name</th><th>Reason</th>${canManageBans ? '<th>Actions</th>' : ''}</tr></thead>
       <tbody>${banned
         .map(
           (e) => `
         <tr>
           <td><strong class="player-name-link" data-action="player-profile" data-name="${esc(e.name)}">${esc(e.name)}</strong></td>
           <td class="dim">${esc(e.reason || '-')}</td>
-          ${isAdmin ? `<td><button class="btn btn-sm btn-success" data-action="unban-player" data-name="${esc(e.name)}">Unban</button></td>` : ''}
+          ${canManageBans ? `<td><button class="btn btn-sm btn-success" data-action="unban-player" data-name="${esc(e.name)}">Unban</button></td>` : ''}
         </tr>`,
         )
         .join('')}
@@ -2247,7 +2296,7 @@ async function loadJvmArgs() {
     } else {
       textarea.value = data.content;
     }
-    textarea.readOnly = !isAdmin;
+    textarea.readOnly = !can('panel.configure');
   } catch (err) {
     textarea.value = '';
     textarea.placeholder = 'Could not load JVM arguments: ' + err.message;
@@ -2290,19 +2339,18 @@ async function loadPanelUsers() {
       container.innerHTML = '<p class="dim">No users found. Users appear after logging in.</p>';
       return;
     }
+    const roleOptions = ['viewer', 'operator', 'moderator', 'admin', 'owner'];
     const rows = users
       .map((u) => {
         const isSelf = u.email === window._userEmail;
-        const roleBadge =
-          u.admin_level >= 1
-            ? '<span class="badge badge-running">Admin</span>'
-            : '<span class="badge badge-stopped">Viewer</span>';
+        const role = u.role || (u.admin_level >= 1 ? 'admin' : 'viewer');
+        const roleBadge = `<span class="badge badge-role-${esc(role)}">${esc(ROLE_NAMES[role] || role)}</span>`;
         const lastLogin = u.last_login_at ? new Date(u.last_login_at).toLocaleDateString() : 'Never';
-        const toggleBtn = isSelf
-          ? '<span class="dim" title="Cannot change your own role">—</span>'
-          : u.admin_level >= 1
-            ? `<button class="btn btn-xs btn-ghost" data-action="demote-user" data-email="${esc(u.email)}">Demote to Viewer</button>`
-            : `<button class="btn btn-xs btn-primary" data-action="promote-user" data-email="${esc(u.email)}">Promote to Admin</button>`;
+        const roleSelect = isSelf
+          ? `<span class="dim" title="Cannot change your own role">${esc(ROLE_NAMES[role] || role)}</span>`
+          : `<select class="role-select" data-email="${esc(u.email)}">
+              ${roleOptions.map((r) => `<option value="${r}" ${r === role ? 'selected' : ''}>${ROLE_NAMES[r]}</option>`).join('')}
+            </select>`;
         const deleteBtn = isSelf
           ? ''
           : `<button class="btn btn-xs btn-danger" data-action="delete-user" data-email="${esc(u.email)}" title="Remove user">&#10005;</button>`;
@@ -2311,26 +2359,25 @@ async function loadPanelUsers() {
           <td>${esc(u.email)}</td>
           <td>${esc(u.provider || '')}</td>
           <td>${roleBadge}</td>
+          <td>${roleSelect}</td>
           <td>${lastLogin}</td>
-          <td>${toggleBtn} ${deleteBtn}</td>
+          <td>${deleteBtn}</td>
         </tr>`;
       })
       .join('');
 
     container.innerHTML = `<table class="data-table">
       <thead><tr>
-        <th>Name</th><th>Email</th><th>Provider</th><th>Role</th><th>Last Login</th><th>Actions</th>
+        <th>Name</th><th>Email</th><th>Provider</th><th>Current Role</th><th>Set Role</th><th>Last Login</th><th>Actions</th>
       </tr></thead>
       <tbody>${rows}</tbody>
     </table>`;
 
-    // Bind promote/demote/delete buttons
-    container.querySelectorAll('[data-action="promote-user"]').forEach((btn) => {
-      btn.addEventListener('click', () => setUserRole(btn.dataset.email, 1));
+    // Bind role change selects
+    container.querySelectorAll('.role-select').forEach((sel) => {
+      sel.addEventListener('change', () => setUserRole(sel.dataset.email, sel.value));
     });
-    container.querySelectorAll('[data-action="demote-user"]').forEach((btn) => {
-      btn.addEventListener('click', () => setUserRole(btn.dataset.email, 0));
-    });
+    // Bind delete buttons
     container.querySelectorAll('[data-action="delete-user"]').forEach((btn) => {
       btn.addEventListener('click', () => deleteUserAccount(btn.dataset.email));
     });
@@ -2339,21 +2386,19 @@ async function loadPanelUsers() {
   }
 }
 
-async function setUserRole(email, level) {
-  const action = level >= 1 ? 'promote to Admin' : 'demote to Viewer';
-  if (!confirm(`${action.charAt(0).toUpperCase() + action.slice(1)}: ${email}?`)) return;
+async function setUserRole(email, role) {
+  const roleName = ROLE_NAMES[role] || role;
+  if (!confirm(`Change ${email} to ${roleName}?`)) {
+    loadPanelUsers(); // reset dropdown
+    return;
+  }
   try {
-    await fetch(`/api/users/${encodeURIComponent(email)}/admin`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': csrfToken },
-      body: JSON.stringify({ level }),
-    }).then(async (r) => {
-      if (!r.ok) throw new Error((await r.json()).error || r.statusText);
-    });
-    flash('panel-users-msg', `${email} is now ${level >= 1 ? 'Admin' : 'Viewer'}.`);
+    await PUT(`/users/${encodeURIComponent(email)}/role`, { role });
+    flash('panel-users-msg', `${email} is now ${roleName}.`);
     loadPanelUsers();
   } catch (err) {
     flash('panel-users-msg', err.message, true);
+    loadPanelUsers(); // reset dropdown
   }
 }
 
@@ -4071,7 +4116,7 @@ function renderPlayerProfile(p, container) {
         <span class="profile-detail-label">Linked At</span>
         <span class="profile-detail-value">${new Date(p.discord.linkedAt).toLocaleString()}</span>
       </div>`;
-    if (isAdmin) {
+    if (can('panel.link_identities')) {
       html += `
       <div class="profile-detail-row" style="margin-top:0.5rem">
         <span></span>
@@ -4139,8 +4184,8 @@ async function openUserProfile() {
 
   const providerLabels = { google: 'Google', microsoft: 'Microsoft', local: 'Local' };
   const provider = providerLabels[window._userProvider] || window._userProvider || 'Unknown';
-  const role = window._userAdminLevel >= 1 ? 'Admin' : 'Viewer';
-  const roleCls = window._userAdminLevel >= 1 ? 'text-green' : '';
+  const role = ROLE_NAMES[window._userRole] || window._userRole || 'Viewer';
+  const roleCls = 'badge-role-' + (window._userRole || 'viewer');
   const loginAt = window._userLoginAt ? new Date(window._userLoginAt).toLocaleString() : 'Unknown';
 
   let html = `
@@ -4159,8 +4204,8 @@ async function openUserProfile() {
           <span class="profile-detail-value">${esc(provider)}</span>
         </div>
         <div class="profile-detail-row">
-          <span class="profile-detail-label">Role</span>
-          <span class="profile-detail-value ${roleCls}">${esc(role)}</span>
+          <span class="profile-detail-label">Panel Role</span>
+          <span class="profile-detail-value"><span class="badge ${roleCls}">${esc(role)}</span></span>
         </div>
         <div class="profile-detail-row">
           <span class="profile-detail-label">Session Started</span>
@@ -4199,7 +4244,8 @@ async function openUserProfile() {
   document.getElementById('user-profile-logout').addEventListener('click', async () => {
     await fetch('/auth/logout', { method: 'POST' }).catch(() => {});
     isLoggedIn = false;
-    isAdmin = false;
+    userRole = 'viewer';
+    userCapabilities = new Set();
     csrfToken = '';
     hide('user-profile-modal');
     applyRoleVisibility();

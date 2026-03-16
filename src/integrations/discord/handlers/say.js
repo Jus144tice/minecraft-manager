@@ -9,6 +9,7 @@ import { isSafeCommand } from '../../../validate.js';
 export function register(ctx) {
   registerCommand('say', {
     permission: PermissionLevel.MODERATOR,
+    capability: 'chat.broadcast',
     builder: new SlashCommandBuilder()
       .setName('say')
       .setDescription('Broadcast a message to the Minecraft server')

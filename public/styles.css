@@ -811,15 +811,32 @@ html {
   color: var(--danger);
   border: 1px solid #6b2020;
 }
-.badge-admin {
+.badge-admin,
+.badge-role-admin {
   background: #1a3a5c;
   color: #58a6ff;
   border: 1px solid #264f78;
 }
-.badge-viewer {
+.badge-viewer,
+.badge-role-viewer {
   background: #2a2a2a;
   color: #999;
   border: 1px solid #444;
+}
+.badge-role-operator {
+  background: #2d3a1a;
+  color: #a3d977;
+  border: 1px solid #4a6b2a;
+}
+.badge-role-moderator {
+  background: #3a2d1a;
+  color: #e3b341;
+  border: 1px solid #6b5a2a;
+}
+.badge-role-owner {
+  background: #3d1240;
+  color: #d478f8;
+  border: 1px solid #6b2070;
 }
 
 /* --- User menu --- */

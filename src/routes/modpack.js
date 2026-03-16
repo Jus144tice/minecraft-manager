@@ -13,7 +13,7 @@ import * as Mrpack from '../mrpack.js';
 import { audit } from '../audit.js';
 import { isSafeModFilename } from '../validate.js';
 import { acquireOp, releaseOp } from '../operationLock.js';
-import { requireAdmin } from '../middleware.js';
+import { requireCapability } from '../middleware.js';
 
 // In-memory cache for analyzed .mrpack files (token → { data, expiresAt })
 const mrpackCache = new Map();
@@ -198,7 +198,7 @@ export default function modpackRoutes(ctx) {
     }
   });
 
-  router.post('/modpack/import', requireAdmin, async (req, res) => {
+  router.post('/modpack/import', requireCapability('server.manage_mods'), async (req, res) => {
     const { mods } = req.body;
     if (!Array.isArray(mods) || mods.length === 0) {
       return res.status(400).json({ error: 'No mods to install' });
@@ -349,7 +349,7 @@ export default function modpackRoutes(ctx) {
    * Import mods from a previously analyzed .mrpack.
    * Body: { token, includeOverrides, unknownAction: "install"|"skip", selectedPaths?: string[] }
    */
-  router.post('/modpack/mrpack/import', requireAdmin, async (req, res) => {
+  router.post('/modpack/mrpack/import', requireCapability('server.manage_mods'), async (req, res) => {
     const { token, includeOverrides = false, unknownAction = 'skip', selectedPaths } = req.body;
 
     if (!token) return res.status(400).json({ error: 'Missing analysis token' });

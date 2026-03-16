@@ -7,7 +7,7 @@ import * as SF from '../serverFiles.js';
 import * as Demo from '../demoData.js';
 import { audit } from '../audit.js';
 import { isValidMinecraftName, isSafeCommand, sanitizeReason } from '../validate.js';
-import { requireAdmin } from '../middleware.js';
+import { requireCapability } from '../middleware.js';
 import { getAllLinks, getLinkByMinecraftName, setLink, removeLink } from '../integrations/discord/links.js';
 import { getLinkByMinecraftName as getPanelLinkByMcName } from '../panelLinks.js';
 
@@ -46,7 +46,7 @@ export default function playerRoutes(ctx) {
     res.json(await SF.getOps(ctx.config.serverPath));
   });
 
-  router.post('/players/op', requireAdmin, async (req, res) => {
+  router.post('/players/op', requireCapability('players.manage_ops'), async (req, res) => {
     const { name, level = 4 } = req.body;
     if (!name) return res.status(400).json({ error: 'name required' });
     if (!isValidMinecraftName(name)) return res.status(400).json({ error: 'Invalid player name' });
@@ -77,7 +77,7 @@ export default function playerRoutes(ctx) {
     }
   });
 
-  router.delete('/players/op/:name', requireAdmin, async (req, res) => {
+  router.delete('/players/op/:name', requireCapability('players.manage_ops'), async (req, res) => {
     const { name } = req.params;
     if (!isValidMinecraftName(name)) return res.status(400).json({ error: 'Invalid player name' });
     if (ctx.config.demoMode) {
@@ -103,7 +103,7 @@ export default function playerRoutes(ctx) {
     res.json(await SF.getWhitelist(ctx.config.serverPath));
   });
 
-  router.post('/players/whitelist', requireAdmin, async (req, res) => {
+  router.post('/players/whitelist', requireCapability('players.manage_whitelist'), async (req, res) => {
     const { name } = req.body;
     if (!name) return res.status(400).json({ error: 'name required' });
     if (!isValidMinecraftName(name)) return res.status(400).json({ error: 'Invalid player name' });
@@ -127,7 +127,7 @@ export default function playerRoutes(ctx) {
     }
   });
 
-  router.delete('/players/whitelist/:name', requireAdmin, async (req, res) => {
+  router.delete('/players/whitelist/:name', requireCapability('players.manage_whitelist'), async (req, res) => {
     const { name } = req.params;
     if (!isValidMinecraftName(name)) return res.status(400).json({ error: 'Invalid player name' });
     if (ctx.config.demoMode) {
@@ -156,7 +156,7 @@ export default function playerRoutes(ctx) {
     });
   });
 
-  router.post('/players/ban', requireAdmin, async (req, res) => {
+  router.post('/players/ban', requireCapability('players.manage_bans'), async (req, res) => {
     const { name, reason: rawReason = 'Banned by admin' } = req.body;
     if (!name) return res.status(400).json({ error: 'name required' });
     if (!isValidMinecraftName(name)) return res.status(400).json({ error: 'Invalid player name' });
@@ -189,7 +189,7 @@ export default function playerRoutes(ctx) {
     }
   });
 
-  router.delete('/players/ban/:name', requireAdmin, async (req, res) => {
+  router.delete('/players/ban/:name', requireCapability('players.manage_bans'), async (req, res) => {
     const { name } = req.params;
     if (!isValidMinecraftName(name)) return res.status(400).json({ error: 'Invalid player name' });
     if (ctx.config.demoMode) {
@@ -210,7 +210,7 @@ export default function playerRoutes(ctx) {
     }
   });
 
-  router.post('/players/kick', requireAdmin, async (req, res) => {
+  router.post('/players/kick', requireCapability('players.manage_bans'), async (req, res) => {
     const { name, reason: rawReason = 'Kicked by admin' } = req.body;
     if (!name) return res.status(400).json({ error: 'name required' });
     if (!isValidMinecraftName(name)) return res.status(400).json({ error: 'Invalid player name' });
@@ -232,7 +232,7 @@ export default function playerRoutes(ctx) {
     }
   });
 
-  router.post('/players/say', requireAdmin, async (req, res) => {
+  router.post('/players/say', requireCapability('chat.broadcast'), async (req, res) => {
     const { message } = req.body;
     if (!message) return res.status(400).json({ error: 'message required' });
     if (!isSafeCommand(message)) return res.status(400).json({ error: 'Invalid message' });
@@ -313,7 +313,7 @@ export default function playerRoutes(ctx) {
   });
 
   // --- Discord link management from web UI (admin only) ---
-  router.get('/players/discord-links', requireAdmin, async (_req, res) => {
+  router.get('/players/discord-links', requireCapability('identity.view_links'), async (_req, res) => {
     try {
       res.json(await getAllLinks());
     } catch (err) {
@@ -321,7 +321,7 @@ export default function playerRoutes(ctx) {
     }
   });
 
-  router.post('/players/discord-link', requireAdmin, async (req, res) => {
+  router.post('/players/discord-link', requireCapability('panel.link_identities'), async (req, res) => {
     const { discordId, minecraftName } = req.body;
     if (!discordId || !minecraftName) return res.status(400).json({ error: 'discordId and minecraftName required' });
     if (!isValidMinecraftName(minecraftName)) return res.status(400).json({ error: 'Invalid player name' });
@@ -334,7 +334,7 @@ export default function playerRoutes(ctx) {
     }
   });
 
-  router.delete('/players/discord-link/:discordId', requireAdmin, async (req, res) => {
+  router.delete('/players/discord-link/:discordId', requireCapability('panel.link_identities'), async (req, res) => {
     const { discordId } = req.params;
     try {
       const existed = await removeLink(discordId);

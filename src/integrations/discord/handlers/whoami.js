@@ -9,6 +9,7 @@ import { getLink } from '../links.js';
 export function register(ctx) {
   registerCommand('whoami', {
     permission: PermissionLevel.READ_ONLY,
+    capability: 'discord.use_commands',
     builder: new SlashCommandBuilder()
       .setName('whoami')
       .setDescription('Show your linked Minecraft account and permission level'),

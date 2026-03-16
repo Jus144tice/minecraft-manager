@@ -8,13 +8,14 @@ import { registerCommand, getCommandsByPermission } from '../registry.js';
 export function register(ctx) {
   registerCommand('help', {
     permission: PermissionLevel.READ_ONLY,
+    capability: 'discord.use_commands',
     builder: new SlashCommandBuilder().setName('help').setDescription('Show available commands'),
     handler: async (interaction) => {
       await interaction.deferReply();
 
       const discordConfig = interaction.client._discordConfig;
       const effective = await getEffectiveLevel(interaction, discordConfig, ctx);
-      const cmds = getCommandsByPermission(effective.level);
+      const cmds = getCommandsByPermission(effective.level, effective.role);
 
       // Group commands by permission tier
       const readOnly = cmds.filter((c) => c.permission === PermissionLevel.READ_ONLY);

@@ -4,6 +4,7 @@
 
 import pg from 'pg';
 import { info, warn } from './audit.js';
+import { adminLevelToRole, roleToAdminLevel, ROLE_ORDER } from './permissions.js';
 
 const { Pool } = pg;
 
@@ -18,6 +19,7 @@ CREATE TABLE IF NOT EXISTS users (
   name          TEXT NOT NULL DEFAULT '',
   provider      TEXT NOT NULL DEFAULT 'local',
   admin_level   INTEGER NOT NULL DEFAULT 0,
+  role          TEXT NOT NULL DEFAULT 'viewer',
   created_at    TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   last_login_at TIMESTAMPTZ
 );
@@ -74,6 +76,19 @@ export async function initDatabase() {
   const client = await pool.connect();
   try {
     await client.query(SCHEMA_SQL);
+
+    // --- Migration: add `role` column if missing (upgrades from pre-RBAC schema) ---
+    const { rows: cols } = await client.query(
+      `SELECT column_name FROM information_schema.columns
+       WHERE table_name = 'users' AND column_name = 'role'`,
+    );
+    if (cols.length === 0) {
+      await client.query(`ALTER TABLE users ADD COLUMN role TEXT NOT NULL DEFAULT 'viewer'`);
+      // Migrate existing admin_level values to role names
+      await client.query(`UPDATE users SET role = 'admin' WHERE admin_level >= 1`);
+      info('Migrated users table: added role column from admin_level');
+    }
+
     info('PostgreSQL connected and schema initialised');
   } finally {
     client.release();
@@ -115,23 +130,42 @@ export async function getUser(email) {
   return rows[0] || null;
 }
 
-/** List all users ordered by admin_level desc, email asc. */
+/** List all users ordered by role level desc, email asc. */
 export async function listUsers() {
   if (!pool) return [];
   const { rows } = await pool.query(
-    'SELECT id, email, name, provider, admin_level, created_at, last_login_at FROM users ORDER BY admin_level DESC, email ASC',
+    `SELECT id, email, name, provider, admin_level, role, created_at, last_login_at
+     FROM users ORDER BY admin_level DESC, email ASC`,
   );
   return rows;
 }
 
-/** Set a user's admin level (0 = regular, 1 = admin). */
+/** Set a user's admin level (0 = regular, 1 = admin). Also updates role for consistency. */
 export async function setAdminLevel(email, level) {
   if (!pool) return null;
-  const { rows } = await pool.query('UPDATE users SET admin_level = $2 WHERE email = $1 RETURNING *', [email, level]);
+  const role = adminLevelToRole(level);
+  const { rows } = await pool.query('UPDATE users SET admin_level = $2, role = $3 WHERE email = $1 RETURNING *', [
+    email,
+    level,
+    role,
+  ]);
   return rows[0] || null;
 }
 
-/** Count the number of admin users (admin_level >= 1). */
+/** Set a user's role directly. Also updates admin_level for backward compatibility. */
+export async function setUserRole(email, roleName) {
+  if (!pool) return null;
+  if (!ROLE_ORDER.includes(roleName)) return null;
+  const adminLevel = roleToAdminLevel(roleName);
+  const { rows } = await pool.query('UPDATE users SET role = $2, admin_level = $3 WHERE email = $1 RETURNING *', [
+    email,
+    roleName,
+    adminLevel,
+  ]);
+  return rows[0] || null;
+}
+
+/** Count the number of admin users (admin_level >= 1 / role >= admin). */
 export async function countAdmins() {
   if (!pool) return 0;
   const { rows } = await pool.query('SELECT COUNT(*) AS count FROM users WHERE admin_level >= 1');

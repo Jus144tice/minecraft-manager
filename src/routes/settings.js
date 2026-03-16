@@ -12,7 +12,7 @@ import cron from 'node-cron';
 import * as Backup from '../backup.js';
 import { audit } from '../audit.js';
 import { runPreflight } from '../preflight.js';
-import { requireAdmin } from '../middleware.js';
+import { requireCapability } from '../middleware.js';
 import {
   getDiscordStatus,
   testDiscordConnection,
@@ -32,7 +32,7 @@ export default function settingsRoutes(ctx) {
     }
   });
 
-  router.post('/settings/properties', requireAdmin, async (req, res) => {
+  router.post('/settings/properties', requireCapability('panel.configure'), async (req, res) => {
     if (ctx.config.demoMode) {
       Object.assign(Demo.DEMO_PROPERTIES, req.body);
       return res.json({ ok: true, demo: true });
@@ -75,7 +75,7 @@ export default function settingsRoutes(ctx) {
     }
   });
 
-  router.post('/settings/jvm-args', requireAdmin, async (req, res) => {
+  router.post('/settings/jvm-args', requireCapability('panel.configure'), async (req, res) => {
     const { content } = req.body;
     if (typeof content !== 'string') {
       return res.status(400).json({ error: 'content must be a string' });
@@ -101,7 +101,7 @@ export default function settingsRoutes(ctx) {
     res.json(safe);
   });
 
-  router.post('/config', requireAdmin, async (req, res) => {
+  router.post('/config', requireCapability('panel.configure'), async (req, res) => {
     const allowed = [
       'serverPath',
       'serverAddress',
@@ -124,6 +124,7 @@ export default function settingsRoutes(ctx) {
       'tpsAlertThreshold',
       'notifications',
       'discord',
+      'authorization',
     ];
     const updates = {};
     for (const k of allowed) {
@@ -184,6 +185,24 @@ export default function settingsRoutes(ctx) {
       // Merge with existing discord config (preserve fields not being updated)
       updates.discord = { ...(ctx.config.discord || {}), ...sanitized };
     }
+    // Sanitize authorization config
+    if (updates.authorization) {
+      if (typeof updates.authorization !== 'object' || Array.isArray(updates.authorization)) {
+        return res.status(400).json({ error: 'authorization must be an object.' });
+      }
+      const a = updates.authorization;
+      const sanitized = {};
+      if (a.permissionPolicy && typeof a.permissionPolicy === 'string') {
+        sanitized.permissionPolicy = a.permissionPolicy;
+      }
+      if (a.opLevelMapping && typeof a.opLevelMapping === 'object') {
+        sanitized.opLevelMapping = a.opLevelMapping;
+      }
+      if (a.discordRoleMapping && typeof a.discordRoleMapping === 'object') {
+        sanitized.discordRoleMapping = a.discordRoleMapping;
+      }
+      updates.authorization = { ...(ctx.config.authorization || {}), ...sanitized };
+    }
     // Validate cron expression before saving
     if (updates.backupSchedule && !cron.validate(updates.backupSchedule)) {
       return res.status(400).json({
@@ -220,17 +239,17 @@ export default function settingsRoutes(ctx) {
     res.json(getDiscordStatus());
   });
 
-  router.post('/discord/test-connection', requireAdmin, async (_req, res) => {
+  router.post('/discord/test-connection', requireCapability('discord.manage'), async (_req, res) => {
     const result = await testDiscordConnection();
     res.json(result);
   });
 
-  router.post('/discord/test-notification', requireAdmin, async (_req, res) => {
+  router.post('/discord/test-notification', requireCapability('discord.manage'), async (_req, res) => {
     const result = await testDiscordNotification();
     res.json(result);
   });
 
-  router.post('/discord/send-message', requireAdmin, async (req, res) => {
+  router.post('/discord/send-message', requireCapability('chat.broadcast'), async (req, res) => {
     const { message } = req.body;
     if (!message || typeof message !== 'string' || !message.trim()) {
       return res.status(400).json({ error: 'message is required' });
@@ -323,7 +342,7 @@ export default function settingsRoutes(ctx) {
   });
 
   // Create a directory (used by the directory browser's "New Folder" button)
-  router.post('/mkdir', requireAdmin, async (req, res) => {
+  router.post('/mkdir', requireCapability('server.manage_files'), async (req, res) => {
     const { path: dirPath } = req.body;
     if (!dirPath || typeof dirPath !== 'string') {
       return res.status(400).json({ error: 'path is required' });

@@ -9,6 +9,7 @@ import * as Demo from '../../../demoData.js';
 export function register(ctx) {
   registerCommand('players', {
     permission: PermissionLevel.READ_ONLY,
+    capability: 'discord.use_commands',
     builder: new SlashCommandBuilder().setName('players').setDescription('Show online players'),
     handler: async (interaction) => {
       await interaction.deferReply();

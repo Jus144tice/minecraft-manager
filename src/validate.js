@@ -1,5 +1,7 @@
 // Input validation helpers for user-supplied values.
 
+import { ROLE_ORDER, PERMISSION_POLICIES } from './permissions.js';
+
 // Minecraft player names: 1–16 characters, alphanumeric or underscore.
 // (Mojang allows 1-16; NPC/Bedrock names may differ but this is conservative for server ops.)
 const MC_NAME_RE = /^[a-zA-Z0-9_]{1,16}$/;
@@ -113,6 +115,30 @@ export function validateConfig(config) {
   const bindHost = config.bindHost;
   if (bindHost !== undefined && (typeof bindHost !== 'string' || !VALID_HOST_RE.test(bindHost))) {
     errors.push(`bindHost must be a valid IP address (got ${JSON.stringify(bindHost)}).`);
+  }
+
+  // Validate authorization config if present
+  if (config.authorization) {
+    const auth = config.authorization;
+    if (auth.permissionPolicy && !PERMISSION_POLICIES.includes(auth.permissionPolicy)) {
+      errors.push(
+        `authorization.permissionPolicy must be one of: ${PERMISSION_POLICIES.join(', ')} (got "${auth.permissionPolicy}").`,
+      );
+    }
+    if (auth.opLevelMapping && typeof auth.opLevelMapping === 'object') {
+      for (const [key, role] of Object.entries(auth.opLevelMapping)) {
+        if (role !== null && !ROLE_ORDER.includes(role)) {
+          errors.push(`authorization.opLevelMapping[${key}] must be a valid role or null (got "${role}").`);
+        }
+      }
+    }
+    if (auth.discordRoleMapping && typeof auth.discordRoleMapping === 'object') {
+      for (const [roleId, role] of Object.entries(auth.discordRoleMapping)) {
+        if (!ROLE_ORDER.includes(role)) {
+          errors.push(`authorization.discordRoleMapping[${roleId}] must be a valid role (got "${role}").`);
+        }
+      }
+    }
   }
 
   return errors;

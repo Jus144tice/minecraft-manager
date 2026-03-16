@@ -5,7 +5,7 @@
 import { Router } from 'express';
 import { audit } from '../audit.js';
 import { isValidMinecraftName } from '../validate.js';
-import { requireAdmin } from '../middleware.js';
+import { requireCapability } from '../middleware.js';
 import * as panelLinks from '../panelLinks.js';
 import { createChallenge, getPendingChallenge, getChallengeTimeout } from '../integrations/discord/links.js';
 import { getLinkByMinecraftName as getDiscordLinkByMcName } from '../integrations/discord/links.js';
@@ -21,8 +21,8 @@ export default function identityRoutes(ctx) {
   router.get('/identity/me', async (req, res) => {
     if (!req.session?.user) return res.status(401).json({ error: 'Authentication required' });
 
-    const { email, name, provider, adminLevel } = req.session.user;
-    const result = { email, name, provider, adminLevel: adminLevel || 0 };
+    const { email, name, provider, adminLevel, role } = req.session.user;
+    const result = { email, name, provider, adminLevel: adminLevel || 0, role: role || 'viewer' };
 
     // Panel↔MC link
     const link = await panelLinks.getLink(email);
@@ -165,7 +165,7 @@ export default function identityRoutes(ctx) {
   // ---- Admin panel-link management ----
 
   /** GET /panel-links — list all panel↔MC links */
-  router.get('/panel-links', requireAdmin, async (_req, res) => {
+  router.get('/panel-links', requireCapability('identity.view_links'), async (_req, res) => {
     try {
       res.json(await panelLinks.getAllLinks());
     } catch (err) {
@@ -174,7 +174,7 @@ export default function identityRoutes(ctx) {
   });
 
   /** POST /panel-link — admin-create a link: { email, minecraftName } */
-  router.post('/panel-link', requireAdmin, async (req, res) => {
+  router.post('/panel-link', requireCapability('panel.link_identities'), async (req, res) => {
     const { email, minecraftName } = req.body;
     if (!email || !minecraftName) return res.status(400).json({ error: 'email and minecraftName required' });
     if (!isValidMinecraftName(minecraftName)) return res.status(400).json({ error: 'Invalid player name' });
@@ -189,7 +189,7 @@ export default function identityRoutes(ctx) {
   });
 
   /** DELETE /panel-link/:email — admin-remove a link */
-  router.delete('/panel-link/:email', requireAdmin, async (req, res) => {
+  router.delete('/panel-link/:email', requireCapability('panel.link_identities'), async (req, res) => {
     const { email } = req.params;
     try {
       const existed = await panelLinks.removeLink(email);

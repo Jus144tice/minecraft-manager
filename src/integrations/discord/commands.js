@@ -29,7 +29,10 @@ export async function handleInteraction(interaction) {
   const guildId = interaction.guildId || 'DM';
   const channelId = interaction.channelId || 'DM';
 
-  // Central permission check (async — looks up op levels)
+  // Attach commands map to client for permission checker to access capability info
+  if (!interaction.client._commands) interaction.client._commands = commands;
+
+  // Central permission check (async — resolves role via mappings)
   const perm = await checkPermission(interaction, def.permission, discordConfig, _ctx);
   if (!perm.allowed) {
     try {

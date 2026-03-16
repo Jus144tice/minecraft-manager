@@ -10,6 +10,7 @@ import { removeLink, getLink } from '../links.js';
 export function register() {
   registerCommand('unlink', {
     permission: PermissionLevel.READ_ONLY,
+    capability: 'discord.link_self',
     builder: new SlashCommandBuilder()
       .setName('unlink')
       .setDescription('Unlink your Discord account from your Minecraft player'),

@@ -1,15 +1,15 @@
 // Backup routes: list, create, restore, delete, schedule info.
-// All endpoints require admin access (requireAdmin middleware).
+// Endpoints require specific backup capabilities.
 
 import { Router } from 'express';
 import * as Backup from '../backup.js';
-import { requireAdmin } from '../middleware.js';
+import { requireCapability } from '../middleware.js';
 import { getActiveOps } from '../operationLock.js';
 
 export default function backupRoutes(ctx) {
   const router = Router();
 
-  router.get('/backups', requireAdmin, async (req, res) => {
+  router.get('/backups', requireCapability('server.view_backups'), async (req, res) => {
     try {
       res.json(await Backup.listBackups(ctx.config));
     } catch (err) {
@@ -17,7 +17,7 @@ export default function backupRoutes(ctx) {
     }
   });
 
-  router.post('/backups', requireAdmin, async (req, res) => {
+  router.post('/backups', requireCapability('server.create_backup'), async (req, res) => {
     const { note } = req.body || {};
     try {
       const result = await Backup.createBackup(ctx.config, {
@@ -33,7 +33,7 @@ export default function backupRoutes(ctx) {
     }
   });
 
-  router.post('/backups/restore', requireAdmin, async (req, res) => {
+  router.post('/backups/restore', requireCapability('server.restore_backup'), async (req, res) => {
     const { filename } = req.body;
     if (!filename) return res.status(400).json({ error: 'filename required' });
     if (ctx.config.demoMode) return res.status(400).json({ error: 'Cannot restore in demo mode' });
@@ -47,15 +47,15 @@ export default function backupRoutes(ctx) {
     }
   });
 
-  router.get('/backups/lock', requireAdmin, (_req, res) => {
+  router.get('/backups/lock', requireCapability('server.view_backups'), (_req, res) => {
     res.json({ lock: Backup.getBackupLock() });
   });
 
-  router.get('/operations', requireAdmin, (_req, res) => {
+  router.get('/operations', requireCapability('server.view_backups'), (_req, res) => {
     res.json({ operations: getActiveOps() });
   });
 
-  router.post('/backups/validate', requireAdmin, async (req, res) => {
+  router.post('/backups/validate', requireCapability('server.view_backups'), async (req, res) => {
     const { filename } = req.body;
     if (!filename) return res.status(400).json({ error: 'filename required' });
     if (!filename.endsWith('.tar.gz')) return res.status(400).json({ error: 'Invalid backup file' });
@@ -67,7 +67,7 @@ export default function backupRoutes(ctx) {
     }
   });
 
-  router.delete('/backups/:filename', requireAdmin, async (req, res) => {
+  router.delete('/backups/:filename', requireCapability('server.delete_backup'), async (req, res) => {
     const { filename } = req.params;
     if (!filename.endsWith('.tar.gz')) return res.status(400).json({ error: 'Invalid backup file' });
     try {
@@ -78,7 +78,7 @@ export default function backupRoutes(ctx) {
     }
   });
 
-  router.get('/backups/schedule', requireAdmin, (req, res) => {
+  router.get('/backups/schedule', requireCapability('server.view_backups'), (req, res) => {
     res.json({
       enabled: !!ctx.config.backupEnabled,
       schedule: ctx.config.backupSchedule || '0 3 * * *',

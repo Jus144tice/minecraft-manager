@@ -68,7 +68,7 @@
           <button class="tab-btn" data-tab="console">Manage Server</button>
           <button class="tab-btn" data-tab="mods">Mods</button>
           <button class="tab-btn" data-tab="players">Players</button>
-          <button class="tab-btn admin-only" data-tab="backups">Backups</button>
+          <button class="tab-btn" data-tab="backups" data-cap="server.view_backups">Backups</button>
           <button class="tab-btn admin-only" data-tab="settings">Settings</button>
         </nav>
         <div class="topbar-right">
@@ -173,7 +173,7 @@
           <button class="btn btn-sm btn-ghost" id="btn-copy-server-url" title="Copy to clipboard">Copy</button>
         </div>
 
-        <div class="control-section admin-only">
+        <div class="control-section operator-up">
           <h3>Server Control</h3>
           <div class="btn-row">
             <button class="btn btn-success" id="btn-start">Start Server</button>
@@ -184,7 +184,7 @@
           <p id="control-msg" class="control-msg"></p>
         </div>
 
-        <div class="control-section admin-only">
+        <div class="control-section operator-up">
           <h3>Quick Broadcast</h3>
           <div class="input-row">
             <input type="text" id="say-input" placeholder="Message to all players..." />
@@ -200,7 +200,7 @@
         </div>
 
         <!-- Discord Integration (admin only, shown when Discord is enabled) -->
-        <div id="discord-panel" class="control-section admin-only hidden">
+        <div id="discord-panel" class="control-section hidden" data-cap="discord.manage">
           <h3>Discord Bot</h3>
           <div class="discord-status-grid">
             <div class="discord-stat">
@@ -257,7 +257,7 @@
         </div>
 
         <!-- Quick Actions -->
-        <details class="control-section quick-actions-details admin-only" open>
+        <details class="control-section quick-actions-details moderator-up" open>
           <summary><h3>Quick Actions</h3></summary>
           <div class="action-categories">
             <div class="action-category">
@@ -637,7 +637,7 @@
         <div class="console-wrap">
           <div id="console-output" class="console-output"></div>
         </div>
-        <div class="console-input-bar admin-only">
+        <div class="console-input-bar moderator-up">
           <span class="console-prompt">&gt;</span>
           <input type="text" id="console-cmd" placeholder="Type a command and press Enter..." />
           <button class="btn btn-primary" id="btn-send-cmd">Send</button>
@@ -652,9 +652,15 @@
         <div class="page-header">
           <h2>Mod Manager</h2>
           <div class="header-actions">
-            <button class="btn btn-sm btn-ghost admin-only" id="btn-export-modpack">Export JSON</button>
-            <button class="btn btn-sm btn-ghost admin-only" id="btn-export-mrpack">Export .mrpack</button>
-            <button class="btn btn-sm btn-ghost admin-only" id="btn-import-modpack">Import Modpack</button>
+            <button class="btn btn-sm btn-ghost" id="btn-export-modpack" data-cap="server.manage_mods">
+              Export JSON
+            </button>
+            <button class="btn btn-sm btn-ghost" id="btn-export-mrpack" data-cap="server.manage_mods">
+              Export .mrpack
+            </button>
+            <button class="btn btn-sm btn-ghost" id="btn-import-modpack" data-cap="server.manage_mods">
+              Import Modpack
+            </button>
             <input type="file" id="modpack-file-input" accept=".json,.mrpack" class="hidden" />
             <button class="btn btn-sm btn-ghost" id="btn-refresh-mods">Refresh List</button>
           </div>
@@ -760,11 +766,11 @@
         <!-- Ops -->
         <div id="subtab-ops" class="subtab-content hidden">
           <div class="legend-box">
-            <strong>Op Levels:</strong>
+            <strong>Minecraft Native Operator Levels</strong> (in-game permissions, separate from panel roles):<br />
             Level 1 = bypass spawn protection &nbsp;|&nbsp; Level 2 = most commands &nbsp;|&nbsp; Level 3 = /kick, /ban,
             manage players &nbsp;|&nbsp; Level 4 = /stop, all commands
           </div>
-          <div class="add-row admin-only">
+          <div class="add-row" data-cap="players.manage_ops">
             <input type="text" id="op-name" placeholder="Player name" />
             <select id="op-level">
               <option value="4">Level 4 (Admin)</option>
@@ -782,7 +788,7 @@
         <!-- Whitelist -->
         <div id="subtab-whitelist" class="subtab-content hidden">
           <div class="legend-box">When whitelist is enabled in server.properties, only listed players can join.</div>
-          <div class="add-row admin-only">
+          <div class="add-row" data-cap="players.manage_whitelist">
             <input type="text" id="wl-name" placeholder="Player name" />
             <button class="btn btn-primary" id="btn-add-wl">Add to Whitelist</button>
           </div>
@@ -793,7 +799,7 @@
 
         <!-- Bans -->
         <div id="subtab-bans" class="subtab-content hidden">
-          <div class="add-row admin-only">
+          <div class="add-row" data-cap="players.manage_bans">
             <input type="text" id="ban-name" placeholder="Player name" />
             <input type="text" id="ban-reason" placeholder="Reason (optional)" />
             <button class="btn btn-danger" id="btn-ban">Ban Player</button>
@@ -1037,7 +1043,7 @@
           <button class="subtab-btn active" data-subtab="app-cfg">App Config</button>
           <button class="subtab-btn" data-subtab="server-props">server.properties</button>
           <button class="subtab-btn" data-subtab="jvm-args">JVM Arguments</button>
-          <button class="subtab-btn admin-only" data-subtab="panel-users">Panel Users</button>
+          <button class="subtab-btn" data-subtab="panel-users" data-cap="panel.manage_users">Panel Users</button>
         </div>
 
         <!-- App config -->
@@ -1186,10 +1192,12 @@
         </div>
 
         <!-- Panel Users -->
-        <div id="subtab-panel-users" class="subtab-content hidden admin-only">
+        <div id="subtab-panel-users" class="subtab-content hidden" data-cap="panel.manage_users">
           <p class="legend-box">
-            Manage panel accounts. Admins have full control of the manager app. Viewers can see dashboards and player
-            info but cannot change settings or control the server.
+            Manage panel accounts and assign roles. Roles determine what each user can do:
+            <strong>Viewer</strong> (read-only), <strong>Operator</strong> (start/stop server, backups),
+            <strong>Moderator</strong> (manage players, console), <strong>Admin</strong> (full config),
+            <strong>Owner</strong> (user management, world ops).
           </p>
           <div id="panel-users-list">
             <p class="dim">Loading...</p>

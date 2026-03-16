@@ -9,6 +9,7 @@ import { audit } from '../../../audit.js';
 export function register(ctx) {
   registerCommand('stop', {
     permission: PermissionLevel.OWNER,
+    capability: 'server.stop',
     builder: new SlashCommandBuilder().setName('stop').setDescription('Stop the Minecraft server'),
     handler: async (interaction) => {
       await interaction.deferReply({ flags: 64 });

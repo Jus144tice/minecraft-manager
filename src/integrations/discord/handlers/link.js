@@ -17,6 +17,7 @@ import { isValidMinecraftName } from '../../../validate.js';
 export function register(ctx) {
   registerCommand('link', {
     permission: PermissionLevel.READ_ONLY,
+    capability: 'discord.link_self',
     builder: new SlashCommandBuilder()
       .setName('link')
       .setDescription('Link your Discord account to your Minecraft player')

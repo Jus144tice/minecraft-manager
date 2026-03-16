@@ -287,22 +287,22 @@ test('SameOrigin: rejects origin with same host but different port', () => {
 
 // ===================== requireAdmin =====================
 
-test('requireAdmin: allows user with adminLevel >= 1', () => {
+test('requireAdmin: allows user with admin role', () => {
   const next = trackNext();
-  requireAdmin(mockReq({ session: { user: { email: 'a@b.com', adminLevel: 1 } } }), mockRes(), next);
+  requireAdmin(mockReq({ session: { user: { email: 'a@b.com', role: 'admin' } } }), mockRes(), next);
   assert.ok(next.wasCalled());
 });
 
-test('requireAdmin: allows higher admin levels', () => {
+test('requireAdmin: allows owner role', () => {
   const next = trackNext();
-  requireAdmin(mockReq({ session: { user: { email: 'a@b.com', adminLevel: 2 } } }), mockRes(), next);
+  requireAdmin(mockReq({ session: { user: { email: 'a@b.com', role: 'owner' } } }), mockRes(), next);
   assert.ok(next.wasCalled());
 });
 
-test('requireAdmin: rejects adminLevel 0', () => {
+test('requireAdmin: rejects viewer role', () => {
   const res = mockRes();
   const next = trackNext();
-  requireAdmin(mockReq({ session: { user: { email: 'a@b.com', adminLevel: 0 } } }), res, next);
+  requireAdmin(mockReq({ session: { user: { email: 'a@b.com', role: 'viewer' } } }), res, next);
   assert.equal(next.wasCalled(), false);
   assert.equal(res.statusCode, 403);
   assert.match(res.body.error, /admin/i);

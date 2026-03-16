@@ -10,6 +10,7 @@ import { getActiveOps } from '../../../operationLock.js';
 export function register(ctx) {
   registerCommand('start', {
     permission: PermissionLevel.OWNER,
+    capability: 'server.start',
     builder: new SlashCommandBuilder().setName('start').setDescription('Start the Minecraft server'),
     handler: async (interaction) => {
       await interaction.deferReply({ flags: 64 });

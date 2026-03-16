@@ -2,6 +2,7 @@
 
 import helmet from 'helmet';
 import rateLimit from 'express-rate-limit';
+import { getCapabilitiesForRole, getRoleLevel } from './permissions.js';
 
 // ---- Security headers via Helmet ----
 
@@ -125,12 +126,33 @@ export function checkWsOrigin(origin, host, appUrl) {
   }
 }
 
-// ---- Admin access guard ----
-// Requires the logged-in user to have adminLevel >= 1.
-// Returns 401 if not logged in, 403 if logged in but not admin.
+// ---- Capability-based access guard ----
+// Checks that the logged-in user's role grants ALL of the listed capabilities.
+// Returns 401 if not logged in, 403 if missing a required capability.
+
+export function requireCapability(...capabilities) {
+  return (req, res, next) => {
+    if (!req.session?.user) {
+      return res.status(401).json({ error: 'Authentication required' });
+    }
+    const role = req.session.user.role || 'viewer';
+    const userCaps = getCapabilitiesForRole(role);
+    for (const cap of capabilities) {
+      if (!userCaps.has(cap)) {
+        return res.status(403).json({ error: 'Insufficient permissions', required: cap });
+      }
+    }
+    next();
+  };
+}
+
+// ---- Legacy admin access guard ----
+// Kept for backward compatibility. Checks role level >= 3 (admin/owner).
+// Prefer requireCapability() for new code.
 
 export function requireAdmin(req, res, next) {
   if (!req.session?.user) return res.status(401).json({ error: 'Authentication required' });
-  if ((req.session.user.adminLevel || 0) >= 1) return next();
+  const role = req.session.user.role || 'viewer';
+  if (getRoleLevel(role) >= 3) return next();
   res.status(403).json({ error: 'Admin access required' });
 }

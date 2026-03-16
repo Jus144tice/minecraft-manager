@@ -10,6 +10,7 @@ import * as Demo from '../../../demoData.js';
 export function register(ctx) {
   registerCommand('status', {
     permission: PermissionLevel.READ_ONLY,
+    capability: 'discord.use_commands',
     builder: new SlashCommandBuilder().setName('status').setDescription('Show Minecraft server status'),
     handler: async (interaction) => {
       await interaction.deferReply();

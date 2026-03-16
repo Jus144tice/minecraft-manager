@@ -10,6 +10,7 @@ import { getActiveOps } from '../../../operationLock.js';
 export function register(ctx) {
   registerCommand('restart', {
     permission: PermissionLevel.OWNER,
+    capability: 'server.restart',
     builder: new SlashCommandBuilder().setName('restart').setDescription('Restart the Minecraft server'),
     handler: async (interaction) => {
       await interaction.deferReply({ flags: 64 });

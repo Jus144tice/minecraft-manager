@@ -182,6 +182,7 @@ function mockInteraction({
     guildId,
     channelId,
     commandName,
+    client: { _commands: new Map() },
     member: {
       roles: {
         cache: new Map(roles.map((r) => [r, { id: r }])),
@@ -212,7 +213,7 @@ test('Permissions: READ_ONLY allowed for any guild member', async () => {
 test('Permissions: OWNER denied without owner override role or link', async () => {
   const result = await checkPermission(mockInteraction(), PermissionLevel.OWNER, baseDiscordConfig, mockCtx);
   assert.equal(result.allowed, false);
-  assert.ok(result.reason.includes('link'));
+  assert.ok(result.reason.includes('capability'));
 });
 
 test('Permissions: botAdminRoleIds does NOT grant OWNER access', async () => {
@@ -223,7 +224,7 @@ test('Permissions: botAdminRoleIds does NOT grant OWNER access', async () => {
     mockCtx,
   );
   assert.equal(result.allowed, false);
-  assert.ok(result.reason.includes('link'));
+  assert.ok(result.reason.includes('capability'));
 });
 
 test('Permissions: ownerOverrideRoleIds grants OWNER access when configured', async () => {
@@ -299,15 +300,15 @@ test('Permissions: elevated denied when no override roles and no link', async ()
   const config = { ...baseDiscordConfig, ownerOverrideRoleIds: [] };
   const result = await checkPermission(mockInteraction(), PermissionLevel.MODERATOR, config, mockCtx);
   assert.equal(result.allowed, false);
-  assert.ok(result.reason.includes('link'));
+  assert.ok(result.reason.includes('capability'));
 });
 
 test('Permissions: TIER_NAMES covers all levels', () => {
   assert.equal(TIER_NAMES[PermissionLevel.READ_ONLY], 'Everyone');
-  assert.equal(TIER_NAMES[PermissionLevel.MODERATOR], 'Moderator (Op 1+)');
-  assert.equal(TIER_NAMES[PermissionLevel.GAME_MASTER], 'Game Master (Op 2+)');
-  assert.equal(TIER_NAMES[PermissionLevel.ADMIN], 'Admin (Op 3+)');
-  assert.equal(TIER_NAMES[PermissionLevel.OWNER], 'Owner (Op 4)');
+  assert.equal(TIER_NAMES[PermissionLevel.MODERATOR], 'Moderator');
+  assert.equal(TIER_NAMES[PermissionLevel.GAME_MASTER], 'Game Master');
+  assert.equal(TIER_NAMES[PermissionLevel.ADMIN], 'Admin');
+  assert.equal(TIER_NAMES[PermissionLevel.OWNER], 'Owner');
 });
 
 test('Permissions: numeric levels are ordered correctly', () => {
@@ -568,7 +569,10 @@ test('Registry: getCommandsJSON returns valid JSON array', () => {
 // Command routing (handleInteraction)
 // ============================================================
 
-import { handleInteraction } from '../src/integrations/discord/commands.js';
+import { handleInteraction, setCommandContext } from '../src/integrations/discord/commands.js';
+
+// Set command context for the router's permission checks
+setCommandContext(mockCtx);
 
 test('Command router: dispatches to registered handler', async () => {
   let handlerCalled = false;
@@ -617,7 +621,7 @@ test('Command router: denies elevated command without link or role', async () =>
     channelId: '789',
     member: { roles: { cache: new Map() } },
     options: { data: [] },
-    client: { _discordConfig: baseDiscordConfig },
+    client: { _discordConfig: baseDiscordConfig, _commands: getCommands() },
     reply: async (opts) => {
       replyContent = typeof opts === 'string' ? opts : opts.content;
     },
@@ -626,7 +630,7 @@ test('Command router: denies elevated command without link or role', async () =>
   };
 
   await handleInteraction(interaction);
-  assert.ok(replyContent.includes('link'), `Expected link prompt, got: "${replyContent}"`);
+  assert.ok(replyContent.includes('capability'), `Expected capability denial, got: "${replyContent}"`);
 });
 
 test('Command router: ignores non-chat-input interactions', async () => {

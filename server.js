@@ -17,8 +17,9 @@ import {
   buildSameOriginCheck,
   buildCsrfCheck,
   checkWsOrigin,
-  requireAdmin,
+  requireCapability,
 } from './src/middleware.js';
+import { getCapabilitiesForRole } from './src/permissions.js';
 import { validateConfig, migrateLaunchConfig, launchToString } from './src/validate.js';
 import { info, setNotifyHook } from './src/audit.js';
 import { initDatabase } from './src/db.js';
@@ -204,13 +205,16 @@ app.get('/api/auth/providers', (req, res) => {
 
 app.get('/api/session', async (req, res) => {
   if (req.session?.user) {
-    const { email, name, provider, adminLevel, loginAt } = req.session.user;
+    const { email, name, provider, adminLevel, role, loginAt } = req.session.user;
+    const capabilities = [...getCapabilitiesForRole(role || 'viewer')];
     const session = {
       loggedIn: true,
       email,
       name,
       provider,
+      role: role || 'viewer',
       adminLevel: adminLevel || 0,
+      capabilities,
       loginAt,
       dbConnected: dbReady,
     };
@@ -270,7 +274,7 @@ app.use('/api', modpackRoutes(ctx));
 app.use('/api', auditRoutes());
 app.use('/api', identityRoutes(ctx));
 
-app.post('/api/rcon/connect', requireAdmin, async (req, res) => {
+app.post('/api/rcon/connect', requireCapability('server.send_console_command'), async (req, res) => {
   if (ctx.config.demoMode) return res.json({ ok: true, connected: true, demo: true });
   const ok = await ctx.connectRcon();
   res.json({ ok, connected: ok });
