@@ -43,6 +43,8 @@ export function register(ctx) {
 
       try {
         ctx.markIntentionalStop();
+        ctx.mc.stopping = true;
+        ctx.broadcastStatus();
         const stopped = new Promise((resolve) => ctx.mc.once('stopped', resolve));
         if (ctx.rconConnected) {
           await ctx.rconCmd('stop');

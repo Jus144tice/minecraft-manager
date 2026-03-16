@@ -9,6 +9,7 @@ export class MinecraftProcess extends EventEmitter {
     super();
     this.proc = null;
     this.running = false;
+    this.stopping = false;
     this.logs = []; // circular buffer
     this.startTime = null;
   }
@@ -28,6 +29,7 @@ export class MinecraftProcess extends EventEmitter {
     });
 
     this.running = true;
+    this.stopping = false;
     this.startTime = Date.now();
     this._log('[Manager] Server process starting...');
     this._log(`[Manager] CWD: ${cwd}`);
@@ -53,6 +55,7 @@ export class MinecraftProcess extends EventEmitter {
     this.proc.on('close', (code) => {
       const uptime = this.getUptime();
       this.running = false;
+      this.stopping = false;
       this.proc = null;
       this.startTime = null;
       this._log(`[Manager] Server stopped (exit code: ${code ?? 'unknown'})`);
@@ -61,6 +64,7 @@ export class MinecraftProcess extends EventEmitter {
 
     this.proc.on('error', (err) => {
       this.running = false;
+      this.stopping = false;
       this.proc = null;
       this.startTime = null;
       this._log(`[Manager] Failed to start server: ${err.message}`);
@@ -70,6 +74,7 @@ export class MinecraftProcess extends EventEmitter {
 
   stop() {
     if (!this.running || !this.proc) throw new Error('Server is not running');
+    this.stopping = true;
     this._log('[Manager] Sending stop command...');
     this.proc.stdin.write('stop\n');
   }

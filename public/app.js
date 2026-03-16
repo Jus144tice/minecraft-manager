@@ -512,8 +512,6 @@ async function initApp() {
 
   // Load dashboard stat cards (non-blocking)
   loadPlayerLinkCount();
-  loadModCount();
-
   // Apply role-based visibility
   applyRoleVisibility();
 }
@@ -774,14 +772,21 @@ async function runServerActionPrompt(el) {
 let lagAlertDismissed = false; // user can dismiss until next spike
 
 function updateDashboard(s) {
+  // Derive 4-state status: Stopped / Starting / Running / Stopping
+  const isStopping = s.running && s.stopping;
+  const isStarting = s.running && !s.stopping && s.rconConnected === false;
+  const statusText = !s.running ? 'Stopped' : isStopping ? 'Stopping' : isStarting ? 'Starting' : 'Running';
+  const statusClass = !s.running ? 'text-red' : isStopping || isStarting ? 'text-yellow' : 'text-green';
+  const badgeClass = !s.running ? 'badge-stopped' : isStopping || isStarting ? 'badge-starting' : 'badge-running';
+
   // Header badge
   const badge = $('server-badge');
-  badge.textContent = s.running ? 'Running' : 'Stopped';
-  badge.className = s.running ? 'badge badge-running' : 'badge badge-stopped';
+  badge.textContent = statusText;
+  badge.className = 'badge ' + badgeClass;
 
   // Core stat cards
-  $('stat-status').textContent = s.running ? 'Running' : 'Stopped';
-  $('stat-status').className = 'stat-value ' + (s.running ? 'text-green' : 'text-red');
+  $('stat-status').textContent = statusText;
+  $('stat-status').className = 'stat-value ' + statusClass;
   $('stat-uptime').textContent = formatUptime(s.uptime);
   $('stat-players').textContent = s.running ? String(s.onlineCount ?? 0) : '-';
 
@@ -804,6 +809,12 @@ function updateDashboard(s) {
   $('stat-cpu').textContent = s.cpuPercent != null ? s.cpuPercent.toFixed(1) + '%' : s.running ? 'N/A' : '-';
   $('stat-ram').textContent = s.memBytes != null ? formatSize(s.memBytes) : s.running ? 'N/A' : '-';
   $('stat-disk').textContent = s.diskBytes != null ? formatSize(s.diskBytes) : '-';
+
+  // Mod count
+  if (s.modCount != null) {
+    $('stat-mod-count').textContent = String(s.modCount);
+    $('stat-mod-count').className = 'stat-value';
+  }
 
   // MC Version card
   const mcVersionEl = $('stat-mc-version');
@@ -1063,20 +1074,6 @@ async function loadPlayerLinkCount() {
     el.className = 'stat-value' + (count > 0 ? '' : ' text-dim');
   } catch {
     $('stat-player-links').textContent = '-';
-  }
-}
-
-async function loadModCount() {
-  try {
-    const data = await GET('/mods');
-    const mods = data.mods || [];
-    const enabledCount = mods.filter((m) => m.enabled !== false).length;
-    const el = $('stat-mod-count');
-    el.textContent = String(enabledCount);
-    el.className = 'stat-value';
-  } catch {
-    $('stat-mod-count').textContent = '-';
-    $('stat-mod-count').className = 'stat-value text-dim';
   }
 }
 

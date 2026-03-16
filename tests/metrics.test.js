@@ -57,6 +57,7 @@ test('collectDemoMetrics: returns all expected fields', () => {
   assert.equal(typeof m.cpuPercent, 'number');
   assert.equal(typeof m.memBytes, 'number');
   assert.equal(typeof m.diskBytes, 'number');
+  assert.equal(typeof m.modCount, 'number');
   assert.equal(m.onlineCount, 3);
   assert.ok(Array.isArray(m.players));
   assert.equal(m.players.length, 3);

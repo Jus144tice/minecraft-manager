@@ -34,6 +34,8 @@ export function register(ctx) {
 
       try {
         ctx.markIntentionalStop();
+        ctx.mc.stopping = true;
+        ctx.broadcastStatus();
         if (ctx.rconConnected) {
           await ctx.rconCmd('stop');
         } else {

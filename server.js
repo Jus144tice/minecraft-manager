@@ -122,7 +122,7 @@ function broadcastStatus() {
   if (config.demoMode) {
     broadcast({ type: 'status', running: ctx.demoState.running, uptime: ctx.getDemoUptime(), demoMode: true });
   } else {
-    broadcast({ type: 'status', running: mc.running, uptime: mc.getUptime() });
+    broadcast({ type: 'status', running: mc.running, stopping: mc.stopping, uptime: mc.getUptime() });
   }
 }
 
@@ -153,6 +153,7 @@ async function broadcastMetrics() {
       payload = {
         type: 'status',
         running: mc.running,
+        stopping: mc.stopping,
         uptime: mc.getUptime(),
         rconConnected: ctx.rconConnected,
         minecraftVersion: config.minecraftVersion || 'unknown',
@@ -315,7 +316,7 @@ wss.on('connection', (ws, req) => {
       for (const entry of mc.logs) {
         ws.send(JSON.stringify({ type: 'log', ...entry }));
       }
-      ws.send(JSON.stringify({ type: 'status', running: mc.running, uptime: mc.getUptime() }));
+      ws.send(JSON.stringify({ type: 'status', running: mc.running, stopping: mc.stopping, uptime: mc.getUptime() }));
     }
 
     ws.on('close', () => wsClients.delete(ws));

@@ -85,6 +85,26 @@ function getProcessMemory(pid) {
   });
 }
 
+// ---- Mod count (cached — only needs periodic refresh) ----
+
+let modCountCache = { count: null, timestamp: 0 };
+const MOD_COUNT_CACHE_TTL = 30_000; // refresh every 30 seconds
+
+async function getModCount(serverPath, modsFolder = 'mods') {
+  if (!serverPath) return null;
+  if (Date.now() - modCountCache.timestamp < MOD_COUNT_CACHE_TTL) return modCountCache.count;
+
+  try {
+    const modsPath = path.join(serverPath, modsFolder);
+    const entries = await readdir(modsPath);
+    const count = entries.filter((f) => f.endsWith('.jar')).length;
+    modCountCache = { count, timestamp: Date.now() };
+    return count;
+  } catch {
+    return modCountCache.count; // return stale on error (folder may not exist)
+  }
+}
+
 // ---- Disk usage (cached — expensive to compute) ----
 
 let diskCache = { bytes: null, timestamp: 0 };
@@ -177,11 +197,15 @@ export async function collectMetrics({ mc, rconCmd, rconConnected, config }) {
     cpuPercent: null,
     memBytes: null,
     diskBytes: null,
+    modCount: null,
     onlineCount: 0,
     players: [],
     lagSpike: false,
     tpsThreshold: config.tpsAlertThreshold ?? 18,
   };
+
+  // Mod count is useful even when server is stopped
+  metrics.modCount = await getModCount(config.serverPath, config.modsFolder);
 
   if (!mc.running) return metrics;
 
@@ -250,6 +274,7 @@ export function collectDemoMetrics() {
     cpuPercent: Math.round((12 + Math.sin(t / 30000) * 8) * 10) / 10,
     memBytes: 2_147_483_648 + Math.floor(Math.sin(t / 45000) * 200_000_000), // ~2 GB
     diskBytes: 1_610_612_736, // ~1.5 GB
+    modCount: 22,
     onlineCount: 3,
     players: ['Steve', 'Alex', 'CreeperSlayer99'],
     lagSpike: false,

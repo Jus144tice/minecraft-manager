@@ -76,12 +76,14 @@ export default function serverRoutes(ctx) {
     }
     try {
       ctx.markIntentionalStop();
+      ctx.mc.stopping = true;
       if (ctx.rconConnected) {
         await ctx.rconCmd('stop');
       } else {
         ctx.mc.stop();
       }
       audit('SERVER_STOP', { user: req.session.user.email, ip: req.ip });
+      ctx.broadcastStatus();
       res.json({ ok: true, message: 'Stop signal sent' });
     } catch (err) {
       res.status(400).json({ error: err.message });
@@ -128,6 +130,8 @@ export default function serverRoutes(ctx) {
     try {
       checkLifecycleLock('restart server');
       ctx.markIntentionalStop();
+      ctx.mc.stopping = true;
+      ctx.broadcastStatus();
       const stopped = new Promise((resolve) => ctx.mc.once('stopped', resolve));
       if (ctx.rconConnected) {
         await ctx.rconCmd('stop');
