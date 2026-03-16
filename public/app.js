@@ -438,6 +438,7 @@ function onTabActivate(tab) {
     loadAppConfig();
     loadServerProps();
     loadJvmArgs();
+    if (isAdmin) loadPanelUsers();
   }
 }
 
@@ -2278,6 +2279,99 @@ $('btn-jvm-save-restart').addEventListener('click', async () => {
     flash('jvm-args-msg', err.message, true);
   }
 });
+
+// --- Settings: Panel Users ---
+
+async function loadPanelUsers() {
+  const container = $('panel-users-list');
+  try {
+    const users = await GET('/users');
+    if (!users.length) {
+      container.innerHTML = '<p class="dim">No users found. Users appear after logging in.</p>';
+      return;
+    }
+    const rows = users
+      .map((u) => {
+        const isSelf = u.email === window._userEmail;
+        const roleBadge =
+          u.admin_level >= 1
+            ? '<span class="badge badge-running">Admin</span>'
+            : '<span class="badge badge-stopped">Viewer</span>';
+        const lastLogin = u.last_login_at ? new Date(u.last_login_at).toLocaleDateString() : 'Never';
+        const toggleBtn = isSelf
+          ? '<span class="dim" title="Cannot change your own role">—</span>'
+          : u.admin_level >= 1
+            ? `<button class="btn btn-xs btn-ghost" data-action="demote-user" data-email="${esc(u.email)}">Demote to Viewer</button>`
+            : `<button class="btn btn-xs btn-primary" data-action="promote-user" data-email="${esc(u.email)}">Promote to Admin</button>`;
+        const deleteBtn = isSelf
+          ? ''
+          : `<button class="btn btn-xs btn-danger" data-action="delete-user" data-email="${esc(u.email)}" title="Remove user">&#10005;</button>`;
+        return `<tr>
+          <td>${esc(u.name || '')} ${isSelf ? '<span class="dim">(you)</span>' : ''}</td>
+          <td>${esc(u.email)}</td>
+          <td>${esc(u.provider || '')}</td>
+          <td>${roleBadge}</td>
+          <td>${lastLogin}</td>
+          <td>${toggleBtn} ${deleteBtn}</td>
+        </tr>`;
+      })
+      .join('');
+
+    container.innerHTML = `<table class="data-table">
+      <thead><tr>
+        <th>Name</th><th>Email</th><th>Provider</th><th>Role</th><th>Last Login</th><th>Actions</th>
+      </tr></thead>
+      <tbody>${rows}</tbody>
+    </table>`;
+
+    // Bind promote/demote/delete buttons
+    container.querySelectorAll('[data-action="promote-user"]').forEach((btn) => {
+      btn.addEventListener('click', () => setUserRole(btn.dataset.email, 1));
+    });
+    container.querySelectorAll('[data-action="demote-user"]').forEach((btn) => {
+      btn.addEventListener('click', () => setUserRole(btn.dataset.email, 0));
+    });
+    container.querySelectorAll('[data-action="delete-user"]').forEach((btn) => {
+      btn.addEventListener('click', () => deleteUserAccount(btn.dataset.email));
+    });
+  } catch (err) {
+    container.innerHTML = `<p class="dim">Could not load users: ${esc(err.message)}</p>`;
+  }
+}
+
+async function setUserRole(email, level) {
+  const action = level >= 1 ? 'promote to Admin' : 'demote to Viewer';
+  if (!confirm(`${action.charAt(0).toUpperCase() + action.slice(1)}: ${email}?`)) return;
+  try {
+    await fetch(`/api/users/${encodeURIComponent(email)}/admin`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': csrfToken },
+      body: JSON.stringify({ level }),
+    }).then(async (r) => {
+      if (!r.ok) throw new Error((await r.json()).error || r.statusText);
+    });
+    flash('panel-users-msg', `${email} is now ${level >= 1 ? 'Admin' : 'Viewer'}.`);
+    loadPanelUsers();
+  } catch (err) {
+    flash('panel-users-msg', err.message, true);
+  }
+}
+
+async function deleteUserAccount(email) {
+  if (!confirm(`Remove ${email} from the panel? They can re-register by logging in again.`)) return;
+  try {
+    await fetch(`/api/users/${encodeURIComponent(email)}`, {
+      method: 'DELETE',
+      headers: { 'X-CSRF-Token': csrfToken },
+    }).then(async (r) => {
+      if (!r.ok) throw new Error((await r.json()).error || r.statusText);
+    });
+    flash('panel-users-msg', `${email} removed.`);
+    loadPanelUsers();
+  } catch (err) {
+    flash('panel-users-msg', err.message, true);
+  }
+}
 
 // ============================================================
 // Backups

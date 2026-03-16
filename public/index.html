@@ -1037,6 +1037,7 @@
           <button class="subtab-btn active" data-subtab="app-cfg">App Config</button>
           <button class="subtab-btn" data-subtab="server-props">server.properties</button>
           <button class="subtab-btn" data-subtab="jvm-args">JVM Arguments</button>
+          <button class="subtab-btn admin-only" data-subtab="panel-users">Panel Users</button>
         </div>
 
         <!-- App config -->
@@ -1182,6 +1183,18 @@
             </div>
             <p id="jvm-args-msg" class="control-msg"></p>
           </form>
+        </div>
+
+        <!-- Panel Users -->
+        <div id="subtab-panel-users" class="subtab-content hidden admin-only">
+          <p class="legend-box">
+            Manage panel accounts. Admins have full control of the manager app. Viewers can see dashboards and player
+            info but cannot change settings or control the server.
+          </p>
+          <div id="panel-users-list">
+            <p class="dim">Loading...</p>
+          </div>
+          <p id="panel-users-msg" class="control-msg"></p>
         </div>
       </section>
 
