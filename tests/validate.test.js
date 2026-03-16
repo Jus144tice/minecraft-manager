@@ -291,3 +291,96 @@ test('launchToString: returns empty string for null/missing', () => {
   assert.equal(launchToString(null), '');
   assert.equal(launchToString({}), '');
 });
+
+// --- validateConfig: authorization ---
+
+test('validateConfig: authorization — valid permissionPolicy values produce no errors', () => {
+  for (const policy of ['isolated', 'inherit-panel', 'panel-ceiling']) {
+    const errors = validateConfig({ ...GOOD_CONFIG, authorization: { permissionPolicy: policy } });
+    assert.deepEqual(errors, [], `expected no errors for permissionPolicy "${policy}"`);
+  }
+});
+
+test('validateConfig: authorization — invalid permissionPolicy reports error', () => {
+  const errors = validateConfig({ ...GOOD_CONFIG, authorization: { permissionPolicy: 'bogus' } });
+  assert.equal(errors.length, 1);
+  assert.match(errors[0], /permissionPolicy/);
+});
+
+test('validateConfig: authorization — valid opLevelMapping with valid role names produces no errors', () => {
+  const errors = validateConfig({
+    ...GOOD_CONFIG,
+    authorization: {
+      opLevelMapping: { 0: 'viewer', 1: 'operator', 2: 'moderator', 3: 'admin', 4: 'owner' },
+    },
+  });
+  assert.deepEqual(errors, []);
+});
+
+test('validateConfig: authorization — opLevelMapping with null values accepted', () => {
+  const errors = validateConfig({
+    ...GOOD_CONFIG,
+    authorization: {
+      opLevelMapping: { 0: null, 1: null, 2: 'admin' },
+    },
+  });
+  assert.deepEqual(errors, []);
+});
+
+test('validateConfig: authorization — opLevelMapping with invalid role name reports error', () => {
+  const errors = validateConfig({
+    ...GOOD_CONFIG,
+    authorization: {
+      opLevelMapping: { 0: 'viewer', 1: 'superadmin' },
+    },
+  });
+  assert.equal(errors.length, 1);
+  assert.match(errors[0], /opLevelMapping\[1\]/);
+});
+
+test('validateConfig: authorization — valid discordRoleMapping produces no errors', () => {
+  const errors = validateConfig({
+    ...GOOD_CONFIG,
+    authorization: {
+      discordRoleMapping: { 123456789: 'admin', 987654321: 'viewer' },
+    },
+  });
+  assert.deepEqual(errors, []);
+});
+
+test('validateConfig: authorization — discordRoleMapping with invalid role name reports error', () => {
+  const errors = validateConfig({
+    ...GOOD_CONFIG,
+    authorization: {
+      discordRoleMapping: { 123456789: 'admin', 555: 'megaadmin' },
+    },
+  });
+  assert.equal(errors.length, 1);
+  assert.match(errors[0], /discordRoleMapping\[555\]/);
+});
+
+test('validateConfig: authorization — multiple errors collected at once', () => {
+  const errors = validateConfig({
+    ...GOOD_CONFIG,
+    authorization: {
+      permissionPolicy: 'invalid-policy',
+      opLevelMapping: { 0: 'fake-role' },
+      discordRoleMapping: { 999: 'also-fake' },
+    },
+  });
+  assert.equal(errors.length, 3);
+  assert.match(errors[0], /permissionPolicy/);
+  assert.match(errors[1], /opLevelMapping/);
+  assert.match(errors[2], /discordRoleMapping/);
+});
+
+test('validateConfig: authorization — empty authorization object produces no errors', () => {
+  const errors = validateConfig({ ...GOOD_CONFIG, authorization: {} });
+  assert.deepEqual(errors, []);
+});
+
+test('validateConfig: authorization — no authorization key produces no errors', () => {
+  const { authorization: _, ...noAuth } = GOOD_CONFIG;
+  const errors = validateConfig(noAuth);
+  assert.deepEqual(errors, []);
+});

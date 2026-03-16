@@ -49,7 +49,7 @@ export default function serverRoutes(ctx) {
       audit('SERVER_START', { user: req.session.user.email, ip: req.ip });
       res.json({ ok: true, message: 'Server starting...' });
     } catch (err) {
-      const status = err.message.includes('already in progress') ? 409 : 400;
+      const status = err.message.includes('already in progress') ? 409 : 500;
       res.status(status).json({ error: err.message });
     }
   });
@@ -141,7 +141,7 @@ export default function serverRoutes(ctx) {
       audit('SERVER_RESTART', { user: req.session.user.email, ip: req.ip });
       res.json({ ok: true, message: 'Restarting...' });
     } catch (err) {
-      const status = err.message.includes('already in progress') ? 409 : 400;
+      const status = err.message.includes('already in progress') ? 409 : 500;
       res.status(status).json({ error: err.message });
     }
   });

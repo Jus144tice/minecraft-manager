@@ -1,7 +1,13 @@
 // Tests for security middleware in src/middleware.js
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { buildCsrfCheck, buildSameOriginCheck, requireAdmin, checkWsOrigin } from '../src/middleware.js';
+import {
+  buildCsrfCheck,
+  buildSameOriginCheck,
+  requireAdmin,
+  requireCapability,
+  checkWsOrigin,
+} from '../src/middleware.js';
 
 // --- Mock helpers ---
 
@@ -322,6 +328,104 @@ test('requireAdmin: rejects with 401 when user is missing', () => {
   requireAdmin(mockReq({ session: {} }), res, next);
   assert.equal(next.wasCalled(), false);
   assert.equal(res.statusCode, 401);
+});
+
+// ===================== requireCapability =====================
+
+test('requireCapability: returns 401 when session is missing', () => {
+  const mw = requireCapability('panel.view');
+  const res = mockRes();
+  const next = trackNext();
+  mw(mockReq({ session: undefined }), res, next);
+  assert.equal(next.wasCalled(), false);
+  assert.equal(res.statusCode, 401);
+  assert.match(res.body.error, /authentication/i);
+});
+
+test('requireCapability: returns 401 when session.user is missing', () => {
+  const mw = requireCapability('panel.view');
+  const res = mockRes();
+  const next = trackNext();
+  mw(mockReq({ session: {} }), res, next);
+  assert.equal(next.wasCalled(), false);
+  assert.equal(res.statusCode, 401);
+  assert.match(res.body.error, /authentication/i);
+});
+
+test('requireCapability: calls next when user has the required capability', () => {
+  const mw = requireCapability('panel.view');
+  const next = trackNext();
+  mw(mockReq({ session: { user: { email: 'a@b.com', role: 'viewer' } } }), mockRes(), next);
+  assert.ok(next.wasCalled());
+});
+
+test('requireCapability: returns 403 when user lacks the required capability', () => {
+  const mw = requireCapability('panel.configure');
+  const res = mockRes();
+  const next = trackNext();
+  mw(mockReq({ session: { user: { email: 'a@b.com', role: 'viewer' } } }), res, next);
+  assert.equal(next.wasCalled(), false);
+  assert.equal(res.statusCode, 403);
+  assert.match(res.body.error, /insufficient/i);
+  assert.equal(res.body.required, 'panel.configure');
+});
+
+test('requireCapability: calls next when user has all multiple capabilities', () => {
+  const mw = requireCapability('server.start', 'server.stop', 'server.restart');
+  const next = trackNext();
+  mw(mockReq({ session: { user: { email: 'a@b.com', role: 'operator' } } }), mockRes(), next);
+  assert.ok(next.wasCalled());
+});
+
+test('requireCapability: returns 403 when user is missing one of multiple capabilities', () => {
+  const mw = requireCapability('server.start', 'panel.configure');
+  const res = mockRes();
+  const next = trackNext();
+  mw(mockReq({ session: { user: { email: 'a@b.com', role: 'operator' } } }), res, next);
+  assert.equal(next.wasCalled(), false);
+  assert.equal(res.statusCode, 403);
+  assert.equal(res.body.required, 'panel.configure');
+});
+
+test('requireCapability: defaults to viewer capabilities when user has no role', () => {
+  const mw = requireCapability('panel.view');
+  const next = trackNext();
+  mw(mockReq({ session: { user: { email: 'a@b.com' } } }), mockRes(), next);
+  assert.ok(next.wasCalled());
+});
+
+test('requireCapability: owner role has all capabilities', () => {
+  const mw = requireCapability('panel.manage_users', 'server.manage_world', 'panel.configure', 'audit.view');
+  const next = trackNext();
+  mw(mockReq({ session: { user: { email: 'a@b.com', role: 'owner' } } }), mockRes(), next);
+  assert.ok(next.wasCalled());
+});
+
+test('requireCapability: viewer cannot access admin-level capabilities', () => {
+  const mw = requireCapability('panel.configure');
+  const res = mockRes();
+  const next = trackNext();
+  mw(mockReq({ session: { user: { email: 'a@b.com', role: 'viewer' } } }), res, next);
+  assert.equal(next.wasCalled(), false);
+  assert.equal(res.statusCode, 403);
+  assert.equal(res.body.required, 'panel.configure');
+});
+
+test('requireCapability: moderator can access moderator-level but not admin-level capabilities', () => {
+  // Moderator has send_console_command
+  const mwMod = requireCapability('server.send_console_command');
+  const next1 = trackNext();
+  mwMod(mockReq({ session: { user: { email: 'a@b.com', role: 'moderator' } } }), mockRes(), next1);
+  assert.ok(next1.wasCalled());
+
+  // Moderator lacks panel.configure (admin-level)
+  const mwAdmin = requireCapability('panel.configure');
+  const res = mockRes();
+  const next2 = trackNext();
+  mwAdmin(mockReq({ session: { user: { email: 'a@b.com', role: 'moderator' } } }), res, next2);
+  assert.equal(next2.wasCalled(), false);
+  assert.equal(res.statusCode, 403);
+  assert.equal(res.body.required, 'panel.configure');
 });
 
 // ===================== checkWsOrigin =====================
