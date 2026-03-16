@@ -144,6 +144,10 @@ async function broadcastMetrics() {
         ...m,
       };
     } else {
+      // Auto-reconnect RCON if the server is running but RCON dropped
+      if (mc.running && !ctx.rconConnected) {
+        await ctx.connectRcon();
+      }
       const m = await collectMetrics({ mc, rconCmd: ctx.rconCmd, rconConnected: ctx.rconConnected, config });
       payload = {
         type: 'status',
