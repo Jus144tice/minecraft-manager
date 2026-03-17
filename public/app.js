@@ -445,11 +445,17 @@ function onTabActivate(tab) {
     loadBackups();
     loadBackupSchedule();
   }
+  if (tab === 'access') {
+    loadRoleReference();
+    if (can('panel.manage_users')) loadAccessControlUsers();
+    if (can('players.manage_ops')) loadOps();
+    checkDiscordTabVisibility();
+    if (can('panel.configure')) loadPermissionPolicy();
+  }
   if (tab === 'settings') {
     loadAppConfig();
     loadServerProps();
     loadJvmArgs();
-    if (can('panel.manage_users')) loadPanelUsers();
   }
 }
 
@@ -458,8 +464,13 @@ let activeModsSubtab = 'installed';
 function onSubtabActivate(subtab) {
   if (subtab === 'online') loadOnlinePlayers();
   if (subtab === 'all-players') loadAllPlayers();
-  if (subtab === 'ops') loadOps();
   if (subtab === 'whitelist') loadWhitelist();
+  // Access Control subtabs
+  if (subtab === 'ac-roles') loadRoleReference();
+  if (subtab === 'ac-users') loadAccessControlUsers();
+  if (subtab === 'ac-ops') loadOps();
+  if (subtab === 'ac-discord') loadDiscordRoles();
+  if (subtab === 'ac-policy') loadPermissionPolicy();
   if (subtab === 'bans') loadBans();
   if (subtab === 'server-props') loadServerProps();
   if (subtab === 'app-cfg') loadAppConfig();
@@ -2326,16 +2337,140 @@ $('btn-jvm-save-restart').addEventListener('click', async () => {
   }
 });
 
-// --- Settings: Panel Users ---
+// ============================================================
+// Access Control
+// ============================================================
 
-async function loadPanelUsers() {
-  const container = $('panel-users-list');
+// --- Role Reference ---
+
+async function loadRoleReference() {
   try {
-    const users = await GET('/users');
+    const roles = await GET('/roles');
+    const roleOrder = ['viewer', 'operator', 'moderator', 'admin', 'owner'];
+
+    // Role summary cards
+    const cards = roleOrder
+      .map((key) => {
+        const r = roles[key];
+        return `<div class="ac-role-card">
+          <div class="ac-role-card-header">
+            <span class="badge badge-role-${esc(key)}">${esc(r.name)}</span>
+            <span class="dim small">Level ${r.level}</span>
+          </div>
+          <p class="ac-role-desc">${esc(r.description)}</p>
+          <p class="dim small">${r.capabilities.length} capabilities</p>
+        </div>`;
+      })
+      .join('');
+    $('ac-role-summary').innerHTML = cards;
+
+    // Capability matrix
+    const allCaps = {};
+    for (const key of roleOrder) {
+      for (const cap of roles[key].capabilities) {
+        if (!allCaps[cap]) allCaps[cap] = {};
+        allCaps[cap][key] = true;
+      }
+    }
+
+    // Group capabilities by category prefix
+    const groups = {};
+    for (const cap of Object.keys(allCaps)) {
+      const dot = cap.indexOf('.');
+      const category = dot > 0 ? cap.substring(0, dot) : 'other';
+      if (!groups[category]) groups[category] = [];
+      groups[category].push(cap);
+    }
+
+    const capLabels = {
+      'panel.view': 'View dashboard',
+      'panel.configure': 'Configure panel & server settings',
+      'panel.manage_users': 'Manage user accounts & roles',
+      'panel.link_identities': 'Manage identity links for others',
+      'server.view_status': 'View server status & metrics',
+      'server.view_logs': 'View server logs',
+      'server.view_console': 'View live console',
+      'server.send_console_command': 'Send console commands',
+      'server.start': 'Start the server',
+      'server.stop': 'Stop the server',
+      'server.restart': 'Restart the server',
+      'server.manage_files': 'Browse & manage server files',
+      'server.manage_mods': 'Install, toggle & remove mods',
+      'server.manage_world': 'Regenerate or delete worlds',
+      'server.view_backups': 'View backups',
+      'server.create_backup': 'Create backups',
+      'server.restore_backup': 'Restore from backup',
+      'server.delete_backup': 'Delete backups',
+      'players.view': 'View player lists & profiles',
+      'players.manage_ops': 'Manage server operators',
+      'players.manage_whitelist': 'Manage whitelist',
+      'players.manage_bans': 'Ban, unban & kick players',
+      'chat.broadcast': 'Broadcast messages to server',
+      'discord.use_commands': 'Use read-only Discord commands',
+      'discord.use_control': 'Use server-control Discord commands',
+      'discord.link_self': 'Link own Discord account',
+      'discord.manage': 'Configure Discord integration',
+      'identity.link_self': 'Link own Minecraft account',
+      'identity.view_links': 'View all identity links',
+      'audit.view': 'View audit logs',
+    };
+
+    const categoryNames = {
+      panel: 'Panel',
+      server: 'Server',
+      players: 'Players',
+      chat: 'Chat',
+      discord: 'Discord',
+      identity: 'Identity',
+      audit: 'Audit',
+    };
+    const categoryOrder = ['panel', 'server', 'players', 'chat', 'discord', 'identity', 'audit'];
+
+    let matrixRows = '';
+    for (const cat of categoryOrder) {
+      const caps = groups[cat];
+      if (!caps) continue;
+      matrixRows += `<tr class="ac-matrix-category"><td colspan="${roleOrder.length + 1}"><strong>${esc(categoryNames[cat] || cat)}</strong></td></tr>`;
+      for (const cap of caps) {
+        const label = capLabels[cap] || cap;
+        const cells = roleOrder
+          .map((r) => `<td class="ac-matrix-check">${allCaps[cap][r] ? '&#10003;' : ''}</td>`)
+          .join('');
+        matrixRows += `<tr><td class="ac-matrix-cap">${esc(label)}</td>${cells}</tr>`;
+      }
+    }
+
+    $('ac-capability-matrix').innerHTML = `<table class="ac-matrix-table">
+      <thead><tr><th>Capability</th>${roleOrder.map((r) => `<th class="ac-matrix-role-header"><span class="badge badge-role-${esc(r)}">${esc(roles[r].name)}</span></th>`).join('')}</tr></thead>
+      <tbody>${matrixRows}</tbody>
+    </table>`;
+  } catch (err) {
+    $('ac-role-summary').innerHTML = `<p class="dim">Could not load roles: ${esc(err.message)}</p>`;
+  }
+}
+
+// --- Panel Users (unified with linked identities) ---
+
+async function loadAccessControlUsers() {
+  const container = $('ac-users-list');
+  try {
+    const [users, panelLinks, discordLinks] = await Promise.all([
+      GET('/users'),
+      GET('/panel-links'),
+      GET('/players/discord-links'),
+    ]);
+
     if (!users.length) {
       container.innerHTML = '<p class="dim">No users found. Users appear after logging in.</p>';
       return;
     }
+
+    // Build lookup maps
+    const panelLinkMap = {};
+    for (const link of panelLinks) panelLinkMap[link.email || link.user_email] = link;
+    const discordByMc = {};
+    for (const link of discordLinks) discordByMc[link.minecraftName?.toLowerCase()] = link;
+
     const roleOptions = ['viewer', 'operator', 'moderator', 'admin', 'owner'];
     const rows = users
       .map((u) => {
@@ -2351,12 +2486,26 @@ async function loadPanelUsers() {
         const deleteBtn = isSelf
           ? ''
           : `<button class="btn btn-xs btn-danger" data-action="delete-user" data-email="${esc(u.email)}" title="Remove user">&#10005;</button>`;
+
+        // Linked MC identity
+        const pLink = panelLinkMap[u.email];
+        const mcCell = pLink
+          ? `<span class="identity-chip" title="Linked: ${esc(pLink.minecraftName)}">${esc(pLink.minecraftName)}${pLink.verified ? ' &#10003;' : ''}</span>`
+          : '<span class="identity-chip unlinked">Not linked</span>';
+
+        // Linked Discord identity (through MC name)
+        const dLink = pLink ? discordByMc[pLink.minecraftName?.toLowerCase()] : null;
+        const discordCell = dLink
+          ? `<span class="identity-chip" title="Discord ID: ${esc(dLink.discordId)}">${esc(dLink.discordId)}</span>`
+          : '<span class="identity-chip unlinked">-</span>';
+
         return `<tr>
           <td>${esc(u.name || '')} ${isSelf ? '<span class="dim">(you)</span>' : ''}</td>
           <td>${esc(u.email)}</td>
-          <td>${esc(u.provider || '')}</td>
           <td>${roleBadge}</td>
           <td>${roleSelect}</td>
+          <td>${mcCell}</td>
+          <td>${discordCell}</td>
           <td>${lastLogin}</td>
           <td>${deleteBtn}</td>
         </tr>`;
@@ -2365,16 +2514,14 @@ async function loadPanelUsers() {
 
     container.innerHTML = `<table class="data-table">
       <thead><tr>
-        <th>Name</th><th>Email</th><th>Provider</th><th>Current Role</th><th>Set Role</th><th>Last Login</th><th>Actions</th>
+        <th>Name</th><th>Email</th><th>Role</th><th>Set Role</th><th>MC Player</th><th>Discord</th><th>Last Login</th><th>Actions</th>
       </tr></thead>
       <tbody>${rows}</tbody>
     </table>`;
 
-    // Bind role change selects
     container.querySelectorAll('.role-select').forEach((sel) => {
       sel.addEventListener('change', () => setUserRole(sel.dataset.email, sel.value));
     });
-    // Bind delete buttons
     container.querySelectorAll('[data-action="delete-user"]').forEach((btn) => {
       btn.addEventListener('click', () => deleteUserAccount(btn.dataset.email));
     });
@@ -2386,16 +2533,16 @@ async function loadPanelUsers() {
 async function setUserRole(email, role) {
   const roleName = ROLE_NAMES[role] || role;
   if (!confirm(`Change ${email} to ${roleName}?`)) {
-    loadPanelUsers(); // reset dropdown
+    loadAccessControlUsers();
     return;
   }
   try {
     await PUT(`/users/${encodeURIComponent(email)}/role`, { role });
-    flash('panel-users-msg', `${email} is now ${roleName}.`);
-    loadPanelUsers();
+    flash('ac-users-msg', `${email} is now ${roleName}.`);
+    loadAccessControlUsers();
   } catch (err) {
-    flash('panel-users-msg', err.message, true);
-    loadPanelUsers(); // reset dropdown
+    flash('ac-users-msg', err.message, true);
+    loadAccessControlUsers();
   }
 }
 
@@ -2408,12 +2555,257 @@ async function deleteUserAccount(email) {
     }).then(async (r) => {
       if (!r.ok) throw new Error((await r.json()).error || r.statusText);
     });
-    flash('panel-users-msg', `${email} removed.`);
-    loadPanelUsers();
+    flash('ac-users-msg', `${email} removed.`);
+    loadAccessControlUsers();
   } catch (err) {
-    flash('panel-users-msg', err.message, true);
+    flash('ac-users-msg', err.message, true);
   }
 }
+
+// --- Discord Roles ---
+
+async function checkDiscordTabVisibility() {
+  try {
+    const status = await GET('/discord/status');
+    const tabBtn = document.getElementById('ac-discord-tab-btn');
+    if (tabBtn) tabBtn.style.display = status.enabled ? '' : 'none';
+  } catch {
+    const tabBtn = document.getElementById('ac-discord-tab-btn');
+    if (tabBtn) tabBtn.style.display = 'none';
+  }
+}
+
+async function loadDiscordRoles() {
+  const container = $('ac-discord-content');
+  try {
+    const status = await GET('/discord/status');
+    if (!status.enabled) {
+      container.innerHTML =
+        '<div class="legend-box">Discord integration is not enabled. Configure it in <strong>Settings &rarr; App Config</strong> to manage Discord role mappings.</div>';
+      return;
+    }
+
+    let html = `<div class="legend-box">
+      Discord bot is <strong>connected</strong> to <strong>${esc(status.guildName || 'Unknown Server')}</strong>.
+      Discord role mappings can be configured in the <strong>Permission Policy</strong> tab.
+    </div>`;
+
+    // Show Discord-MC identity links
+    if (can('identity.view_links')) {
+      const links = await GET('/players/discord-links');
+      if (links.length) {
+        const rows = links
+          .map(
+            (l) => `<tr>
+            <td>${esc(l.discordId)}</td>
+            <td><strong class="player-name-link" data-action="player-profile" data-name="${esc(l.minecraftName)}">${esc(l.minecraftName)}</strong></td>
+            <td>${esc(l.linkedBy || '-')}</td>
+            <td>${l.linkedAt ? new Date(l.linkedAt).toLocaleDateString() : '-'}</td>
+            ${can('panel.link_identities') ? `<td><button class="btn btn-xs btn-danger" data-action="unlink-discord" data-id="${esc(l.discordId)}" title="Unlink">&#10005;</button></td>` : ''}
+          </tr>`,
+          )
+          .join('');
+        html += `<h3 class="ac-section-heading">Discord &harr; Minecraft Links</h3>
+          <div class="player-table-wrap"><table class="data-table">
+            <thead><tr><th>Discord ID</th><th>MC Player</th><th>Linked By</th><th>Linked</th>${can('panel.link_identities') ? '<th>Actions</th>' : ''}</tr></thead>
+            <tbody>${rows}</tbody>
+          </table></div>`;
+      } else {
+        html += '<p class="dim" style="margin-top:1rem">No Discord &harr; Minecraft links found.</p>';
+      }
+    }
+
+    container.innerHTML = html;
+
+    // Bind unlink buttons
+    container.querySelectorAll('[data-action="unlink-discord"]').forEach((btn) => {
+      btn.addEventListener('click', async () => {
+        if (!confirm(`Unlink Discord ID ${btn.dataset.id}?`)) return;
+        try {
+          await DEL(`/players/discord-link/${encodeURIComponent(btn.dataset.id)}`);
+          loadDiscordRoles();
+        } catch (err) {
+          alert(err.message);
+        }
+      });
+    });
+  } catch (err) {
+    container.innerHTML = `<p class="dim">Could not load Discord status: ${esc(err.message)}</p>`;
+  }
+}
+
+// --- Permission Policy ---
+
+async function loadPermissionPolicy() {
+  try {
+    const config = await GET('/config');
+    const auth = config.authorization || {};
+    const currentPolicy = auth.permissionPolicy || 'isolated';
+    const opMapping = auth.opLevelMapping || {};
+    const discordMapping = auth.discordRoleMapping || {};
+
+    const policies = [
+      {
+        key: 'isolated',
+        name: 'Isolated',
+        desc: 'Each identity channel (panel, Discord, Minecraft) has independent permissions. Linking accounts does not share capabilities between channels. This is the safest default.',
+      },
+      {
+        key: 'inherit-panel',
+        name: 'Inherit Panel',
+        desc: "Linked Discord and Minecraft identities inherit ALL of the panel user's capabilities. Use with caution — a panel Admin would have full admin powers through Discord commands too.",
+      },
+      {
+        key: 'panel-ceiling',
+        name: 'Panel Ceiling',
+        desc: "Linked identities use the HIGHER of their own channel role and the panel user's role. The panel role can elevate but never restrict. A good middle-ground option.",
+      },
+    ];
+
+    const policyHtml = policies
+      .map(
+        (p) => `<label class="ac-policy-card ${p.key === currentPolicy ? 'active' : ''}">
+        <input type="radio" name="ac-policy" value="${p.key}" ${p.key === currentPolicy ? 'checked' : ''} />
+        <strong>${esc(p.name)}</strong>
+        <span class="ac-policy-desc">${esc(p.desc)}</span>
+      </label>`,
+      )
+      .join('');
+    $('ac-policy-options').innerHTML = policyHtml;
+
+    // Bind radio cards to toggle active class
+    $('ac-policy-options')
+      .querySelectorAll('input[name="ac-policy"]')
+      .forEach((radio) => {
+        radio.addEventListener('change', () => {
+          $('ac-policy-options')
+            .querySelectorAll('.ac-policy-card')
+            .forEach((c) => c.classList.remove('active'));
+          radio.closest('.ac-policy-card').classList.add('active');
+        });
+      });
+
+    // Op level mapping
+    const roleOptions = ['viewer', 'operator', 'moderator', 'admin', 'owner'];
+    const defaultOpMap = { 1: 'viewer', 2: 'operator', 3: 'moderator', 4: 'admin' };
+    const opRows = [1, 2, 3, 4]
+      .map((level) => {
+        const mapped = opMapping[level] ?? defaultOpMap[level] ?? null;
+        return `<tr>
+          <td><span class="level-badge level-${level}">Level ${level}</span></td>
+          <td><select class="ac-op-map-select" data-level="${level}">
+            <option value="" ${!mapped ? 'selected' : ''}>None</option>
+            ${roleOptions.map((r) => `<option value="${r}" ${r === mapped ? 'selected' : ''}>${ROLE_NAMES[r]}</option>`).join('')}
+          </select></td>
+        </tr>`;
+      })
+      .join('');
+    $('ac-op-mapping').innerHTML = `<table class="data-table">
+      <thead><tr><th>MC Op Level</th><th>Panel Role</th></tr></thead>
+      <tbody>${opRows}</tbody>
+    </table>`;
+
+    // Discord role mapping (conditional)
+    try {
+      const discStatus = await GET('/discord/status');
+      if (discStatus.enabled) {
+        document.getElementById('ac-discord-mapping-heading').style.display = '';
+        document.getElementById('ac-discord-mapping-hint').style.display = '';
+        document.getElementById('ac-discord-mapping').style.display = '';
+
+        const mappingEntries = Object.entries(discordMapping);
+        let dmHtml = '';
+        if (mappingEntries.length) {
+          const dmRows = mappingEntries
+            .map(
+              ([roleId, role]) => `<tr>
+              <td><input type="text" class="ac-discord-role-id" value="${esc(roleId)}" style="width:180px" /></td>
+              <td><select class="ac-discord-role-select">
+                ${roleOptions.map((r) => `<option value="${r}" ${r === role ? 'selected' : ''}>${ROLE_NAMES[r]}</option>`).join('')}
+              </select></td>
+              <td><button class="btn btn-xs btn-danger ac-discord-map-remove" title="Remove">&#10005;</button></td>
+            </tr>`,
+            )
+            .join('');
+          dmHtml = `<table class="data-table" id="ac-discord-map-table">
+            <thead><tr><th>Discord Role ID</th><th>Panel Role</th><th></th></tr></thead>
+            <tbody>${dmRows}</tbody>
+          </table>`;
+        }
+        dmHtml +=
+          '<button class="btn btn-sm btn-ghost" id="btn-add-discord-map" style="margin-top:0.5rem">+ Add Mapping</button>';
+        $('ac-discord-mapping').innerHTML = dmHtml;
+
+        // Bind add button
+        const addBtn = document.getElementById('btn-add-discord-map');
+        if (addBtn) {
+          addBtn.addEventListener('click', () => {
+            let table = document.getElementById('ac-discord-map-table');
+            if (!table) {
+              $('ac-discord-mapping').insertAdjacentHTML(
+                'afterbegin',
+                `<table class="data-table" id="ac-discord-map-table">
+                <thead><tr><th>Discord Role ID</th><th>Panel Role</th><th></th></tr></thead>
+                <tbody></tbody>
+              </table>`,
+              );
+              table = document.getElementById('ac-discord-map-table');
+            }
+            const tbody = table.querySelector('tbody');
+            tbody.insertAdjacentHTML(
+              'beforeend',
+              `<tr>
+              <td><input type="text" class="ac-discord-role-id" placeholder="Role ID" style="width:180px" /></td>
+              <td><select class="ac-discord-role-select">
+                ${roleOptions.map((r) => `<option value="${r}">${ROLE_NAMES[r]}</option>`).join('')}
+              </select></td>
+              <td><button class="btn btn-xs btn-danger ac-discord-map-remove" title="Remove">&#10005;</button></td>
+            </tr>`,
+            );
+            bindDiscordMapRemoveButtons();
+          });
+        }
+        bindDiscordMapRemoveButtons();
+      }
+    } catch {
+      // Discord not available, hide mapping sections
+    }
+  } catch (err) {
+    $('ac-policy-options').innerHTML = `<p class="dim">Could not load policy: ${esc(err.message)}</p>`;
+  }
+}
+
+function bindDiscordMapRemoveButtons() {
+  document.querySelectorAll('.ac-discord-map-remove').forEach((btn) => {
+    btn.onclick = () => btn.closest('tr').remove();
+  });
+}
+
+document.getElementById('btn-save-policy')?.addEventListener('click', async () => {
+  const policy = document.querySelector('input[name="ac-policy"]:checked')?.value || 'isolated';
+
+  // Collect op level mapping
+  const opLevelMapping = {};
+  document.querySelectorAll('.ac-op-map-select').forEach((sel) => {
+    const level = sel.dataset.level;
+    opLevelMapping[level] = sel.value || null;
+  });
+
+  // Collect discord role mapping
+  const discordRoleMapping = {};
+  document.querySelectorAll('#ac-discord-map-table tbody tr').forEach((row) => {
+    const roleId = row.querySelector('.ac-discord-role-id')?.value?.trim();
+    const role = row.querySelector('.ac-discord-role-select')?.value;
+    if (roleId && role) discordRoleMapping[roleId] = role;
+  });
+
+  try {
+    await POST('/config', { authorization: { permissionPolicy: policy, opLevelMapping, discordRoleMapping } });
+    flash('ac-policy-msg', 'Policy settings saved.');
+  } catch (err) {
+    flash('ac-policy-msg', err.message, true);
+  }
+});
 
 // ============================================================
 // Backups

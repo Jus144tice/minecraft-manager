@@ -12,6 +12,7 @@ export class MinecraftProcess extends EventEmitter {
     this.stopping = false;
     this.logs = []; // circular buffer
     this.startTime = null;
+    this.readyTime = null; // set when RCON connects (server is joinable)
   }
 
   start(launch, cwd) {
@@ -31,6 +32,7 @@ export class MinecraftProcess extends EventEmitter {
     this.running = true;
     this.stopping = false;
     this.startTime = Date.now();
+    this.readyTime = null;
     this._log('[Manager] Server process starting...');
     this._log(`[Manager] CWD: ${cwd}`);
     this._log(`[Manager] Command: ${cmd} ${args.join(' ')}`);
@@ -53,11 +55,12 @@ export class MinecraftProcess extends EventEmitter {
     });
 
     this.proc.on('close', (code) => {
-      const uptime = this.getUptime();
+      const uptime = this.startTime ? Math.floor((Date.now() - this.startTime) / 1000) : null;
       this.running = false;
       this.stopping = false;
       this.proc = null;
       this.startTime = null;
+      this.readyTime = null;
       this._log(`[Manager] Server stopped (exit code: ${code ?? 'unknown'})`);
       this.emit('stopped', code, uptime);
     });
@@ -67,6 +70,7 @@ export class MinecraftProcess extends EventEmitter {
       this.stopping = false;
       this.proc = null;
       this.startTime = null;
+      this.readyTime = null;
       this._log(`[Manager] Failed to start server: ${err.message}`);
       this.emit('error', err);
     });
@@ -93,8 +97,8 @@ export class MinecraftProcess extends EventEmitter {
   }
 
   getUptime() {
-    if (!this.running || !this.startTime) return null;
-    return Math.floor((Date.now() - this.startTime) / 1000);
+    if (!this.running || !this.readyTime) return null;
+    return Math.floor((Date.now() - this.readyTime) / 1000);
   }
 
   _log(line) {

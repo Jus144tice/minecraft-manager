@@ -69,6 +69,7 @@
           <button class="tab-btn" data-tab="mods">Mods</button>
           <button class="tab-btn" data-tab="players">Players</button>
           <button class="tab-btn" data-tab="backups" data-cap="server.view_backups">Backups</button>
+          <button class="tab-btn" data-tab="access">Access Control</button>
           <button class="tab-btn admin-only" data-tab="settings">Settings</button>
         </nav>
         <div class="topbar-right">
@@ -744,7 +745,6 @@
         <div class="subtab-nav">
           <button class="subtab-btn active" data-subtab="online">Online</button>
           <button class="subtab-btn" data-subtab="all-players">All Players</button>
-          <button class="subtab-btn" data-subtab="ops">Operators</button>
           <button class="subtab-btn" data-subtab="whitelist">Whitelist</button>
           <button class="subtab-btn" data-subtab="bans">Bans</button>
         </div>
@@ -759,28 +759,6 @@
         <!-- All Players -->
         <div id="subtab-all-players" class="subtab-content hidden">
           <div id="all-players-list" class="player-table-wrap">
-            <p class="dim">Loading...</p>
-          </div>
-        </div>
-
-        <!-- Ops -->
-        <div id="subtab-ops" class="subtab-content hidden">
-          <div class="legend-box">
-            <strong>Minecraft Native Operator Levels</strong> (in-game permissions, separate from panel roles):<br />
-            Level 1 = bypass spawn protection &nbsp;|&nbsp; Level 2 = most commands &nbsp;|&nbsp; Level 3 = /kick, /ban,
-            manage players &nbsp;|&nbsp; Level 4 = /stop, all commands
-          </div>
-          <div class="add-row" data-cap="players.manage_ops">
-            <input type="text" id="op-name" placeholder="Player name" />
-            <select id="op-level">
-              <option value="4">Level 4 (Admin)</option>
-              <option value="3">Level 3 (Moderator)</option>
-              <option value="2">Level 2 (Builder)</option>
-              <option value="1">Level 1 (Basic)</option>
-            </select>
-            <button class="btn btn-primary" id="btn-add-op">Add Operator</button>
-          </div>
-          <div id="ops-list" class="player-table-wrap">
             <p class="dim">Loading...</p>
           </div>
         </div>
@@ -1034,6 +1012,113 @@
         </div>
       </div>
 
+      <!-- Tab: Access Control -->
+      <section id="tab-access" class="tab-content hidden">
+        <div class="page-header">
+          <h2>Access Control</h2>
+        </div>
+        <div class="subtab-nav">
+          <button class="subtab-btn active" data-subtab="ac-roles">Role Reference</button>
+          <button class="subtab-btn" data-subtab="ac-users" data-cap="panel.manage_users">Panel Users</button>
+          <button class="subtab-btn" data-subtab="ac-ops" data-cap="players.manage_ops">MC Operators</button>
+          <button class="subtab-btn" data-subtab="ac-discord" id="ac-discord-tab-btn">Discord Roles</button>
+          <button class="subtab-btn" data-subtab="ac-policy" data-cap="panel.configure">Permission Policy</button>
+        </div>
+
+        <!-- Role Reference (visible to all authenticated users) -->
+        <div id="subtab-ac-roles" class="subtab-content">
+          <div class="legend-box">
+            This panel uses <strong>role-based access control (RBAC)</strong>. Each user is assigned a role that
+            determines what they can do. Roles are cumulative &mdash; each role includes all capabilities of the roles
+            below it, plus its own.
+          </div>
+          <div id="ac-role-summary" class="ac-role-cards">
+            <p class="dim">Loading...</p>
+          </div>
+          <h3 class="ac-section-heading">Capability Matrix</h3>
+          <p class="dim small">
+            A checkmark means the role grants this capability. Each role includes all capabilities from lower roles.
+          </p>
+          <div id="ac-capability-matrix" class="player-table-wrap">
+            <p class="dim">Loading...</p>
+          </div>
+        </div>
+
+        <!-- Panel Users (Owner only) -->
+        <div id="subtab-ac-users" class="subtab-content hidden" data-cap="panel.manage_users">
+          <div class="legend-box">
+            Manage panel accounts and assign roles. Users appear here after they sign in for the first time. Use the
+            <strong>Role Reference</strong> tab to see what each role can do.
+          </div>
+          <div id="ac-users-list">
+            <p class="dim">Loading...</p>
+          </div>
+          <p id="ac-users-msg" class="control-msg"></p>
+        </div>
+
+        <!-- MC Operators -->
+        <div id="subtab-ac-ops" class="subtab-content hidden" data-cap="players.manage_ops">
+          <div class="legend-box">
+            <strong>Minecraft Operator Levels</strong> control in-game permissions and are separate from panel roles.<br />
+            Level 1 = bypass spawn protection &nbsp;|&nbsp; Level 2 = most commands &nbsp;|&nbsp; Level 3 = /kick, /ban,
+            manage players &nbsp;|&nbsp; Level 4 = /stop, all commands<br />
+            <span class="dim">Op levels can be mapped to panel roles via the Permission Policy tab.</span>
+          </div>
+          <div class="add-row" data-cap="players.manage_ops">
+            <input type="text" id="op-name" placeholder="Player name" />
+            <select id="op-level">
+              <option value="4">Level 4 (Admin)</option>
+              <option value="3">Level 3 (Moderator)</option>
+              <option value="2">Level 2 (Builder)</option>
+              <option value="1">Level 1 (Basic)</option>
+            </select>
+            <button class="btn btn-primary" id="btn-add-op">Add Operator</button>
+          </div>
+          <div id="ops-list" class="player-table-wrap">
+            <p class="dim">Loading...</p>
+          </div>
+        </div>
+
+        <!-- Discord Roles (conditional on Discord integration) -->
+        <div id="subtab-ac-discord" class="subtab-content hidden">
+          <div id="ac-discord-content">
+            <p class="dim">Loading...</p>
+          </div>
+        </div>
+
+        <!-- Permission Policy (Admin+) -->
+        <div id="subtab-ac-policy" class="subtab-content hidden" data-cap="panel.configure">
+          <div class="legend-box">
+            <strong>Permission policies</strong> control how linked identities interact. When a panel user links their
+            Minecraft or Discord account, this policy determines whether the linked identity inherits the panel user's
+            permissions.
+          </div>
+          <div id="ac-policy-options">
+            <p class="dim">Loading...</p>
+          </div>
+          <h3 class="ac-section-heading">Op Level &rarr; Panel Role Mapping</h3>
+          <p class="dim small">
+            Map Minecraft operator levels to panel roles. These apply when a player joins and has operator status.
+          </p>
+          <div id="ac-op-mapping">
+            <p class="dim">Loading...</p>
+          </div>
+          <h3 class="ac-section-heading" id="ac-discord-mapping-heading" style="display: none">
+            Discord Role &rarr; Panel Role Mapping
+          </h3>
+          <p class="dim small" id="ac-discord-mapping-hint" style="display: none">
+            Map Discord server roles to panel roles by Discord Role ID.
+          </p>
+          <div id="ac-discord-mapping" style="display: none">
+            <p class="dim">Loading...</p>
+          </div>
+          <div class="form-actions" style="margin-top: 1rem">
+            <button class="btn btn-primary" id="btn-save-policy">Save Policy Settings</button>
+            <span id="ac-policy-msg" class="control-msg"></span>
+          </div>
+        </div>
+      </section>
+
       <!-- Tab: Settings -->
       <section id="tab-settings" class="tab-content hidden">
         <div class="page-header">
@@ -1043,7 +1128,6 @@
           <button class="subtab-btn active" data-subtab="app-cfg">App Config</button>
           <button class="subtab-btn" data-subtab="server-props">server.properties</button>
           <button class="subtab-btn" data-subtab="jvm-args">JVM Arguments</button>
-          <button class="subtab-btn" data-subtab="panel-users" data-cap="panel.manage_users">Panel Users</button>
         </div>
 
         <!-- App config -->
@@ -1189,20 +1273,6 @@
             </div>
             <p id="jvm-args-msg" class="control-msg"></p>
           </form>
-        </div>
-
-        <!-- Panel Users -->
-        <div id="subtab-panel-users" class="subtab-content hidden" data-cap="panel.manage_users">
-          <p class="legend-box">
-            Manage panel accounts and assign roles. Roles determine what each user can do:
-            <strong>Viewer</strong> (read-only), <strong>Operator</strong> (start/stop server, backups),
-            <strong>Moderator</strong> (manage players, console), <strong>Admin</strong> (full config),
-            <strong>Owner</strong> (user management, world ops).
-          </p>
-          <div id="panel-users-list">
-            <p class="dim">Loading...</p>
-          </div>
-          <p id="panel-users-msg" class="control-msg"></p>
         </div>
       </section>
 

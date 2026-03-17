@@ -64,6 +64,7 @@ export function createServices({ config, saveConfig, loadConfig, mc, broadcast, 
     try {
       await rcon.connect();
       info('[RCON] Connected');
+      if (!mc.readyTime) mc.readyTime = Date.now();
       return true;
     } catch {
       rcon = null;
