@@ -187,9 +187,16 @@
 
         <div class="control-section operator-up">
           <h3>Quick Broadcast</h3>
-          <div class="input-row">
-            <input type="text" id="say-input" placeholder="Message to all players..." />
-            <button class="btn btn-primary" id="btn-say">Send</button>
+          <div id="broadcast-blocked" class="hidden">
+            <p class="dim" style="font-size: 0.85rem">
+              RCON is not connected. The server must be fully started before you can broadcast messages.
+            </p>
+          </div>
+          <div id="broadcast-ready" class="hidden">
+            <div class="input-row">
+              <input type="text" id="say-input" placeholder="Message to all players..." />
+              <button class="btn btn-primary" id="btn-say">Send</button>
+            </div>
           </div>
         </div>
 

@@ -827,6 +827,19 @@ function updateDashboard(s) {
     $('stat-mod-count').className = 'stat-value';
   }
 
+  // Quick Broadcast: enable only when RCON is connected
+  const broadcastReady = $('broadcast-ready');
+  const broadcastBlocked = $('broadcast-blocked');
+  if (broadcastReady && broadcastBlocked) {
+    if (s.rconConnected) {
+      hide(broadcastBlocked);
+      show(broadcastReady);
+    } else {
+      hide(broadcastReady);
+      show(broadcastBlocked);
+    }
+  }
+
   // MC Version card
   const mcVersionEl = $('stat-mc-version');
   if (s.running && s.minecraftVersion && s.minecraftVersion !== 'unknown') {
