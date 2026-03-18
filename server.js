@@ -19,10 +19,10 @@ import {
   checkWsOrigin,
   requireCapability,
 } from './src/middleware.js';
-import { getCapabilitiesForRole } from './src/permissions.js';
+import { getCapabilitiesForRole, roleToAdminLevel } from './src/permissions.js';
 import { validateConfig, migrateLaunchConfig, launchToString } from './src/validate.js';
 import { info, setNotifyHook } from './src/audit.js';
-import { initDatabase } from './src/db.js';
+import { initDatabase, getUser } from './src/db.js';
 import * as Backup from './src/backup.js';
 import { createServices } from './src/services.js';
 import { collectMetrics, collectDemoMetrics } from './src/metrics.js';
@@ -206,15 +206,32 @@ app.get('/api/auth/providers', (req, res) => {
 
 app.get('/api/session', async (req, res) => {
   if (req.session?.user) {
-    const { email, name, provider, adminLevel, role, loginAt } = req.session.user;
-    const capabilities = [...getCapabilitiesForRole(role || 'viewer')];
+    const { email, name, provider, loginAt } = req.session.user;
+
+    // Always read the current role from the DB so that role changes
+    // (e.g. promotion to owner) take effect without re-login.
+    let role = req.session.user.role || 'viewer';
+    try {
+      const dbUser = await getUser(email);
+      if (dbUser?.role) {
+        role = dbUser.role;
+        // Sync back into the session so subsequent requests are fast
+        if (req.session.user.role !== role) {
+          req.session.user.role = role;
+        }
+      }
+    } catch {
+      // DB unavailable — use cached session role
+    }
+
+    const capabilities = [...getCapabilitiesForRole(role)];
     const session = {
       loggedIn: true,
       email,
       name,
       provider,
-      role: role || 'viewer',
-      adminLevel: adminLevel || 0,
+      role,
+      adminLevel: roleToAdminLevel(role),
       capabilities,
       loginAt,
       dbConnected: dbReady,
