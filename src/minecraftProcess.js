@@ -5,8 +5,9 @@ import { EventEmitter } from 'events';
 const MAX_LOGS = 2000;
 
 export class MinecraftProcess extends EventEmitter {
-  constructor() {
+  constructor({ spawn: spawnFn } = {}) {
     super();
+    this._spawn = spawnFn || spawn;
     this.proc = null;
     this.running = false;
     this.stopping = false;
@@ -22,10 +23,11 @@ export class MinecraftProcess extends EventEmitter {
     const cmd = launch.executable;
     const args = launch.args || [];
 
-    this.proc = spawn(cmd, args, {
+    this.proc = this._spawn(cmd, args, {
       cwd,
       stdio: ['pipe', 'pipe', 'pipe'],
       shell: false,
+      windowsHide: true,
       env: launch.env ? { ...process.env, ...launch.env } : undefined,
     });
 
@@ -66,11 +68,19 @@ export class MinecraftProcess extends EventEmitter {
     });
 
     this.proc.on('error', (err) => {
+      // Destroy stdio streams to prevent dangling handles (especially on
+      // spawn-failure where 'close' may never fire).
+      const p = this.proc;
       this.running = false;
       this.stopping = false;
       this.proc = null;
       this.startTime = null;
       this.readyTime = null;
+      if (p) {
+        p.stdin?.destroy();
+        p.stdout?.destroy();
+        p.stderr?.destroy();
+      }
       this._log(`[Manager] Failed to start server: ${err.message}`);
       this.emit('error', err);
     });

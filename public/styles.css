@@ -1868,8 +1868,7 @@ textarea:focus {
   .tab-btn {
     padding: 0.4rem 0.6rem;
     font-size: 0.78rem;
-    /* Ensure min 44px touch target height */
-    min-height: 36px;
+    min-height: 44px;
   }
 
   /* Server badge: smaller on mobile */
@@ -1982,7 +1981,7 @@ textarea:focus {
   .action-btn-grid .btn {
     font-size: 0.75rem;
     padding: 0.3rem 0.55rem;
-    min-height: 32px;
+    min-height: 44px;
   }
 
   /* Control sections */
@@ -2104,7 +2103,7 @@ textarea:focus {
   .subtab-btn {
     padding: 0.5rem 0.75rem;
     font-size: 0.82rem;
-    min-height: 38px;
+    min-height: 44px;
   }
 
   /* Version modal rows */
@@ -2154,6 +2153,52 @@ textarea:focus {
     font-size: 0.72rem;
   }
 
+  /* Access Control: role cards stack on phones */
+  .ac-role-cards {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 0.5rem;
+  }
+  .ac-role-card {
+    padding: 0.6rem 0.75rem;
+  }
+  .ac-role-desc {
+    font-size: 0.75rem;
+  }
+
+  /* Access Control: capability matrix — smaller text, remove min-width */
+  .ac-matrix-table {
+    font-size: 0.72rem;
+  }
+  .ac-matrix-table th,
+  .ac-matrix-table td {
+    padding: 0.25rem 0.35rem;
+  }
+  .ac-matrix-role-header {
+    min-width: 50px;
+  }
+  .ac-matrix-cap {
+    padding-left: 0.5rem !important;
+  }
+
+  /* Access Control: policy cards — tighter padding, larger radio targets */
+  .ac-policy-card {
+    padding: 0.65rem 0.75rem;
+  }
+  .ac-policy-card label {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.5rem;
+  }
+  .ac-policy-card input[type='radio'] {
+    width: 20px;
+    height: 20px;
+    min-width: 20px;
+    margin-top: 0.1rem;
+  }
+  .ac-policy-desc {
+    font-size: 0.75rem;
+  }
+
   /* Prevent iOS auto-zoom on input focus (needs ≥16px) */
   input[type='text'],
   input[type='password'],
@@ -2168,6 +2213,9 @@ textarea:focus {
 /* Very small phones (≤380px) */
 @media (max-width: 380px) {
   .stat-grid {
+    grid-template-columns: 1fr;
+  }
+  .ac-role-cards {
     grid-template-columns: 1fr;
   }
   .topbar {

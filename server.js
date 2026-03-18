@@ -182,7 +182,7 @@ if (config.demoMode) ctx.startDemoActivityTimer();
 app.disable('x-powered-by');
 app.use(buildHelmet(process.env.APP_URL));
 app.use(sessionMiddleware);
-app.use(express.json({ limit: '1mb' }));
+app.use(express.json({ limit: '10mb' }));
 app.use(express.static(path.join(__dirname, 'public')));
 
 // Ops endpoints — unauthenticated so probes/scrapers work without sessions

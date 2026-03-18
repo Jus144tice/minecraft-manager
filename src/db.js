@@ -165,10 +165,10 @@ export async function setUserRole(email, roleName) {
   return rows[0] || null;
 }
 
-/** Count the number of admin users (admin_level >= 1 / role >= admin). */
+/** Count the number of admin-or-above users. */
 export async function countAdmins() {
   if (!pool) return 0;
-  const { rows } = await pool.query('SELECT COUNT(*) AS count FROM users WHERE admin_level >= 1');
+  const { rows } = await pool.query("SELECT COUNT(*) AS count FROM users WHERE role IN ('admin', 'owner')");
   return parseInt(rows[0].count, 10);
 }
 

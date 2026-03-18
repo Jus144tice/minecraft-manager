@@ -461,27 +461,31 @@ function onTabActivate(tab) {
 
 let activeModsSubtab = 'installed';
 
-function onSubtabActivate(subtab) {
-  if (subtab === 'online') loadOnlinePlayers();
-  if (subtab === 'all-players') loadAllPlayers();
-  if (subtab === 'whitelist') loadWhitelist();
-  // Access Control subtabs
-  if (subtab === 'ac-roles') loadRoleReference();
-  if (subtab === 'ac-users') loadAccessControlUsers();
-  if (subtab === 'ac-ops') loadOps();
-  if (subtab === 'ac-discord') loadDiscordRoles();
-  if (subtab === 'ac-policy') loadPermissionPolicy();
-  if (subtab === 'bans') loadBans();
-  if (subtab === 'server-props') loadServerProps();
-  if (subtab === 'app-cfg') loadAppConfig();
-  if (subtab === 'installed') {
+const subtabHandlers = {
+  online: () => loadOnlinePlayers(),
+  'all-players': () => loadAllPlayers(),
+  whitelist: () => loadWhitelist(),
+  'ac-roles': () => loadRoleReference(),
+  'ac-users': () => loadAccessControlUsers(),
+  'ac-ops': () => loadOps(),
+  'ac-discord': () => loadDiscordRoles(),
+  'ac-policy': () => loadPermissionPolicy(),
+  bans: () => loadBans(),
+  'server-props': () => loadServerProps(),
+  'app-cfg': () => loadAppConfig(),
+  installed: () => {
     activeModsSubtab = 'installed';
     renderMods();
-  }
-  if (subtab === 'browse') {
+  },
+  browse: () => {
     activeModsSubtab = 'browse';
     browseLoad();
-  }
+  },
+};
+
+function onSubtabActivate(subtab) {
+  const handler = subtabHandlers[subtab];
+  if (handler) handler();
 }
 
 // --- App init ---

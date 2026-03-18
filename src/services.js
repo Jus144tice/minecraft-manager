@@ -28,6 +28,7 @@ export function createServices({ config, saveConfig, loadConfig, mc, broadcast, 
     startTime: Date.now() - 3847000,
     activityIndex: 0,
     activityTimer: null,
+    startupTimers: [], // setTimeout IDs for demo startup log sequence
   };
 
   function getDemoUptime() {
@@ -50,6 +51,11 @@ export function createServices({ config, saveConfig, loadConfig, mc, broadcast, 
       clearInterval(demoState.activityTimer);
       demoState.activityTimer = null;
     }
+  }
+
+  function clearDemoStartupTimers() {
+    for (const id of demoState.startupTimers) clearTimeout(id);
+    demoState.startupTimers = [];
   }
 
   async function connectRcon() {
@@ -201,6 +207,7 @@ export function createServices({ config, saveConfig, loadConfig, mc, broadcast, 
     clearTimeout(autoRestartTimer);
     autoRestartTimer = null;
     stopDemoActivityTimer();
+    clearDemoStartupTimers();
     if (rcon) {
       try {
         rcon.disconnect();
@@ -229,6 +236,7 @@ export function createServices({ config, saveConfig, loadConfig, mc, broadcast, 
     getDemoUptime,
     startDemoActivityTimer,
     stopDemoActivityTimer,
+    clearDemoStartupTimers,
     connectRcon,
     scheduleRconConnect,
     rconCmd,

@@ -30,14 +30,16 @@ export default function serverRoutes(ctx) {
       ctx.demoState.running = true;
       ctx.demoState.startTime = Date.now();
       ctx.broadcast({ type: 'log', time: Date.now(), line: '[Manager] [DEMO] Starting demo server...' });
+      ctx.clearDemoStartupTimers();
       Demo.DEMO_STARTUP_LOGS.forEach((line, i) => {
-        setTimeout(() => {
+        const id = setTimeout(() => {
           ctx.broadcast({ type: 'log', time: Date.now(), line });
           if (i === Demo.DEMO_STARTUP_LOGS.length - 1) {
             ctx.broadcastStatus();
             ctx.startDemoActivityTimer();
           }
         }, i * 120);
+        ctx.demoState.startupTimers.push(id);
       });
       return res.json({ ok: true, message: '[DEMO] Server starting...' });
     }
@@ -70,6 +72,7 @@ export default function serverRoutes(ctx) {
       ctx.broadcast({ type: 'log', time: Date.now(), line: '[Manager] [DEMO] Server stopped.' });
       ctx.demoState.running = false;
       ctx.demoState.startTime = null;
+      ctx.clearDemoStartupTimers();
       ctx.stopDemoActivityTimer();
       ctx.broadcastStatus();
       return res.json({ ok: true, message: '[DEMO] Server stopped.' });
@@ -94,6 +97,7 @@ export default function serverRoutes(ctx) {
     if (ctx.config.demoMode) {
       ctx.demoState.running = false;
       ctx.demoState.startTime = null;
+      ctx.clearDemoStartupTimers();
       ctx.stopDemoActivityTimer();
       ctx.broadcast({ type: 'log', time: Date.now(), line: '[Manager] [DEMO] Process force-killed.' });
       ctx.broadcastStatus();
@@ -109,22 +113,25 @@ export default function serverRoutes(ctx) {
     if (ctx.config.demoMode) {
       ctx.demoState.running = false;
       ctx.demoState.startTime = null;
+      ctx.clearDemoStartupTimers();
       ctx.stopDemoActivityTimer();
       ctx.broadcast({ type: 'log', time: Date.now(), line: '[Manager] [DEMO] Restarting server...' });
       ctx.broadcastStatus();
-      setTimeout(async () => {
+      const restartId = setTimeout(() => {
         ctx.demoState.running = true;
         ctx.demoState.startTime = Date.now();
         Demo.DEMO_STARTUP_LOGS.forEach((line, i) => {
-          setTimeout(() => {
+          const id = setTimeout(() => {
             ctx.broadcast({ type: 'log', time: Date.now(), line });
             if (i === Demo.DEMO_STARTUP_LOGS.length - 1) {
               ctx.broadcastStatus();
               ctx.startDemoActivityTimer();
             }
           }, i * 120);
+          ctx.demoState.startupTimers.push(id);
         });
       }, 1500);
+      ctx.demoState.startupTimers.push(restartId);
       return res.json({ ok: true, message: '[DEMO] Restarting...' });
     }
     try {
