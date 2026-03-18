@@ -384,12 +384,17 @@ export default function modpackRoutes(ctx) {
     // Return immediately — downloads happen in background
     res.json({ jobId });
 
-    runMrpackImportAsync(jobId, cached, { unknownAction, selectedPaths, includeOverrides }, ctx, lockId, auditInfo).catch(
-      (err) => {
-        ctx.broadcast({ type: 'mrpack-complete', jobId, report: null, error: err.message });
-        if (lockId != null) releaseOp(lockId);
-      },
-    );
+    runMrpackImportAsync(
+      jobId,
+      cached,
+      { unknownAction, selectedPaths, includeOverrides },
+      ctx,
+      lockId,
+      auditInfo,
+    ).catch((err) => {
+      ctx.broadcast({ type: 'mrpack-complete', jobId, report: null, error: err.message });
+      if (lockId != null) releaseOp(lockId);
+    });
   });
 
   /**
@@ -612,7 +617,12 @@ function classifyFiles(cached, { unknownAction, selectedPaths }) {
 function runMrpackImportSync(cached, options) {
   const { toInstall, report } = classifyFiles(cached, options);
   for (const file of toInstall) {
-    report.installed.push({ path: file.path, filename: path.basename(file.path), size: file.fileSize || 0, classification: file._classification || 'unknown' });
+    report.installed.push({
+      path: file.path,
+      filename: path.basename(file.path),
+      size: file.fileSize || 0,
+      classification: file._classification || 'unknown',
+    });
   }
   return report;
 }
@@ -653,7 +663,12 @@ async function runMrpackImportAsync(jobId, cached, options, ctx, lockId, auditIn
         }
 
         await SF.saveMod(ctx.config.serverPath, filename, buffer, ctx.config.modsFolder);
-        report.installed.push({ path: file.path, filename, size: buffer.length, classification: file._classification || 'unknown' });
+        report.installed.push({
+          path: file.path,
+          filename,
+          size: buffer.length,
+          classification: file._classification || 'unknown',
+        });
       } catch (err) {
         report.failed.push({ path: file.path, error: err.message });
       }
