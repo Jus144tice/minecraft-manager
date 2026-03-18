@@ -20,6 +20,18 @@ export function isSafeModFilename(name) {
   return MOD_FILENAME_RE.test(name);
 }
 
+// Broader filename check for mrpack entries: mods (.jar, .jar.disabled), resource packs,
+// shader packs, and config files. Allows spaces, parens, and other common characters.
+// Still blocks path traversal and null bytes.
+const MRPACK_FILENAME_RE = /\.(jar|jar\.disabled|zip)$/i;
+
+export function isSafeMrpackFilename(name) {
+  if (typeof name !== 'string' || name.length === 0 || name.length > 255) return false;
+  if (name.includes('\0') || name.includes('/') || name.includes('\\')) return false;
+  if (name === '..' || name.startsWith('../') || name.includes('/../')) return false;
+  return MRPACK_FILENAME_RE.test(name);
+}
+
 // RCON / console commands: no null bytes, not empty, not absurdly long.
 export function isSafeCommand(cmd) {
   if (typeof cmd !== 'string') return false;

@@ -11,7 +11,7 @@ import * as Modrinth from '../modrinth.js';
 import * as Demo from '../demoData.js';
 import * as Mrpack from '../mrpack.js';
 import { audit } from '../audit.js';
-import { isSafeModFilename } from '../validate.js';
+import { isSafeModFilename, isSafeMrpackFilename } from '../validate.js';
 import { acquireOp, releaseOp } from '../operationLock.js';
 import { requireCapability } from '../middleware.js';
 
@@ -396,7 +396,7 @@ export default function modpackRoutes(ctx) {
       // Download and install each file
       for (const file of toInstall) {
         const filename = path.basename(file.path);
-        if (!isSafeModFilename(filename)) {
+        if (!isSafeMrpackFilename(filename)) {
           report.failed.push({ path: file.path, error: 'Unsafe filename' });
           continue;
         }

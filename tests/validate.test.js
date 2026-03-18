@@ -4,6 +4,7 @@ import assert from 'node:assert/strict';
 import {
   isValidMinecraftName,
   isSafeModFilename,
+  isSafeMrpackFilename,
   isSafeCommand,
   sanitizeReason,
   validateConfig,
@@ -73,6 +74,37 @@ test('isSafeModFilename: rejects path separators in name', () => {
 test('isSafeModFilename: rejects empty and non-string', () => {
   assert.equal(isSafeModFilename(''), false);
   assert.equal(isSafeModFilename(null), false);
+});
+
+// --- isSafeMrpackFilename ---
+
+test('isSafeMrpackFilename: accepts jar, jar.disabled, and zip files', () => {
+  assert.ok(isSafeMrpackFilename('create-1.20.1.jar'));
+  assert.ok(isSafeMrpackFilename('Terralith_1.20.x_v2.5.4.jar.disabled'));
+  assert.ok(isSafeMrpackFilename('ComplementaryReimagined_r5.5.1.zip'));
+});
+
+test('isSafeMrpackFilename: accepts filenames with spaces, parens, and plus signs', () => {
+  assert.ok(isSafeMrpackFilename('Create Encased-1.20.1-1.7.2-fix1.jar'));
+  assert.ok(isSafeMrpackFilename('Dungeon Now Loading-forge-1.20.1-2.11.jar'));
+  assert.ok(isSafeMrpackFilename('Bliss_v2.1.1_(Chocapic13_Shaders_edit).zip'));
+  assert.ok(isSafeMrpackFilename('Scary Spider 1.20+.zip'));
+  assert.ok(isSafeMrpackFilename('DetailedAnimationsReworked - V1.15.zip'));
+  assert.ok(isSafeMrpackFilename('Forgematica-0.1.13-mc1.20.1.jar.disabled'));
+});
+
+test('isSafeMrpackFilename: rejects path traversal and backslashes', () => {
+  assert.equal(isSafeMrpackFilename('../evil.jar'), false);
+  assert.equal(isSafeMrpackFilename('sub\\mod.jar'), false);
+  assert.equal(isSafeMrpackFilename('mods/sub/evil.jar'), false);
+});
+
+test('isSafeMrpackFilename: rejects non-allowed extensions and edge cases', () => {
+  assert.equal(isSafeMrpackFilename('mod.exe'), false);
+  assert.equal(isSafeMrpackFilename('script.sh'), false);
+  assert.equal(isSafeMrpackFilename(''), false);
+  assert.equal(isSafeMrpackFilename(null), false);
+  assert.equal(isSafeMrpackFilename('a\0b.jar'), false);
 });
 
 // --- isSafeCommand ---

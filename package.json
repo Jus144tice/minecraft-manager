@@ -9,6 +9,7 @@
     "start": "node --env-file=.env server.js",
     "dev": "node --env-file=.env --watch server.js",
     "test": "node --test tests/*.test.js",
+    "test:integration": "node --test tests/*.integration.js",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
     "format": "prettier --write .",
