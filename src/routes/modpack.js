@@ -348,6 +348,10 @@ export default function modpackRoutes(ctx) {
    * POST /modpack/mrpack/import
    * Import mods from a previously analyzed .mrpack.
    * Body: { token, includeOverrides, unknownAction: "install"|"skip", selectedPaths?: string[] }
+   *
+   * Returns { jobId } immediately. Downloads run in the background with progress
+   * broadcast over WebSocket (mrpack-progress / mrpack-complete messages).
+   * In demo mode, returns { jobId, report } synchronously for instant feedback.
    */
   router.post('/modpack/mrpack/import', requireCapability('server.manage_mods'), async (req, res) => {
     const { token, includeOverrides = false, unknownAction = 'skip', selectedPaths } = req.body;
@@ -360,109 +364,32 @@ export default function modpackRoutes(ctx) {
     // Clean up cache entry — single use
     mrpackCache.delete(token);
 
+    const jobId = crypto.randomBytes(16).toString('hex');
+    const auditInfo = { user: req.session.user.email, pack: cached.index.name, ip: req.ip };
+
+    // Demo mode: run synchronously and return report inline
+    if (ctx.config.demoMode) {
+      const report = runMrpackImportSync(cached, { unknownAction, selectedPaths, includeOverrides });
+      audit('MRPACK_IMPORT', { ...auditInfo, ...reportSummary(report) });
+      return res.json({ jobId, report });
+    }
+
     let lockId;
-    if (!ctx.config.demoMode) {
-      try {
-        lockId = acquireOp('mrpack import', ['files']);
-      } catch (err) {
-        return res.status(409).json({ error: err.message });
-      }
-    }
-
-    const report = { installed: [], failed: [], skipped: [], overridesApplied: 0, warnings: [] };
-
     try {
-      const classification = Mrpack.analyzeForServer(cached.index);
-
-      // Determine which files to install
-      const toInstall = [...classification.server, ...classification.both];
-
-      // Handle unknown files based on policy
-      for (const file of classification.unknown) {
-        if (unknownAction === 'install') {
-          toInstall.push(file);
-        } else if (selectedPaths && selectedPaths.includes(file.path)) {
-          toInstall.push(file);
-        } else {
-          report.skipped.push({ path: file.path, reason: 'Unknown environment — skipped by policy' });
-        }
-      }
-
-      // Skip client-only
-      for (const file of classification.client) {
-        report.skipped.push({ path: file.path, reason: 'Client-only — not needed on server' });
-      }
-
-      // Download and install each file
-      for (const file of toInstall) {
-        const filename = path.basename(file.path);
-        if (!isSafeMrpackFilename(filename)) {
-          report.failed.push({ path: file.path, error: 'Unsafe filename' });
-          continue;
-        }
-
-        const url = file.downloads?.[0];
-        if (!url) {
-          report.failed.push({ path: file.path, error: 'No download URL' });
-          continue;
-        }
-
-        try {
-          const expectedSha1 = file.hashes?.sha1;
-          const { buffer } = await Modrinth.downloadModFile(url, filename, expectedSha1);
-
-          // Verify sha512 if available
-          if (file.hashes?.sha512) {
-            const actual = crypto.createHash('sha512').update(buffer).digest('hex');
-            if (actual !== file.hashes.sha512) {
-              report.failed.push({ path: file.path, error: 'SHA-512 hash mismatch' });
-              continue;
-            }
-          }
-
-          await SF.saveMod(ctx.config.serverPath, filename, buffer, ctx.config.modsFolder);
-          report.installed.push({
-            path: file.path,
-            filename,
-            size: buffer.length,
-            classification: file._classification || 'unknown',
-          });
-        } catch (err) {
-          report.failed.push({ path: file.path, error: err.message });
-        }
-      }
-
-      // Extract overrides if requested
-      if (includeOverrides && !ctx.config.demoMode) {
-        try {
-          const overrides = await Mrpack.extractOverrides(cached.buffer, ctx.config.serverPath);
-          for (const entry of overrides) {
-            try {
-              await SF.writeOverrideFile(ctx.config.serverPath, entry.relativePath, entry.buffer);
-              report.overridesApplied++;
-            } catch (err) {
-              report.warnings.push(`Override ${entry.relativePath}: ${err.message}`);
-            }
-          }
-        } catch (err) {
-          report.warnings.push(`Override extraction failed: ${err.message}`);
-        }
-      }
-
-      audit('MRPACK_IMPORT', {
-        user: req.session.user.email,
-        pack: cached.index.name,
-        installed: report.installed.length,
-        failed: report.failed.length,
-        skipped: report.skipped.length,
-        overrides: report.overridesApplied,
-        ip: req.ip,
-      });
-
-      res.json(report);
-    } finally {
-      if (lockId != null) releaseOp(lockId);
+      lockId = acquireOp('mrpack import', ['files']);
+    } catch (err) {
+      return res.status(409).json({ error: err.message });
     }
+
+    // Return immediately — downloads happen in background
+    res.json({ jobId });
+
+    runMrpackImportAsync(jobId, cached, { unknownAction, selectedPaths, includeOverrides }, ctx, lockId, auditInfo).catch(
+      (err) => {
+        ctx.broadcast({ type: 'mrpack-complete', jobId, report: null, error: err.message });
+        if (lockId != null) releaseOp(lockId);
+      },
+    );
   });
 
   /**
@@ -645,6 +572,115 @@ export default function modpackRoutes(ctx) {
   });
 
   return router;
+}
+
+// ============================================================
+// Mrpack import helpers (shared between sync demo and async real)
+// ============================================================
+
+function reportSummary(report) {
+  return {
+    installed: report.installed.length,
+    failed: report.failed.length,
+    skipped: report.skipped.length,
+    overrides: report.overridesApplied,
+  };
+}
+
+function classifyFiles(cached, { unknownAction, selectedPaths }) {
+  const classification = Mrpack.analyzeForServer(cached.index);
+  const toInstall = [...classification.server, ...classification.both];
+  const report = { installed: [], failed: [], skipped: [], overridesApplied: 0, warnings: [] };
+
+  for (const file of classification.unknown) {
+    if (unknownAction === 'install') {
+      toInstall.push(file);
+    } else if (selectedPaths && selectedPaths.includes(file.path)) {
+      toInstall.push(file);
+    } else {
+      report.skipped.push({ path: file.path, reason: 'Unknown environment — skipped by policy' });
+    }
+  }
+  for (const file of classification.client) {
+    report.skipped.push({ path: file.path, reason: 'Client-only — not needed on server' });
+  }
+
+  return { toInstall, report };
+}
+
+/** Demo mode: run synchronously, no downloads */
+function runMrpackImportSync(cached, options) {
+  const { toInstall, report } = classifyFiles(cached, options);
+  for (const file of toInstall) {
+    report.installed.push({ path: file.path, filename: path.basename(file.path), size: file.fileSize || 0, classification: file._classification || 'unknown' });
+  }
+  return report;
+}
+
+/** Production: download mods in background, broadcast progress over WebSocket */
+async function runMrpackImportAsync(jobId, cached, options, ctx, lockId, auditInfo) {
+  const { toInstall, report } = classifyFiles(cached, options);
+  const total = toInstall.length;
+
+  try {
+    for (let i = 0; i < toInstall.length; i++) {
+      const file = toInstall[i];
+      const filename = path.basename(file.path);
+
+      ctx.broadcast({ type: 'mrpack-progress', jobId, current: i + 1, total, filename });
+
+      if (!isSafeMrpackFilename(filename)) {
+        report.failed.push({ path: file.path, error: 'Unsafe filename' });
+        continue;
+      }
+
+      const url = file.downloads?.[0];
+      if (!url) {
+        report.failed.push({ path: file.path, error: 'No download URL' });
+        continue;
+      }
+
+      try {
+        const expectedSha1 = file.hashes?.sha1;
+        const { buffer } = await Modrinth.downloadModFile(url, filename, expectedSha1);
+
+        if (file.hashes?.sha512) {
+          const actual = crypto.createHash('sha512').update(buffer).digest('hex');
+          if (actual !== file.hashes.sha512) {
+            report.failed.push({ path: file.path, error: 'SHA-512 hash mismatch' });
+            continue;
+          }
+        }
+
+        await SF.saveMod(ctx.config.serverPath, filename, buffer, ctx.config.modsFolder);
+        report.installed.push({ path: file.path, filename, size: buffer.length, classification: file._classification || 'unknown' });
+      } catch (err) {
+        report.failed.push({ path: file.path, error: err.message });
+      }
+    }
+
+    // Extract overrides if requested
+    if (options.includeOverrides) {
+      try {
+        const overrides = await Mrpack.extractOverrides(cached.buffer, ctx.config.serverPath);
+        for (const entry of overrides) {
+          try {
+            await SF.writeOverrideFile(ctx.config.serverPath, entry.relativePath, entry.buffer);
+            report.overridesApplied++;
+          } catch (err) {
+            report.warnings.push(`Override ${entry.relativePath}: ${err.message}`);
+          }
+        }
+      } catch (err) {
+        report.warnings.push(`Override extraction failed: ${err.message}`);
+      }
+    }
+
+    audit('MRPACK_IMPORT', { ...auditInfo, ...reportSummary(report) });
+    ctx.broadcast({ type: 'mrpack-complete', jobId, report });
+  } finally {
+    if (lockId != null) releaseOp(lockId);
+  }
 }
 
 /** Extract a brief summary of a file entry for the analysis response. */

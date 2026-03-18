@@ -631,6 +631,8 @@ function connectWs() {
       if (msg.type === 'log') appendConsole(msg.line);
       if (msg.type === 'status') updateDashboard(msg);
       if (msg.type === 'crash') showCrashAlert(msg);
+      if (msg.type === 'mrpack-progress') handleMrpackProgress(msg);
+      if (msg.type === 'mrpack-complete') handleMrpackComplete(msg);
       if (msg.type === 'panel-link-verified') {
         // Auto-refresh MC link section if the user profile modal is open
         const mcContainer = document.getElementById('user-profile-mc-link');
@@ -3512,6 +3514,27 @@ function renderModpackReport(report, analysis) {
 // .mrpack import/export
 // ============================================================
 
+let activeMrpackJobId = null;
+
+function handleMrpackProgress(msg) {
+  if (msg.jobId !== activeMrpackJobId) return;
+  const fill = document.getElementById('mrpack-progress-fill');
+  const text = document.getElementById('mrpack-progress-text');
+  if (fill) fill.style.width = `${Math.round((msg.current / msg.total) * 100)}%`;
+  if (text) text.textContent = `Downloading ${msg.filename} (${msg.current}/${msg.total})`;
+}
+
+function handleMrpackComplete(msg) {
+  if (msg.jobId !== activeMrpackJobId) return;
+  activeMrpackJobId = null;
+  if (msg.error) {
+    $('modpack-modal-body').innerHTML = `<p class="error-msg">Import failed: ${esc(msg.error)}</p>`;
+    return;
+  }
+  renderMrpackReport(msg.report);
+  loadMods();
+}
+
 async function analyzeMrpack(file) {
   show('modpack-modal');
   $('modpack-modal-title').textContent = 'Import .mrpack';
@@ -3640,13 +3663,28 @@ function renderMrpackAnalysis(data) {
       const includeOverrides = overridesCb?.checked || false;
 
       try {
-        const report = await POST('/modpack/mrpack/import', {
+        const result = await POST('/modpack/mrpack/import', {
           token: data.token,
           unknownAction,
           includeOverrides,
         });
-        renderMrpackReport(report);
-        await loadMods();
+
+        // Demo mode returns report inline
+        if (result.report) {
+          renderMrpackReport(result.report);
+          await loadMods();
+          return;
+        }
+
+        // Real mode: show progress bar and wait for WebSocket updates
+        activeMrpackJobId = result.jobId;
+        $('modpack-modal-body').innerHTML = `
+          <div style="padding: 1rem 0;">
+            <div class="progress-bar" style="height: 10px; margin-bottom: 0.75rem;">
+              <div class="progress-fill" id="mrpack-progress-fill" style="width: 0%; transition: width 0.3s;"></div>
+            </div>
+            <p id="mrpack-progress-text" class="dim">Starting import...</p>
+          </div>`;
       } catch (err) {
         flash('mrpack-install-msg', 'Import failed: ' + err.message, true);
         installBtn.disabled = false;
