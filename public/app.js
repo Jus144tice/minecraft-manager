@@ -1726,6 +1726,10 @@ window.downloadMod = async function (btn) {
     btn.className = 'btn btn-sm btn-ghost';
     hide('version-modal');
     await loadMods();
+    // Ensure Modrinth lookup completes so getInstalledSlugs() has the new mod's slug
+    if (allMods.some((m) => !currentModData[m.filename])) {
+      await enrichInstalledMods();
+    }
     // Re-render browse results so the card shows "Installed" badge
     if (lastBrowseHits.length > 0) renderBrowseResults(lastBrowseHits);
   } catch (err) {
