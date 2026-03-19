@@ -630,11 +630,45 @@ function runMrpackImportSync(cached, options) {
 /** Production: download mods in background, broadcast progress over WebSocket */
 async function runMrpackImportAsync(jobId, cached, options, ctx, lockId, auditInfo) {
   const { toInstall, report } = classifyFiles(cached, options);
-  const total = toInstall.length;
+
+  // Batch-lookup on Modrinth to identify client-only mods before downloading
+  const sha1Hashes = toInstall.map((f) => f.hashes?.sha1).filter(Boolean);
+  let modrinthLookup = {};
+  if (sha1Hashes.length > 0) {
+    ctx.broadcast({
+      type: 'mrpack-progress',
+      jobId,
+      current: 0,
+      total: toInstall.length,
+      filename: 'Checking mods on Modrinth...',
+    });
+    try {
+      modrinthLookup = await Modrinth.lookupByHashes(sha1Hashes);
+    } catch {
+      // Non-critical — proceed without client-side filtering
+    }
+  }
+
+  // Filter out mods that Modrinth confirms are client-only
+  const downloadList = [];
+  for (const file of toInstall) {
+    const sha1 = file.hashes?.sha1;
+    const mr = sha1 ? modrinthLookup[sha1] : null;
+    if (mr && mr.serverSide === 'unsupported') {
+      report.skipped.push({
+        path: file.path,
+        reason: `Client-only mod: ${mr.projectTitle || path.basename(file.path)}`,
+      });
+      continue;
+    }
+    downloadList.push(file);
+  }
+
+  const total = downloadList.length;
 
   try {
-    for (let i = 0; i < toInstall.length; i++) {
-      const file = toInstall[i];
+    for (let i = 0; i < downloadList.length; i++) {
+      const file = downloadList[i];
       const filename = path.basename(file.path);
 
       ctx.broadcast({ type: 'mrpack-progress', jobId, current: i + 1, total, filename });
