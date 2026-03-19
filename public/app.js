@@ -1722,11 +1722,12 @@ window.downloadMod = async function (btn) {
   btn.textContent = 'Downloading...';
   try {
     const result = await POST('/modrinth/download', { versionId: versionid });
-    btn.textContent = 'Done!';
+    btn.textContent = 'Installed';
     btn.className = 'btn btn-sm btn-ghost';
     hide('version-modal');
     await loadMods();
-    alert(`Downloaded: ${result.filename} (${formatSize(result.size)})`);
+    // Re-render browse results so the card shows "Installed" badge
+    if (lastBrowseHits.length > 0) renderBrowseResults(lastBrowseHits);
   } catch (err) {
     btn.disabled = false;
     btn.textContent = 'Download';
