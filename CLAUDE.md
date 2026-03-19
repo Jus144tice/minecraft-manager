@@ -3,6 +3,9 @@
 > **Self-maintenance rule**: When you modify any file in this project, check whether the change affects
 > information in this document (line numbers, file list, exports, patterns, routes). If it does, update
 > CLAUDE.md in the same commit. Line numbers shift — keep them accurate.
+>
+> **Pre-push rule**: ALWAYS run `npm run lint && npx prettier --check .` before committing. Fix any
+> issues before pushing. CI fails on lint errors and formatting — never push without checking both.
 
 ## Quick Reference
 

@@ -1721,7 +1721,7 @@ window.downloadMod = async function (btn) {
   btn.disabled = true;
   btn.textContent = 'Downloading...';
   try {
-    const result = await POST('/modrinth/download', { versionId: versionid });
+    await POST('/modrinth/download', { versionId: versionid });
     btn.textContent = 'Installed';
     btn.className = 'btn btn-sm btn-ghost';
     hide('version-modal');
