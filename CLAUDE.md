@@ -1,11 +1,24 @@
 # CLAUDE.md — Minecraft Manager
 
 > **Self-maintenance rule**: When you modify any file in this project, check whether the change affects
-> information in this document (line numbers, file list, exports, patterns, routes). If it does, update
-> CLAUDE.md in the same commit. Line numbers shift — keep them accurate.
+> this document or `README.md`. Update both in the same commit if needed. For CLAUDE.md, keep symbol
+> references and structural landmarks accurate. For README.md, keep feature descriptions and role/auth
+> documentation consistent with the implementation.
 >
 > **Pre-push rule**: ALWAYS run `npm run lint && npx prettier --check .` before committing. Fix any
 > issues before pushing. CI fails on lint errors and formatting — never push without checking both.
+
+## Source of Truth
+
+When docs conflict, prefer implementation in this order:
+
+1. `src/permissions.js` — roles, capabilities, permission policies
+2. `server.js` — route mounting, auth boundaries, WebSocket flow, startup/shutdown
+3. `src/routes/*` — API behavior
+4. `src/integrations/discord/*` — Discord command and linking behavior
+5. `public/app.js` + `public/index.html` — UI behavior
+
+`README.md` may lag behind implementation. When updating auth, RBAC, or identity behavior, update README too.
 
 ## Quick Reference
 
@@ -14,6 +27,7 @@
 - **Node version**: >=20.19.0
 - **Test runner**: `node:test` (built-in, no framework)
 - **Lint/format**: ESLint 10 (flat config) + Prettier (120 col, single quotes, trailing commas)
+- **Target environment**: Linux production host, systemd, Nginx reverse proxy, localhost binding. Dev/demo on Windows or Linux.
 
 ## Commands
 
@@ -30,84 +44,109 @@ npm run dev               # Dev server with --watch
 npm start                 # Production start with --env-file=.env
 ```
 
+## High-Risk Change Checklist
+
+If you touch **auth, RBAC, or identity linking**, review all of these — they are tightly coupled:
+
+- `src/permissions.js` — role definitions, capability sets, permission policies
+- `src/middleware.js` — `requireCapability()` route guards
+- `server.js` — session payloads, guest vs authenticated route boundary
+- `src/routes/identity.js` — identity linking endpoints
+- `src/integrations/discord/permissions.js` — Discord role → capability resolution
+- `src/integrations/discord/links.js` — challenge system, link storage
+- `public/app.js` — `can()` permission gating, user/session rendering, role-based UI visibility
+- Tests: `permissions.test.js`, `identity.test.js`, `discord.test.js`, `middleware.test.js`, route tests, e2e smoke
+
+## Guest vs Authenticated Route Boundary
+
+In `server.js`, routes are mounted in two groups. **Do not move routes between groups without understanding the security implications.**
+
+**Guest-accessible** (before `requireSession`, ~L262): `status`, `players`, `mods`, `modrinth`, `settings` (read-only GET endpoints within these; mutating POST/PUT/DELETE endpoints use `requireCapability` internally)
+
+**Authenticated** (after `requireSession` + CSRF, ~L288): `server`, `users`, `backups`, `modpack`, `audit`, `identity`, `rcon/connect`
+
+**Always unauthenticated** (mounted before all API middleware): `health` routes (`/healthz`, `/readyz`, `/metrics`)
+
+## Frontend Warning
+
+`public/app.js` is a single-file SPA controller (~4800 lines). `public/index.html` defines all DOM structure. They are tightly coupled:
+
+- DOM element IDs and `data-action` attributes are referenced by name across both files
+- E2E tests depend on specific selectors and UI flows
+- Role-based visibility (`can()`) controls which sections/buttons appear
+- If you rename or restructure DOM IDs, `data-action` values, or modal structures, you must update app.js, index.html, and e2e tests together
+
 ## File Map
 
 ### Entry Point
 
-| File        | Key Landmarks                                               |
-| ----------- | ----------------------------------------------------------- |
-| `server.js` | Express bootstrap, middleware, WebSocket, graceful shutdown |
-|             | L113: WebSocket server created                              |
-|             | L183: Middleware stack begins                               |
-|             | L288: Authenticated route mounting                          |
-|             | L350: Metrics broadcast interval (10s)                      |
-|             | L449: `gracefulShutdown()`                                  |
+`server.js` — Express bootstrap, middleware stack, WebSocket server, graceful shutdown. Key structural landmarks: WebSocket server creation (~L113), middleware stack (~L183), guest route mounting (~L262), authenticated route mounting (~L288), metrics broadcast interval (~L350), `gracefulShutdown()` (~L449).
 
 ### Core Modules (`src/`)
 
-| File                  | Purpose                                           | Key Locations                                                                                                                                                |
-| --------------------- | ------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `auth.js`             | OIDC (Google/Microsoft) + local password auth     | L49: `buildSessionMiddleware()`, L101: `buildAuthRouter()`                                                                                                   |
-| `permissions.js`      | RBAC engine: 5 roles, 30 capabilities, 3 policies | L30: `CAPABILITIES`, L135: `ROLES`, L169: `ROLE_ORDER`, L183: `getCapabilitiesForRole()`, L282: `PERMISSION_POLICIES`, L294: `resolveEffectivePermissions()` |
-| `middleware.js`       | Helmet, rate limiting, CSRF, origin checks        | L70: `buildCsrfCheck()`, L133: `requireCapability()`                                                                                                         |
-| `db.js`               | PostgreSQL schema + CRUD helpers                  | L15: `SCHEMA_SQL`, L66: `initDatabase()`, L111: `upsertUser()`, L185: `insertAuditLog()`, L231: `upsertDiscordLink()`, L279: `upsertPanelLink()`             |
-| `audit.js`            | Structured JSON logging + DB audit trail          | Exports: `audit()`, `info()`, `warn()`, `setNotifyHook()`                                                                                                    |
-| `services.js`         | Creates shared `ctx` object                       | L14: `createServices()`                                                                                                                                      |
-| `minecraftProcess.js` | Child process, log streaming (2000-line buffer)   | L7: `class MinecraftProcess`, L19: `start()`, L89: `stop()`                                                                                                  |
-| `rcon.js`             | Source RCON protocol client                       | L7: `class RconClient`, L20: `connect()`, L98: `sendCommand()`                                                                                               |
-| `operationLock.js`    | Mutex for destructive ops                         | L22: `acquireOp()`, L39: `releaseOp()`                                                                                                                       |
-| `backup.js`           | tar.gz backup/restore, cron scheduling            | L181: `createBackup()`, L468: `restoreBackup()`, L606: `initBackupScheduler()`                                                                               |
-| `metrics.js`          | TPS, CPU, RAM, disk, player count                 | L155: `parseTps()`, L194: `collectMetrics()`                                                                                                                 |
-| `notify.js`           | Webhook + Discord notifications                   | L15: `initNotifications()`, L172: `onAuditEvent()`                                                                                                           |
-| `validate.js`         | Input validation & config migration               | L9: `isValidMinecraftName()`, L17: `isSafeModFilename()`, L28: `isSafeMrpackFilename()`, L58: `parseLaunchCommand()`, L90: `validateConfig()`                |
-| `preflight.js`        | Runtime diagnostic checks                         | Exports: `runPreflight()`                                                                                                                                    |
-| `pathUtils.js`        | Path traversal prevention                         | Exports: `safeJoin()`                                                                                                                                        |
-| `serverFiles.js`      | CRUD for MC server JSON files & mods              | L27: `getOps()`, L35: `getWhitelist()`, L61: `getServerProperties()`, L112: `listMods()`                                                                     |
-| `modrinth.js`         | Modrinth API v2 wrapper                           | L32: `searchMods()`, L177: `downloadModFile()`                                                                                                               |
-| `mrpack.js`           | .mrpack ZIP parsing & building                    | L205: `parseMrpack()`, L363: `buildMrpack()`                                                                                                                 |
-| `panelLinks.js`       | Panel user ↔ MC player linking                    | L30: `setLink()`                                                                                                                                             |
-| `demoData.js`         | Seed data for demo mode                           | L26: `DEMO_ONLINE_PLAYERS`, L147: `DEMO_MODS`, L766: `enrichDemoIcons()`                                                                                     |
+| File                  | Purpose                                           | Key Exports                                                                                                                                    |
+| --------------------- | ------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------- |
+| `auth.js`             | OIDC (Google/Microsoft) + local password auth     | `buildSessionMiddleware()`, `buildAuthRouter()`, `requireSession`                                                                              |
+| `permissions.js`      | RBAC engine: 5 roles, 30 capabilities, 3 policies | `CAPABILITIES`, `ROLES`, `ROLE_ORDER`, `PERMISSION_POLICIES`, `getCapabilitiesForRole()`, `resolveEffectivePermissions()`                      |
+| `middleware.js`       | Helmet, rate limiting, CSRF, origin checks        | `buildCsrfCheck()`, `requireCapability()`, `buildSameOriginCheck()`, `checkWsOrigin()`                                                         |
+| `db.js`               | PostgreSQL schema + CRUD helpers                  | `initDatabase()`, `upsertUser()`, `insertAuditLog()`, `upsertDiscordLink()`, `upsertPanelLink()`                                               |
+| `audit.js`            | Structured JSON logging + DB audit trail          | `audit()`, `info()`, `warn()`, `setNotifyHook()`                                                                                               |
+| `services.js`         | Creates shared `ctx` object                       | `createServices()`                                                                                                                             |
+| `minecraftProcess.js` | Child process, log streaming (2000-line buffer)   | `class MinecraftProcess` — `start()`, `stop()`, `kill()`, `sendConsoleCommand()`                                                               |
+| `rcon.js`             | Source RCON protocol client                       | `class RconClient` — `connect()`, `sendCommand()`, `disconnect()`                                                                              |
+| `operationLock.js`    | Mutex for destructive ops                         | `acquireOp()`, `releaseOp()`, `getActiveOps()`                                                                                                 |
+| `backup.js`           | tar.gz backup/restore, cron scheduling            | `createBackup()`, `restoreBackup()`, `listBackups()`, `initBackupScheduler()`                                                                  |
+| `metrics.js`          | TPS, CPU, RAM, disk, player count                 | `collectMetrics()`, `parseTps()`, `collectDemoMetrics()`                                                                                       |
+| `notify.js`           | Webhook + Discord notifications                   | `initNotifications()`, `onAuditEvent()`, `notifyLagSpike()`                                                                                    |
+| `validate.js`         | Input validation & config migration               | `isValidMinecraftName()`, `isSafeModFilename()`, `isSafeMrpackFilename()`, `validateConfig()`, `parseLaunchCommand()`, `migrateLaunchConfig()` |
+| `preflight.js`        | Runtime diagnostic checks                         | `runPreflight()`                                                                                                                               |
+| `pathUtils.js`        | Path traversal prevention                         | `safeJoin()`                                                                                                                                   |
+| `serverFiles.js`      | CRUD for MC server JSON files & mods              | `getOps()`, `getWhitelist()`, `getServerProperties()`, `listMods()`, `hashMods()`, `saveMod()`                                                 |
+| `modrinth.js`         | Modrinth API v2 wrapper                           | `searchMods()`, `lookupByHashes()`, `downloadModFile()`, `getVersion()`, `getVersionsBatch()`                                                  |
+| `mrpack.js`           | .mrpack ZIP parsing & building                    | `parseMrpack()`, `buildMrpack()`, `analyzeForServer()`, `classifyEntry()`, `extractOverrides()`                                                |
+| `panelLinks.js`       | Panel user ↔ MC player linking                    | `setLink()`, `getLink()`, `removeLink()`, `getLinkByMinecraftName()`                                                                           |
+| `demoData.js`         | Seed data for demo mode                           | `DEMO_ONLINE_PLAYERS`, `DEMO_MODS`, `DEMO_OPS`, `enrichDemoIcons()`                                                                            |
 
 ### Routes (`src/routes/`)
 
 All export `(ctx) => router`. Mounted under `/api/` in server.js unless noted.
 
-| File          | Factory Line | Endpoints                                                                                                                                                                                                           |
-| ------------- | ------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `status.js`   | L7           | `GET /status`                                                                                                                                                                                                       |
-| `server.js`   | L14          | `POST /server/{start,stop,kill,restart,command,stdin,regenerate-world}`                                                                                                                                             |
-| `players.js`  | L14          | `GET /players/{online,all,ops,whitelist,banned}`, `GET /players/profile/:name`, `POST /players/{op,whitelist,ban,kick,say}`, `DELETE /players/{op,whitelist,ban}/:name`, `GET/POST/DELETE /players/discord-link(s)` |
-| `mods.js`     | L12          | `GET /mods`, `GET /mods/lookup`, `POST /mods/toggle`, `DELETE /mods/:filename`                                                                                                                                      |
-| `modrinth.js` | L14          | `GET /modrinth/{browse,search,project/:id,versions/:id,versions/batch}`, `POST /modrinth/download`                                                                                                                  |
-| `modpack.js`  | L51          | `GET /modpack/export`, `POST /modpack/{analyze,import}`, `POST /modpack/mrpack/{analyze,import}`, `GET /modpack/mrpack/export`                                                                                      |
-| `backups.js`  | L9           | `GET /backups`, `POST /backups`, `POST /backups/{restore,validate}`, `DELETE /backups/:filename`, `GET /backups/{schedule,lock}`, `GET /operations`                                                                 |
-| `settings.js` | L23          | `GET/POST /settings/{properties,jvm-args}`, `GET/POST /config`, `GET /browse-dirs`, `POST /mkdir`, `GET /discord/status`, `POST /discord/{test-connection,test-notification,send-message}`, `GET /preflight`        |
-| `users.js`    | L10          | `GET /users`, `GET /users/:email`, `PUT /users/:email/{role,admin}`, `DELETE /users/:email`, `GET /roles`                                                                                                           |
-| `audit.js`    | L8           | `GET /audit-logs`                                                                                                                                                                                                   |
-| `identity.js` | L15          | `GET /identity/me`, `POST /identity/link`, `GET /identity/link/status`, `DELETE /identity/link`, `GET /panel-links`, `POST /panel-link`, `DELETE /panel-link/:email`                                                |
-| `health.js`   | L7           | `GET /healthz`, `GET /readyz`, `GET /metrics` (unauthenticated, mounted outside `/api/`)                                                                                                                            |
+| File          | Endpoints                                                                                                                                                                                                           |
+| ------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `status.js`   | `GET /status`                                                                                                                                                                                                       |
+| `server.js`   | `POST /server/{start,stop,kill,restart,command,stdin,regenerate-world}`                                                                                                                                             |
+| `players.js`  | `GET /players/{online,all,ops,whitelist,banned}`, `GET /players/profile/:name`, `POST /players/{op,whitelist,ban,kick,say}`, `DELETE /players/{op,whitelist,ban}/:name`, `GET/POST/DELETE /players/discord-link(s)` |
+| `mods.js`     | `GET /mods`, `GET /mods/lookup`, `POST /mods/toggle`, `DELETE /mods/:filename`                                                                                                                                      |
+| `modrinth.js` | `GET /modrinth/{browse,search,project/:id,versions/:id,versions/batch}`, `POST /modrinth/download`                                                                                                                  |
+| `modpack.js`  | `GET /modpack/export`, `POST /modpack/{analyze,import}`, `POST /modpack/mrpack/{analyze,import}`, `GET /modpack/mrpack/export`                                                                                      |
+| `backups.js`  | `GET /backups`, `POST /backups`, `POST /backups/{restore,validate}`, `DELETE /backups/:filename`, `GET /backups/{schedule,lock}`, `GET /operations`                                                                 |
+| `settings.js` | `GET/POST /settings/{properties,jvm-args}`, `GET/POST /config`, `GET /browse-dirs`, `POST /mkdir`, `GET /discord/status`, `POST /discord/{test-connection,test-notification,send-message}`, `GET /preflight`        |
+| `users.js`    | `GET /users`, `GET /users/:email`, `PUT /users/:email/{role,admin}`, `DELETE /users/:email`, `GET /roles`                                                                                                           |
+| `audit.js`    | `GET /audit-logs`                                                                                                                                                                                                   |
+| `identity.js` | `GET /identity/me`, `POST /identity/link`, `GET /identity/link/status`, `DELETE /identity/link`, `GET /panel-links`, `POST /panel-link`, `DELETE /panel-link/:email`                                                |
+| `health.js`   | `GET /healthz`, `GET /readyz`, `GET /metrics` (unauthenticated, mounted outside `/api/`)                                                                                                                            |
 
 ### Discord Integration (`src/integrations/discord/`)
 
-| File               | Purpose                                                                                        | Key Locations                                                                 |
-| ------------------ | ---------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------- |
-| `index.js`         | Bot init, chat monitor for `!link`                                                             | L44: `initDiscord()`, L192: `notifyDiscord()`                                 |
-| `config.js`        | Config builder from env + config.json                                                          | Exports: `buildDiscordConfig()`                                               |
-| `client.js`        | discord.js client lifecycle                                                                    | Exports: `connectDiscord()`, `disconnectDiscord()`, `registerSlashCommands()` |
-| `commands.js`      | Central command router + permission checks                                                     | Exports: `handleInteraction()`, `setCommandContext()`                         |
-| `registry.js`      | Command registry                                                                               | Exports: `getCommands()`, `registerCommand()`                                 |
-| `permissions.js`   | Discord role → app capability resolution                                                       | Exports: `checkPermission()`                                                  |
-| `links.js`         | Discord ↔ MC linking + challenge codes                                                         | L201: `createChallenge()`, L257: `verifyChallenge()`                          |
-| `notifications.js` | Discord embed notifications                                                                    | Exports: `sendDiscordNotification()`                                          |
-| `handlers/`        | Slash commands: status, players, start, stop, restart, say, backup, link, unlink, whoami, help |
+| File               | Purpose                                                                                        | Key Exports                                                           |
+| ------------------ | ---------------------------------------------------------------------------------------------- | --------------------------------------------------------------------- |
+| `index.js`         | Bot init, chat monitor for `!link`                                                             | `initDiscord()`, `notifyDiscord()`, `getDiscordStatus()`              |
+| `config.js`        | Config builder from env + config.json                                                          | `buildDiscordConfig()`                                                |
+| `client.js`        | discord.js client lifecycle                                                                    | `connectDiscord()`, `disconnectDiscord()`, `registerSlashCommands()`  |
+| `commands.js`      | Central command router + permission checks                                                     | `handleInteraction()`, `setCommandContext()`                          |
+| `registry.js`      | Command registry                                                                               | `getCommands()`, `registerCommand()`                                  |
+| `permissions.js`   | Discord role → app capability resolution                                                       | `checkPermission()`                                                   |
+| `links.js`         | Discord ↔ MC linking + challenge codes                                                         | `createChallenge()`, `verifyChallenge()`, `setLink()`, `removeLink()` |
+| `notifications.js` | Discord embed notifications                                                                    | `sendDiscordNotification()`                                           |
+| `handlers/`        | Slash commands: status, players, start, stop, restart, say, backup, link, unlink, whoami, help |                                                                       |
 
 ### Frontend (`public/`)
 
-| File                       | Purpose                        | Key Locations                                                                                                                                                                                                                                                                                                                     |
-| -------------------------- | ------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `index.html` (~1350 lines) | SPA shell: tabs, modals, menus | L12: login-modal, L103: tab-dashboard, L259: tab-console, L659: tab-mods, L748: tab-players, L799: tab-backups, L923: player-profile-modal, L989: user-profile-modal, L1023: tab-access, L1130: tab-settings, L1287: modpack-modal                                                                                                |
-| `app.js` (~4800 lines)     | All frontend logic             | L25: delegated click handler (`data-action`), L161: `can()`, L168: `api()`, L618: `connectWs()`, L791: `updateDashboard()`, L1133: `loadMods()`, L1785: `loadOnlinePlayers()`, L2833: `loadBackups()`, L3519: `handleMrpackProgress()`, L3527: `handleMrpackComplete()`, L4469: `openPlayerProfile()`, L4624: `openUserProfile()` |
-| `styles.css` (~2800 lines) | Dark theme, responsive layout  |                                                                                                                                                                                                                                                                                                                                   |
+| File                       | Purpose                                                                                                                                                                                               |
+| -------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `index.html` (~1350 lines) | SPA shell: 7 tabs (dashboard, console, mods, players, backups, access control, settings), 9+ modals (login, player profile, user profile, modpack, version picker, etc.), user menu                   |
+| `app.js` (~4800 lines)     | All frontend logic: delegated click handler (`data-action`), `can()` permission check, `api()` fetch wrapper, `connectWs()` WebSocket, tab/modal management, all data loading and rendering functions |
+| `styles.css` (~2800 lines) | Dark theme, responsive layout                                                                                                                                                                         |
 
 ### Tests (`tests/`)
 
@@ -139,7 +178,7 @@ All export `(ctx) => router`. Mounted under `/api/` in server.js unless noted.
 | `crashDetection.test.js`   | Auto-restart, restart window                                          |
 | `frontend.test.js`         | HTML/CSS parsing (jsdom)                                              |
 | `demoIcons.integration.js` | Modrinth API icon fetch (network-dependent, excluded from `npm test`) |
-| `e2e/smoke.spec.js`        | 11 Playwright browser tests against demo mode                         |
+| `e2e/smoke.spec.js`        | Playwright browser tests against demo mode                            |
 
 ### Deploy (`deploy/`)
 
@@ -152,19 +191,19 @@ All export `(ctx) => router`. Mounted under `/api/` in server.js unless noted.
 
 ### Shared Context (`ctx`)
 
-All route files export `(ctx) => router`. The `ctx` object (built in `services.js:14`) contains: `config`, `mc` (MinecraftProcess), `rconCmd()`, `broadcast()`, `services`, `getStatus()`.
+All route files export `(ctx) => router`. The `ctx` object (built in `services.js` → `createServices()`) contains: `config`, `mc` (MinecraftProcess), `rconCmd()`, `broadcast()`, `services`, `getStatus()`.
 
 ### RBAC
 
-5 roles (viewer < operator < moderator < admin < owner) with cumulative capabilities defined in `permissions.js:135`. Routes guard with `requireCapability('server.start')` from `middleware.js:133`. Frontend checks with `can()` at `app.js:161`.
+5 roles (viewer < operator < moderator < admin < owner) with cumulative capabilities defined in `permissions.js` → `ROLES`. Routes guard with `requireCapability()` from `middleware.js`. Frontend checks with `can()` in `app.js`.
 
 ### Operation Locking
 
-`acquireOp(scope, label)` at `operationLock.js:22` / `releaseOp(id)` at `:39` prevents concurrent destructive ops. Scopes: `'files'` (backup/restore/mod install) and `'lifecycle'` (start/stop/restart).
+`acquireOp(scope, label)` / `releaseOp(id)` in `operationLock.js` prevents concurrent destructive ops. Scopes: `'files'` (backup/restore/mod install) and `'lifecycle'` (start/stop/restart).
 
 ### WebSocket Messages
 
-Backend broadcasts these `msg.type` values: `log`, `status`, `crash`, `mrpack-progress`, `mrpack-complete`, `panel-link-verified`. Frontend handles them in `connectWs()` at `app.js:618`.
+Backend broadcasts these `msg.type` values: `log`, `status`, `crash`, `mrpack-progress`, `mrpack-complete`, `panel-link-verified`. Frontend handles them in `connectWs()` in `app.js`.
 
 ### Demo Mode
 
@@ -176,11 +215,11 @@ When `DATABASE_URL` is not set, `db.js` functions return empty results. `panelLi
 
 ### Validation
 
-User input validated at route boundaries. `safeJoin()` in `pathUtils.js` prevents path traversal. `isSafeModFilename()` at `validate.js:17` for direct downloads; `isSafeMrpackFilename()` at `:28` for mrpack entries (broader: allows spaces, .zip, .jar.disabled).
+User input validated at route boundaries. `safeJoin()` in `pathUtils.js` prevents path traversal. `isSafeModFilename()` for direct downloads; `isSafeMrpackFilename()` for mrpack entries (broader: allows spaces, .zip, .jar.disabled).
 
 ### Async Modpack Import
 
-Large mrpack imports (`modpack.js:51`) return `{ jobId }` immediately. Downloads run in background, broadcasting progress via WebSocket. Demo mode runs synchronously and returns report inline.
+Large mrpack imports return `{ jobId }` immediately from `modpack.js` route. Downloads run in background, broadcasting progress via WebSocket. Modrinth hash lookup filters client-only mods before downloading. Demo mode runs synchronously and returns report inline.
 
 ## Roles & Capabilities
 
@@ -194,7 +233,7 @@ Large mrpack imports (`modpack.js:51`) return `{ jobId }` immediately. Downloads
 
 ## DB Tables
 
-Defined in `db.js:15` (`SCHEMA_SQL`):
+Defined in `db.js` → `SCHEMA_SQL`:
 
 | Table           | Primary Key  | Purpose                                                   |
 | --------------- | ------------ | --------------------------------------------------------- |
@@ -210,7 +249,7 @@ Defined in `db.js:15` (`SCHEMA_SQL`):
 Panel User (email) --> Minecraft Player (name/UUID) <-- Discord User (ID)
 ```
 
-Challenge-based verification: user starts challenge from Panel (`identity.js:15`) or Discord (`links.js:201`), types `!link CODE` in Minecraft chat, server log monitor in `discord/index.js` verifies and creates link.
+Challenge-based verification: user starts challenge from Panel (`identity.js`) or Discord (`links.js` → `createChallenge()`), types `!link CODE` in Minecraft chat, server log monitor in `discord/index.js` verifies and creates link.
 
 ## Config Files
 
@@ -241,5 +280,5 @@ Challenge-based verification: user starts challenge from Panel (`identity.js:15`
 - Express `json()` middleware skips `application/octet-stream` — mrpack upload uses `express.raw()` on specific route
 - Nginx `client_max_body_size` must be set on all proxy layers (Pi gateway + server nginx)
 - `startCommand` (string) is legacy — current config uses `launch: { executable, args[] }`
-- `migrateLaunchConfig()` at `validate.js:67` auto-converts on load
+- `migrateLaunchConfig()` in `validate.js` auto-converts on load
 - `admin_level` (0/1) is legacy — current system uses `role` column; both kept in sync by `db.js`

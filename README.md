@@ -14,7 +14,7 @@ A self-hosted web control panel for a Minecraft Forge server running on Linux. B
 - Player management — operators (with permission levels 1–4), whitelist, bans
 - Edit `server.properties` in the browser
 - OIDC authentication (Google and/or Microsoft) with email allowlist; optional local password fallback
-- Role-based access — Admin (full control) and Viewer (read-only); first OIDC user auto-promoted to admin
+- Role-based access — five granular roles (Viewer, Operator, Moderator, Admin, Owner) with 30 capabilities; first OIDC user auto-promoted to admin
 - WebSocket-based live log streaming
 - Full backup & restore — scheduled nightly (configurable cron), quiesced snapshots via RCON, disk-space preflight checks, concurrent-operation locking. Restore to any point in time from the Backups tab.
 - **Discord bot integration** — slash commands (`/status`, `/start`, `/stop`, `/restart`, `/backup`, `/players`, `/say`) with role-based permissions, plus automatic notifications for server events. See [DISCORD.md](DISCORD.md) for setup.
@@ -227,7 +227,7 @@ rcon.password=pick-a-strong-password
 A PostgreSQL database is **optional**. Without one, the app works exactly as before (sessions in memory, audit logs to stdout only). With one, you get:
 
 - **Persistent sessions** — survive server restarts (no more logging everyone out on redeploy)
-- **User management** — tracks every user who logs in, with an `admin_level` field (0 = regular, 1 = admin)
+- **User management** — tracks every user who logs in with a role (viewer, operator, moderator, admin, or owner)
 - **Queryable audit logs** — every action (login, server start/stop, mod install, ban, etc.) stored with timestamps and searchable via the API
 
 #### Install PostgreSQL
@@ -259,37 +259,43 @@ DATABASE_URL=postgres://mcmanager:pick-a-strong-password@localhost:5432/mcmanage
 
 Tables are created automatically on first startup — no manual migration step needed.
 
-#### Admin levels
+#### Roles
 
-Admin access (`admin_level = 1`) is required for backups, user management, and audit logs. There are several ways to become an admin:
+Access is controlled by five roles, each adding capabilities on top of the previous:
 
-**Automatic admin grant:**
+| Role          | Level | Access                                                                                |
+| ------------- | ----- | ------------------------------------------------------------------------------------- |
+| **Viewer**    | 0     | Read-only: dashboard, console output, player lists, mod list, server status           |
+| **Operator**  | 1     | + start/stop/restart server, create backups, broadcast messages                       |
+| **Moderator** | 2     | + send console commands, manage whitelist and bans                                    |
+| **Admin**     | 3     | + configure panel/server, manage mods and files, restore backups, view identity links |
+| **Owner**     | 4     | + manage users and roles, regenerate worlds, delete backups                           |
 
-| Login method                           | Admin level   | Why                                                                                                              |
-| -------------------------------------- | ------------- | ---------------------------------------------------------------------------------------------------------------- |
-| **Demo mode** (any password)           | Always admin  | Full access needed to demo the UI                                                                                |
-| **Local password** (`LOCAL_PASSWORD`)  | Always admin  | You have the server password — you're the admin                                                                  |
-| **First OIDC user** (Google/Microsoft) | Auto-promoted | When no admins exist in the database yet, the first person to log in via OIDC is automatically promoted to admin |
+**Automatic role assignment:**
+
+| Login method                           | Role         | Why                                                                                                              |
+| -------------------------------------- | ------------ | ---------------------------------------------------------------------------------------------------------------- |
+| **Demo mode** (any password)           | Always owner | Full access needed to demo the UI                                                                                |
+| **Local password** (`LOCAL_PASSWORD`)  | Always admin | You have the server password — you're the admin                                                                  |
+| **First OIDC user** (Google/Microsoft) | Auto-owner   | When no admins exist in the database yet, the first person to log in via OIDC is automatically promoted to owner |
 
 **Manual promotion** (for additional admins after the first):
 
-Once you're logged in as an admin, promote other users from the Users tab in Settings, or via the API:
+Once you're logged in as an owner, promote other users from the Access Control tab, or via the API:
 
 ```bash
-curl -X PUT http://localhost:3000/api/users/friend@gmail.com/admin \
+curl -X PUT http://localhost:3000/api/users/friend@gmail.com/role \
   -H 'Content-Type: application/json' \
   -H 'X-CSRF-Token: <token>' \
   -H 'Cookie: mcm.sid=<session>' \
-  -d '{"level": 1}'
+  -d '{"role": "admin"}'
 ```
 
 Or connect to the database directly:
 
 ```sql
-UPDATE users SET admin_level = 1 WHERE email = 'you@gmail.com';
+UPDATE users SET role = 'admin' WHERE email = 'you@gmail.com';
 ```
-
-Admin users can access backups, `GET /api/users`, `PUT /api/users/:email/admin`, `DELETE /api/users/:email`, and `GET /api/audit-logs`.
 
 ---
 
@@ -486,30 +492,32 @@ In **demo mode**, no login is required. Demo mode is for local development only 
 
 ### Roles & permissions
 
-Every user has one of two roles:
+Every user has one of five roles (cumulative — each role includes all capabilities of the roles below it):
 
-| Role       | Access                                                                                                                       |
-| ---------- | ---------------------------------------------------------------------------------------------------------------------------- |
-| **Admin**  | Full access — start/stop server, manage mods, edit players, backups, settings, and all other controls                        |
-| **Viewer** | Read-only — can see the dashboard, console output, mod list, player lists, and server status, but cannot perform any actions |
+| Role          | Access                                                                                |
+| ------------- | ------------------------------------------------------------------------------------- |
+| **Viewer**    | Read-only — dashboard, console output, player lists, mod list, server status          |
+| **Operator**  | + start/stop/restart server, create backups, broadcast messages                       |
+| **Moderator** | + send console commands, manage whitelist and bans                                    |
+| **Admin**     | + configure panel/server, manage mods and files, restore backups, view identity links |
+| **Owner**     | + manage users and roles, regenerate worlds, delete backups                           |
 
 **How roles are assigned:**
 
-- The **first user** to log in via Google or Microsoft OIDC is **automatically promoted to admin** (so you don't get locked out of your own panel).
+- The **first user** to log in via Google or Microsoft OIDC is **automatically promoted to owner** (so you don't get locked out of your own panel).
 - All subsequent OIDC users start as **Viewer**.
 - **Local password** login (`LOCAL_PASSWORD`) always grants **Admin** access.
-- In **demo mode**, everyone is Admin.
+- In **demo mode**, everyone is Owner.
 
-**How to promote a user to Admin:**
+**How to change a user's role:**
 
-1. Log in as an existing Admin.
-2. Go to the **Users** panel (admin-only, accessible via the API or a database-connected deployment).
-3. Find the user and set their admin level to 1:
-   - **Via the UI**: Navigate to `/api/users` in the admin panel, find the user, and click to promote them.
-   - **Via the API**: `PUT /api/users/:email/admin` with body `{ "level": 1 }`.
-   - **Via the database**: `UPDATE users SET admin_level = 1 WHERE email = 'user@example.com';`
+1. Log in as an **Owner**.
+2. Go to the **Access Control → Users** tab.
+3. Find the user and select their new role from the dropdown.
 
-> **Note:** Roles require a PostgreSQL database (`DATABASE_URL`). Without a database, session data is stored in memory and all OIDC users get the default admin level (0 = Viewer). Use `LOCAL_PASSWORD` for single-admin setups without a database.
+You can also use the API (`PUT /api/users/:email/role` with body `{ "role": "admin" }`) or update the database directly (`UPDATE users SET role = 'admin' WHERE email = '...'`).
+
+> **Note:** Roles require a PostgreSQL database (`DATABASE_URL`). Without a database, session data is stored in memory and all OIDC users get the default role (Viewer). Use `LOCAL_PASSWORD` for single-admin setups without a database.
 
 ---
 
