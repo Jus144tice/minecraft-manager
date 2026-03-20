@@ -1233,7 +1233,6 @@ textarea:focus {
   border: 1px solid var(--border);
   border-radius: var(--radius);
   padding: 0.75rem;
-  min-height: 5rem;
   transition: border-color 0.15s;
 }
 .mod-card:hover {

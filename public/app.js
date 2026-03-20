@@ -1269,7 +1269,7 @@ function renderMods() {
           <span class="side-badge ${side.cls}">${side.text}</span>
           ${!mod.enabled ? '<span class="side-badge mod-off-badge">Disabled</span>' : ''}
         </div>
-        ${desc ? `<div class="mod-desc">${esc(desc.slice(0, 120))}${desc.length > 120 ? '...' : ''}</div>` : ''}
+        <div class="mod-desc">${desc ? `${esc(desc.slice(0, 120))}${desc.length > 120 ? '...' : ''}` : '&nbsp;'}</div>
         <div class="mod-meta">
           ${md?.author ? `<span class="dim" title="Author">by <strong>${esc(md.author)}</strong></span>` : ''}
           ${md?.downloads != null ? `<span class="dim" title="Downloads">&#11015; ${Number(md.downloads).toLocaleString()}</span>` : ''}
