@@ -19,7 +19,7 @@ import {
   checkWsOrigin,
   requireCapability,
 } from './src/middleware.js';
-import { getCapabilitiesForRole, roleToAdminLevel } from './src/permissions.js';
+import { getCapabilitiesForRole, roleToAdminLevel, setCapabilityOverrides } from './src/permissions.js';
 import { validateConfig, migrateLaunchConfig, launchToString } from './src/validate.js';
 import { info, setNotifyHook } from './src/audit.js';
 import { initDatabase, getUser } from './src/db.js';
@@ -66,6 +66,9 @@ if (migrateLaunchConfig(config)) {
   await writeFile(CONFIG_PATH, JSON.stringify(config, null, 2), 'utf8');
   console.log('Migrated legacy startCommand to structured launch config in config.json');
 }
+
+// Apply any custom RBAC capability overrides from config
+setCapabilityOverrides(config.authorization?.capabilityOverrides);
 
 async function saveConfig(updates) {
   config = { ...config, ...updates };
@@ -286,7 +289,7 @@ app.use('/api', buildCsrfCheck());
 // ============================================================
 
 app.use('/api', serverRoutes(ctx));
-app.use('/api', userRoutes());
+app.use('/api', userRoutes(ctx));
 app.use('/api', backupRoutes(ctx));
 app.use('/api', modpackRoutes(ctx));
 app.use('/api', auditRoutes());

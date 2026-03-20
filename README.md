@@ -14,7 +14,7 @@ A self-hosted web control panel for a Minecraft Forge server running on Linux. B
 - Player management — operators (with permission levels 1–4), whitelist, bans
 - Edit `server.properties` in the browser
 - OIDC authentication (Google and/or Microsoft) with email allowlist; optional local password fallback
-- Role-based access — five granular roles (Viewer, Operator, Moderator, Admin, Owner) with 30 capabilities; first OIDC user auto-promoted to admin
+- Role-based access — five granular roles (Viewer, Operator, Moderator, Admin, Owner) with 30 capabilities; owners can customize which capabilities each role grants; first OIDC user auto-promoted to admin
 - WebSocket-based live log streaming
 - Full backup & restore — scheduled nightly (configurable cron), quiesced snapshots via RCON, disk-space preflight checks, concurrent-operation locking. Restore to any point in time from the Backups tab.
 - **Discord bot integration** — slash commands (`/status`, `/start`, `/stop`, `/restart`, `/backup`, `/players`, `/say`) with role-based permissions, plus automatic notifications for server events. See [DISCORD.md](DISCORD.md) for setup.
@@ -492,7 +492,7 @@ In **demo mode**, no login is required. Demo mode is for local development only 
 
 ### Roles & permissions
 
-Every user has one of five roles (cumulative — each role includes all capabilities of the roles below it):
+Every user has one of five roles (cumulative — each role includes all capabilities of the roles below it). Owners can customize which capabilities each role grants from the **Access Control → Role Reference** tab:
 
 | Role          | Access                                                                                |
 | ------------- | ------------------------------------------------------------------------------------- |

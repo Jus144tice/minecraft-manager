@@ -1,6 +1,6 @@
 // Input validation helpers for user-supplied values.
 
-import { ROLE_ORDER, PERMISSION_POLICIES } from './permissions.js';
+import { ROLE_ORDER, PERMISSION_POLICIES, CAPABILITIES } from './permissions.js';
 
 // Minecraft player names: 1–16 characters, alphanumeric or underscore.
 // (Mojang allows 1-16; NPC/Bedrock names may differ but this is conservative for server ops.)
@@ -148,6 +148,30 @@ export function validateConfig(config) {
       for (const [roleId, role] of Object.entries(auth.discordRoleMapping)) {
         if (!ROLE_ORDER.includes(role)) {
           errors.push(`authorization.discordRoleMapping[${roleId}] must be a valid role (got "${role}").`);
+        }
+      }
+    }
+    if (auth.capabilityOverrides && typeof auth.capabilityOverrides === 'object') {
+      const allCaps = Object.keys(CAPABILITIES);
+      for (const [roleName, ov] of Object.entries(auth.capabilityOverrides)) {
+        if (!ROLE_ORDER.includes(roleName)) {
+          errors.push(`authorization.capabilityOverrides has unknown role "${roleName}".`);
+          continue;
+        }
+        if (typeof ov !== 'object' || ov === null) {
+          errors.push(`authorization.capabilityOverrides[${roleName}] must be an object.`);
+          continue;
+        }
+        for (const field of ['add', 'remove']) {
+          if (ov[field] && Array.isArray(ov[field])) {
+            for (const cap of ov[field]) {
+              if (!allCaps.includes(cap)) {
+                errors.push(
+                  `authorization.capabilityOverrides[${roleName}].${field} contains unknown capability "${cap}".`,
+                );
+              }
+            }
+          }
         }
       }
     }

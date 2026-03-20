@@ -84,28 +84,28 @@ In `server.js`, routes are mounted in two groups. **Do not move routes between g
 
 ### Core Modules (`src/`)
 
-| File                  | Purpose                                           | Key Exports                                                                                                                                    |
-| --------------------- | ------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------- |
-| `auth.js`             | OIDC (Google/Microsoft) + local password auth     | `buildSessionMiddleware()`, `buildAuthRouter()`, `requireSession`                                                                              |
-| `permissions.js`      | RBAC engine: 5 roles, 30 capabilities, 3 policies | `CAPABILITIES`, `ROLES`, `ROLE_ORDER`, `PERMISSION_POLICIES`, `getCapabilitiesForRole()`, `resolveEffectivePermissions()`                      |
-| `middleware.js`       | Helmet, rate limiting, CSRF, origin checks        | `buildCsrfCheck()`, `requireCapability()`, `buildSameOriginCheck()`, `checkWsOrigin()`                                                         |
-| `db.js`               | PostgreSQL schema + CRUD helpers                  | `initDatabase()`, `upsertUser()`, `insertAuditLog()`, `upsertDiscordLink()`, `upsertPanelLink()`                                               |
-| `audit.js`            | Structured JSON logging + DB audit trail          | `audit()`, `info()`, `warn()`, `setNotifyHook()`                                                                                               |
-| `services.js`         | Creates shared `ctx` object                       | `createServices()`                                                                                                                             |
-| `minecraftProcess.js` | Child process, log streaming (2000-line buffer)   | `class MinecraftProcess` — `start()`, `stop()`, `kill()`, `sendConsoleCommand()`                                                               |
-| `rcon.js`             | Source RCON protocol client                       | `class RconClient` — `connect()`, `sendCommand()`, `disconnect()`                                                                              |
-| `operationLock.js`    | Mutex for destructive ops                         | `acquireOp()`, `releaseOp()`, `getActiveOps()`                                                                                                 |
-| `backup.js`           | tar.gz backup/restore, cron scheduling            | `createBackup()`, `restoreBackup()`, `listBackups()`, `initBackupScheduler()`                                                                  |
-| `metrics.js`          | TPS, CPU, RAM, disk, player count                 | `collectMetrics()`, `parseTps()`, `collectDemoMetrics()`                                                                                       |
-| `notify.js`           | Webhook + Discord notifications                   | `initNotifications()`, `onAuditEvent()`, `notifyLagSpike()`                                                                                    |
-| `validate.js`         | Input validation & config migration               | `isValidMinecraftName()`, `isSafeModFilename()`, `isSafeMrpackFilename()`, `validateConfig()`, `parseLaunchCommand()`, `migrateLaunchConfig()` |
-| `preflight.js`        | Runtime diagnostic checks                         | `runPreflight()`                                                                                                                               |
-| `pathUtils.js`        | Path traversal prevention                         | `safeJoin()`                                                                                                                                   |
-| `serverFiles.js`      | CRUD for MC server JSON files & mods              | `getOps()`, `getWhitelist()`, `getServerProperties()`, `listMods()`, `hashMods()`, `saveMod()`                                                 |
-| `modrinth.js`         | Modrinth API v2 wrapper                           | `searchMods()`, `lookupByHashes()`, `downloadModFile()`, `getVersion()`, `getVersionsBatch()`                                                  |
-| `mrpack.js`           | .mrpack ZIP parsing & building                    | `parseMrpack()`, `buildMrpack()`, `analyzeForServer()`, `classifyEntry()`, `extractOverrides()`                                                |
-| `panelLinks.js`       | Panel user ↔ MC player linking                    | `setLink()`, `getLink()`, `removeLink()`, `getLinkByMinecraftName()`                                                                           |
-| `demoData.js`         | Seed data for demo mode                           | `DEMO_ONLINE_PLAYERS`, `DEMO_MODS`, `DEMO_OPS`, `enrichDemoIcons()`                                                                            |
+| File                  | Purpose                                           | Key Exports                                                                                                                                                       |
+| --------------------- | ------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `auth.js`             | OIDC (Google/Microsoft) + local password auth     | `buildSessionMiddleware()`, `buildAuthRouter()`, `requireSession`                                                                                                 |
+| `permissions.js`      | RBAC engine: 5 roles, 30 capabilities, 3 policies | `CAPABILITIES`, `ROLES`, `ROLE_ORDER`, `getCapabilitiesForRole()`, `setCapabilityOverrides()`, `getDefaultCapabilitiesForRole()`, `resolveEffectivePermissions()` |
+| `middleware.js`       | Helmet, rate limiting, CSRF, origin checks        | `buildCsrfCheck()`, `requireCapability()`, `buildSameOriginCheck()`, `checkWsOrigin()`                                                                            |
+| `db.js`               | PostgreSQL schema + CRUD helpers                  | `initDatabase()`, `upsertUser()`, `insertAuditLog()`, `upsertDiscordLink()`, `upsertPanelLink()`                                                                  |
+| `audit.js`            | Structured JSON logging + DB audit trail          | `audit()`, `info()`, `warn()`, `setNotifyHook()`                                                                                                                  |
+| `services.js`         | Creates shared `ctx` object                       | `createServices()`                                                                                                                                                |
+| `minecraftProcess.js` | Child process, log streaming (2000-line buffer)   | `class MinecraftProcess` — `start()`, `stop()`, `kill()`, `sendConsoleCommand()`                                                                                  |
+| `rcon.js`             | Source RCON protocol client                       | `class RconClient` — `connect()`, `sendCommand()`, `disconnect()`                                                                                                 |
+| `operationLock.js`    | Mutex for destructive ops                         | `acquireOp()`, `releaseOp()`, `getActiveOps()`                                                                                                                    |
+| `backup.js`           | tar.gz backup/restore, cron scheduling            | `createBackup()`, `restoreBackup()`, `listBackups()`, `initBackupScheduler()`                                                                                     |
+| `metrics.js`          | TPS, CPU, RAM, disk, player count                 | `collectMetrics()`, `parseTps()`, `collectDemoMetrics()`                                                                                                          |
+| `notify.js`           | Webhook + Discord notifications                   | `initNotifications()`, `onAuditEvent()`, `notifyLagSpike()`                                                                                                       |
+| `validate.js`         | Input validation & config migration               | `isValidMinecraftName()`, `isSafeModFilename()`, `isSafeMrpackFilename()`, `validateConfig()`, `parseLaunchCommand()`, `migrateLaunchConfig()`                    |
+| `preflight.js`        | Runtime diagnostic checks                         | `runPreflight()`                                                                                                                                                  |
+| `pathUtils.js`        | Path traversal prevention                         | `safeJoin()`                                                                                                                                                      |
+| `serverFiles.js`      | CRUD for MC server JSON files & mods              | `getOps()`, `getWhitelist()`, `getServerProperties()`, `listMods()`, `hashMods()`, `saveMod()`                                                                    |
+| `modrinth.js`         | Modrinth API v2 wrapper                           | `searchMods()`, `lookupByHashes()`, `downloadModFile()`, `getVersion()`, `getVersionsBatch()`                                                                     |
+| `mrpack.js`           | .mrpack ZIP parsing & building                    | `parseMrpack()`, `buildMrpack()`, `analyzeForServer()`, `classifyEntry()`, `extractOverrides()`                                                                   |
+| `panelLinks.js`       | Panel user ↔ MC player linking                    | `setLink()`, `getLink()`, `removeLink()`, `getLinkByMinecraftName()`                                                                                              |
+| `demoData.js`         | Seed data for demo mode                           | `DEMO_ONLINE_PLAYERS`, `DEMO_MODS`, `DEMO_OPS`, `enrichDemoIcons()`                                                                                               |
 
 ### Routes (`src/routes/`)
 
@@ -121,7 +121,7 @@ All export `(ctx) => router`. Mounted under `/api/` in server.js unless noted.
 | `modpack.js`  | `GET /modpack/export`, `POST /modpack/{analyze,import}`, `POST /modpack/mrpack/{analyze,import}`, `GET /modpack/mrpack/export`                                                                                      |
 | `backups.js`  | `GET /backups`, `POST /backups`, `POST /backups/{restore,validate}`, `DELETE /backups/:filename`, `GET /backups/{schedule,lock}`, `GET /operations`                                                                 |
 | `settings.js` | `GET/POST /settings/{properties,jvm-args}`, `GET/POST /config`, `GET /browse-dirs`, `POST /mkdir`, `GET /discord/status`, `POST /discord/{test-connection,test-notification,send-message}`, `GET /preflight`        |
-| `users.js`    | `GET /users`, `GET /users/:email`, `PUT /users/:email/{role,admin}`, `DELETE /users/:email`, `GET /roles`                                                                                                           |
+| `users.js`    | `GET /users`, `GET /users/:email`, `PUT /users/:email/{role,admin}`, `DELETE /users/:email`, `GET /roles`, `PUT /roles/capabilities`                                                                                |
 | `audit.js`    | `GET /audit-logs`                                                                                                                                                                                                   |
 | `identity.js` | `GET /identity/me`, `POST /identity/link`, `GET /identity/link/status`, `DELETE /identity/link`, `GET /panel-links`, `POST /panel-link`, `DELETE /panel-link/:email`                                                |
 | `health.js`   | `GET /healthz`, `GET /readyz`, `GET /metrics` (unauthenticated, mounted outside `/api/`)                                                                                                                            |
@@ -195,7 +195,7 @@ All route files export `(ctx) => router`. The `ctx` object (built in `services.j
 
 ### RBAC
 
-5 roles (viewer < operator < moderator < admin < owner) with cumulative capabilities defined in `permissions.js` → `ROLES`. Routes guard with `requireCapability()` from `middleware.js`. Frontend checks with `can()` in `app.js`.
+5 roles (viewer < operator < moderator < admin < owner) with cumulative capabilities defined in `permissions.js` → `ROLES`. Routes guard with `requireCapability()` from `middleware.js`. Frontend checks with `can()` in `app.js`. Owners can customize which capabilities each role grants via the Access Control → Role Reference UI or `PUT /roles/capabilities`. Overrides are stored in `config.json` → `authorization.capabilityOverrides` as `{ roleName: { add: [], remove: [] } }` diffs from defaults. Safety: `panel.view` can never be removed; `panel.manage_users` can never be removed from owner.
 
 ### Operation Locking
 
@@ -223,7 +223,9 @@ Large mrpack imports return `{ jobId }` immediately from `modpack.js` route. Dow
 
 ## Roles & Capabilities
 
-| Role      | Level | Key Capabilities                                                   |
+Default capabilities (owners can customize per-role via Access Control UI):
+
+| Role      | Level | Key Capabilities (defaults)                                        |
 | --------- | ----- | ------------------------------------------------------------------ |
 | viewer    | 0     | Read-only: status, logs, console, players, link_self               |
 | operator  | 1     | + start, stop, restart, create_backup, broadcast                   |
@@ -254,7 +256,7 @@ Challenge-based verification: user starts challenge from Panel (`identity.js`) o
 ## Config Files
 
 - `.env` — secrets (SESSION_SECRET, OIDC creds, DATABASE_URL, DISCORD_BOT_TOKEN)
-- `config.json` — app settings (serverPath, RCON, backups, notifications, discord)
+- `config.json` — app settings (serverPath, RCON, backups, notifications, discord, authorization.capabilityOverrides)
 - `config.example.json` — template with all options documented
 - `config.lan-example.json` — LAN-only setup (local password, no OIDC)
 

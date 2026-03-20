@@ -416,3 +416,36 @@ test('validateConfig: authorization — no authorization key produces no errors'
   const errors = validateConfig(noAuth);
   assert.deepEqual(errors, []);
 });
+
+// --- validateConfig: capabilityOverrides ---
+
+test('validateConfig: valid capabilityOverrides produces no errors', () => {
+  const errors = validateConfig({
+    ...GOOD_CONFIG,
+    authorization: {
+      capabilityOverrides: {
+        admin: { remove: ['server.delete_backup'] },
+        viewer: { add: ['server.start'] },
+      },
+    },
+  });
+  assert.deepEqual(errors, []);
+});
+
+test('validateConfig: capabilityOverrides with unknown role reports error', () => {
+  const errors = validateConfig({
+    ...GOOD_CONFIG,
+    authorization: { capabilityOverrides: { superadmin: { add: ['panel.view'] } } },
+  });
+  assert.equal(errors.length, 1);
+  assert.match(errors[0], /capabilityOverrides.*superadmin/);
+});
+
+test('validateConfig: capabilityOverrides with unknown capability reports error', () => {
+  const errors = validateConfig({
+    ...GOOD_CONFIG,
+    authorization: { capabilityOverrides: { admin: { remove: ['nonexistent.cap'] } } },
+  });
+  assert.equal(errors.length, 1);
+  assert.match(errors[0], /capabilityOverrides.*nonexistent\.cap/);
+});

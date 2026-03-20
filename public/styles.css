@@ -1703,6 +1703,19 @@ textarea:focus {
   color: var(--green);
   font-weight: bold;
 }
+.ac-matrix-check input[type='checkbox'] {
+  width: 16px;
+  height: 16px;
+  cursor: pointer;
+  accent-color: var(--green);
+}
+.ac-matrix-check input[type='checkbox']:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+.ac-matrix-check.rbac-customized {
+  background: rgba(88, 166, 255, 0.1);
+}
 .ac-matrix-role-header {
   min-width: 80px;
 }

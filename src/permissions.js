@@ -170,18 +170,66 @@ export const ROLE_ORDER = ['viewer', 'operator', 'moderator', 'admin', 'owner'];
 
 // ---- Capability resolution ---------------------------------
 
-/** Cached Set<string> per role for fast lookups */
-const _capSets = {};
+/** Default (immutable) Set<string> per role for fast lookups */
+const _defaultCapSets = {};
 for (const [key, role] of Object.entries(ROLES)) {
-  _capSets[key] = new Set(role.capabilities);
+  _defaultCapSets[key] = new Set(role.capabilities);
+}
+
+/** Effective (overridden) Set<string> per role — rebuilt by setCapabilityOverrides() */
+let _effectiveCapSets = { ..._defaultCapSets };
+
+/** Currently active overrides (for inspection by GET /roles) */
+let _activeOverrides = {};
+
+/**
+ * Apply capability overrides from config.authorization.capabilityOverrides.
+ * Rebuilds the effective capability sets.  Call at startup and after config saves.
+ *
+ * @param {Record<string, { add?: string[], remove?: string[] }>} overrides
+ */
+export function setCapabilityOverrides(overrides) {
+  _activeOverrides = overrides && typeof overrides === 'object' ? overrides : {};
+  const rebuilt = {};
+  for (const key of ROLE_ORDER) {
+    const base = new Set(_defaultCapSets[key]);
+    const ov = _activeOverrides[key];
+    if (ov) {
+      if (Array.isArray(ov.remove)) {
+        for (const cap of ov.remove) base.delete(cap);
+      }
+      if (Array.isArray(ov.add)) {
+        for (const cap of ov.add) {
+          if (CAPABILITIES[cap]) base.add(cap);
+        }
+      }
+    }
+    // Safety: panel.view can never be removed; panel.manage_users can never be removed from owner
+    base.add('panel.view');
+    if (key === 'owner') base.add('panel.manage_users');
+    rebuilt[key] = base;
+  }
+  _effectiveCapSets = rebuilt;
+}
+
+/** Return the currently active capability overrides (for API responses). */
+export function getCapabilityOverrides() {
+  return _activeOverrides;
 }
 
 /**
- * Return the Set of capabilities granted by a role name.
+ * Return the Set of capabilities granted by a role name (with overrides applied).
  * Returns the viewer set for unknown role names (safe default).
  */
 export function getCapabilitiesForRole(roleName) {
-  return _capSets[roleName] || _capSets.viewer;
+  return _effectiveCapSets[roleName] || _effectiveCapSets.viewer;
+}
+
+/**
+ * Return the default (un-overridden) Set of capabilities for a role.
+ */
+export function getDefaultCapabilitiesForRole(roleName) {
+  return _defaultCapSets[roleName] || _defaultCapSets.viewer;
 }
 
 /**

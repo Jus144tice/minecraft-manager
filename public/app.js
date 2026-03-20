@@ -2367,9 +2367,15 @@ $('btn-jvm-save-restart').addEventListener('click', async () => {
 
 // --- Role Reference ---
 
+// Track RBAC editing state
+let _rbacData = null; // last fetched role data from GET /roles
+let _rbacDirty = false; // true when user has toggled checkboxes
+
 async function loadRoleReference() {
   try {
-    const roles = await GET('/roles');
+    const data = await GET('/roles');
+    _rbacData = data;
+    const { roles, allCapabilities, editable } = data;
     const roleOrder = ['viewer', 'operator', 'moderator', 'admin', 'owner'];
 
     // Role summary cards
@@ -2388,18 +2394,26 @@ async function loadRoleReference() {
       .join('');
     $('ac-role-summary').innerHTML = cards;
 
-    // Capability matrix
+    // Update hint text based on editability
+    const hint = $('ac-matrix-hint');
+    if (hint) {
+      hint.textContent = editable
+        ? 'Toggle checkboxes to customize which capabilities each role grants. Click Save Changes when done.'
+        : 'A checkmark means the role grants this capability. Each role includes all capabilities from lower roles.';
+    }
+
+    // Build effective capability map from current role data
     const allCaps = {};
-    for (const key of roleOrder) {
-      for (const cap of roles[key].capabilities) {
-        if (!allCaps[cap]) allCaps[cap] = {};
-        allCaps[cap][key] = true;
+    for (const cap of allCapabilities) {
+      allCaps[cap] = {};
+      for (const key of roleOrder) {
+        if (roles[key].capabilities.includes(cap)) allCaps[cap][key] = true;
       }
     }
 
     // Group capabilities by category prefix
     const groups = {};
-    for (const cap of Object.keys(allCaps)) {
+    for (const cap of allCapabilities) {
       const dot = cap.indexOf('.');
       const category = dot > 0 ? cap.substring(0, dot) : 'other';
       if (!groups[category]) groups[category] = [];
@@ -2458,7 +2472,17 @@ async function loadRoleReference() {
       for (const cap of caps) {
         const label = capLabels[cap] || cap;
         const cells = roleOrder
-          .map((r) => `<td class="ac-matrix-check">${allCaps[cap][r] ? '&#10003;' : ''}</td>`)
+          .map((r) => {
+            const checked = allCaps[cap][r] ? 'checked' : '';
+            const isCustomized = checked !== (roles[r].defaultCapabilities.includes(cap) ? 'checked' : '');
+            const customClass = isCustomized ? ' rbac-customized' : '';
+            if (editable) {
+              // Safety: panel.view always on, panel.manage_users always on for owner
+              const locked = cap === 'panel.view' || (cap === 'panel.manage_users' && r === 'owner');
+              return `<td class="ac-matrix-check${customClass}"><input type="checkbox" class="rbac-checkbox" data-cap="${esc(cap)}" data-role="${esc(r)}" ${checked} ${locked ? 'disabled' : ''} /></td>`;
+            }
+            return `<td class="ac-matrix-check${customClass}">${allCaps[cap][r] ? '&#10003;' : ''}</td>`;
+          })
           .join('');
         matrixRows += `<tr><td class="ac-matrix-cap">${esc(label)}</td>${cells}</tr>`;
       }
@@ -2468,8 +2492,98 @@ async function loadRoleReference() {
       <thead><tr><th>Capability</th>${roleOrder.map((r) => `<th class="ac-matrix-role-header"><span class="badge badge-role-${esc(r)}">${esc(roles[r].name)}</span></th>`).join('')}</tr></thead>
       <tbody>${matrixRows}</tbody>
     </table>`;
+
+    // Show/hide save/reset buttons
+    const actionsEl = $('ac-rbac-actions');
+    if (actionsEl) {
+      if (editable) {
+        actionsEl.classList.remove('hidden');
+        _rbacDirty = false;
+        updateRbacButtons();
+      } else {
+        actionsEl.classList.add('hidden');
+      }
+    }
   } catch (err) {
     $('ac-role-summary').innerHTML = `<p class="dim">Could not load roles: ${esc(err.message)}</p>`;
+  }
+}
+
+function updateRbacButtons() {
+  const saveBtn = $('btn-save-rbac');
+  const resetBtn = $('btn-reset-rbac');
+  if (saveBtn) saveBtn.disabled = !_rbacDirty;
+  // Show reset button only when there are active overrides or unsaved changes
+  const hasOverrides = _rbacData?.overrides && Object.keys(_rbacData.overrides).length > 0;
+  if (resetBtn) resetBtn.disabled = !hasOverrides && !_rbacDirty;
+}
+
+async function saveRbacChanges() {
+  const roleOrder = ['viewer', 'operator', 'moderator', 'admin', 'owner'];
+  const desired = {};
+  for (const role of roleOrder) {
+    desired[role] = [];
+  }
+  // Read all checkbox states
+  const checkboxes = document.querySelectorAll('.rbac-checkbox');
+  for (const cb of checkboxes) {
+    if (cb.checked) {
+      desired[cb.dataset.role].push(cb.dataset.cap);
+    }
+  }
+  // Safety: ensure locked caps are always included
+  for (const role of roleOrder) {
+    if (!desired[role].includes('panel.view')) desired[role].push('panel.view');
+  }
+  if (!desired.owner.includes('panel.manage_users')) desired.owner.push('panel.manage_users');
+
+  const msg = $('ac-rbac-msg');
+  try {
+    const data = await PUT('/roles/capabilities', { roles: desired });
+    _rbacData = data;
+    _rbacDirty = false;
+    if (msg) {
+      msg.textContent = 'RBAC rules saved successfully.';
+      msg.className = 'control-msg success';
+      setTimeout(() => (msg.textContent = ''), 3000);
+    }
+    // Re-render to reflect saved state
+    await loadRoleReference();
+    // Refresh session so the current user's capabilities update
+    await refreshSession();
+  } catch (err) {
+    if (msg) {
+      msg.textContent = 'Failed to save: ' + err.message;
+      msg.className = 'control-msg error';
+    }
+  }
+}
+
+async function resetRbacDefaults() {
+  const roleOrder = ['viewer', 'operator', 'moderator', 'admin', 'owner'];
+  if (!_rbacData?.roles) return;
+  // Send default capabilities for each role
+  const desired = {};
+  for (const role of roleOrder) {
+    desired[role] = _rbacData.roles[role].defaultCapabilities;
+  }
+  const msg = $('ac-rbac-msg');
+  try {
+    const data = await PUT('/roles/capabilities', { roles: desired });
+    _rbacData = data;
+    _rbacDirty = false;
+    if (msg) {
+      msg.textContent = 'RBAC rules reset to defaults.';
+      msg.className = 'control-msg success';
+      setTimeout(() => (msg.textContent = ''), 3000);
+    }
+    await loadRoleReference();
+    await refreshSession();
+  } catch (err) {
+    if (msg) {
+      msg.textContent = 'Failed to reset: ' + err.message;
+      msg.className = 'control-msg error';
+    }
   }
 }
 
@@ -2804,6 +2918,23 @@ function bindDiscordMapRemoveButtons() {
     btn.onclick = () => btn.closest('tr').remove();
   });
 }
+
+// RBAC capability overrides — save/reset buttons + checkbox change tracking
+document.getElementById('btn-save-rbac')?.addEventListener('click', saveRbacChanges);
+document.getElementById('btn-reset-rbac')?.addEventListener('click', resetRbacDefaults);
+document.getElementById('ac-capability-matrix')?.addEventListener('change', (e) => {
+  if (e.target.classList.contains('rbac-checkbox')) {
+    _rbacDirty = true;
+    updateRbacButtons();
+    // Highlight customized cells
+    const cap = e.target.dataset.cap;
+    const role = e.target.dataset.role;
+    const isDefault = _rbacData?.roles?.[role]?.defaultCapabilities.includes(cap);
+    const isChecked = e.target.checked;
+    const td = e.target.closest('td');
+    if (td) td.classList.toggle('rbac-customized', isChecked !== isDefault);
+  }
+});
 
 document.getElementById('btn-save-policy')?.addEventListener('click', async () => {
   const policy = document.querySelector('input[name="ac-policy"]:checked')?.value || 'isolated';

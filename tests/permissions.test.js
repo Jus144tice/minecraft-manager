@@ -6,6 +6,9 @@ import {
   ROLES,
   ROLE_ORDER,
   getCapabilitiesForRole,
+  getDefaultCapabilitiesForRole,
+  setCapabilityOverrides,
+  getCapabilityOverrides,
   getRoleLevel,
   getRoleByLevel,
   roleHasCapability,
@@ -271,4 +274,66 @@ test('mergeAuthorizationConfig rejects invalid policy', () => {
 
 test('PERMISSION_POLICIES contains expected values', () => {
   assert.deepEqual(PERMISSION_POLICIES, ['isolated', 'inherit-panel', 'panel-ceiling']);
+});
+
+// --- Capability overrides ---
+
+test('setCapabilityOverrides: remove capability from a role', () => {
+  setCapabilityOverrides({ admin: { remove: ['server.delete_backup'] } });
+  const caps = getCapabilitiesForRole('admin');
+  assert.equal(caps.has('server.delete_backup'), false, 'admin should not have server.delete_backup after removal');
+  // owner should still have it (overrides are per-role, not inherited)
+  const ownerCaps = getCapabilitiesForRole('owner');
+  assert.ok(ownerCaps.has('server.delete_backup'), 'owner should still have server.delete_backup');
+  // Clean up
+  setCapabilityOverrides({});
+});
+
+test('setCapabilityOverrides: add capability to a role', () => {
+  setCapabilityOverrides({ viewer: { add: ['server.start'] } });
+  const caps = getCapabilitiesForRole('viewer');
+  assert.ok(caps.has('server.start'), 'viewer should have server.start after addition');
+  setCapabilityOverrides({});
+});
+
+test('setCapabilityOverrides: panel.view can never be removed', () => {
+  setCapabilityOverrides({ viewer: { remove: ['panel.view'] } });
+  const caps = getCapabilitiesForRole('viewer');
+  assert.ok(caps.has('panel.view'), 'panel.view must always be present');
+  setCapabilityOverrides({});
+});
+
+test('setCapabilityOverrides: panel.manage_users can never be removed from owner', () => {
+  setCapabilityOverrides({ owner: { remove: ['panel.manage_users'] } });
+  const caps = getCapabilitiesForRole('owner');
+  assert.ok(caps.has('panel.manage_users'), 'owner must always have panel.manage_users');
+  setCapabilityOverrides({});
+});
+
+test('setCapabilityOverrides: ignores unknown capabilities in add', () => {
+  setCapabilityOverrides({ viewer: { add: ['nonexistent.cap'] } });
+  const caps = getCapabilitiesForRole('viewer');
+  assert.equal(caps.has('nonexistent.cap'), false);
+  setCapabilityOverrides({});
+});
+
+test('getDefaultCapabilitiesForRole: returns defaults regardless of overrides', () => {
+  setCapabilityOverrides({ admin: { remove: ['server.delete_backup'] } });
+  const defaults = getDefaultCapabilitiesForRole('admin');
+  assert.ok(defaults.has('server.delete_backup'), 'default should still include removed cap');
+  setCapabilityOverrides({});
+});
+
+test('getCapabilityOverrides: returns current overrides', () => {
+  const ov = { moderator: { add: ['panel.configure'] } };
+  setCapabilityOverrides(ov);
+  assert.deepEqual(getCapabilityOverrides(), ov);
+  setCapabilityOverrides({});
+});
+
+test('setCapabilityOverrides: null/undefined resets to defaults', () => {
+  setCapabilityOverrides({ viewer: { add: ['server.start'] } });
+  setCapabilityOverrides(null);
+  const caps = getCapabilitiesForRole('viewer');
+  assert.equal(caps.has('server.start'), false);
 });

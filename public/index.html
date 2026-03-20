@@ -1043,11 +1043,16 @@
             <p class="dim">Loading...</p>
           </div>
           <h3 class="ac-section-heading">Capability Matrix</h3>
-          <p class="dim small">
+          <p class="dim small" id="ac-matrix-hint">
             A checkmark means the role grants this capability. Each role includes all capabilities from lower roles.
           </p>
           <div id="ac-capability-matrix" class="player-table-wrap">
             <p class="dim">Loading...</p>
+          </div>
+          <div id="ac-rbac-actions" class="form-actions hidden" style="margin-top: 1rem">
+            <button class="btn btn-primary" id="btn-save-rbac">Save Changes</button>
+            <button class="btn btn-ghost" id="btn-reset-rbac">Reset to Defaults</button>
+            <span id="ac-rbac-msg" class="control-msg"></span>
           </div>
         </div>
 
