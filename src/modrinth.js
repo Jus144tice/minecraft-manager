@@ -108,6 +108,35 @@ export async function lookupByHashes(hashes) {
     }
   }
 
+  // Fetch team members to resolve author names (owner of each team)
+  const teamIds = [
+    ...new Set(
+      Object.values(projects)
+        .map((p) => p.team)
+        .filter(Boolean),
+    ),
+  ];
+  const authors = {}; // projectId -> author username
+  if (teamIds.length > 0) {
+    try {
+      const params = new URLSearchParams({ ids: JSON.stringify(teamIds) });
+      const teams = await modrinthFetch(`/teams?${params}`);
+      // teams is an array of arrays: [[member, member], [member, ...], ...]
+      const teamOwners = {};
+      for (const members of teams) {
+        const owner = members.find((m) => m.role === 'Owner') || members[0];
+        if (owner) teamOwners[owner.team_id] = owner.user?.username || owner.user?.name || null;
+      }
+      for (const project of Object.values(projects)) {
+        if (project.team && teamOwners[project.team]) {
+          authors[project.id] = teamOwners[project.team];
+        }
+      }
+    } catch {
+      // Non-fatal — cards render without author
+    }
+  }
+
   // Combine version + project data
   const result = {};
   for (const [hash, version] of Object.entries(versions)) {
@@ -128,7 +157,7 @@ export async function lookupByHashes(hashes) {
       downloads: project.downloads ?? null,
       follows: project.follows ?? null,
       categories: project.categories || [],
-      author: project.author || null,
+      author: authors[version.project_id] || null,
     };
   }
   return result;
