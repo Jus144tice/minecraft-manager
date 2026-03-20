@@ -127,6 +127,8 @@ export async function lookupByHashes(hashes) {
       iconUrl: project.icon_url || null,
       downloads: project.downloads ?? null,
       follows: project.follows ?? null,
+      categories: project.categories || [],
+      author: project.author || null,
     };
   }
   return result;

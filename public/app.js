@@ -1270,6 +1270,7 @@ function renderMods() {
           ${!mod.enabled ? '<span class="side-badge mod-off-badge">Disabled</span>' : ''}
         </div>
         <div class="mod-desc">${desc ? `${esc(desc.slice(0, 120))}${desc.length > 120 ? '...' : ''}` : '&nbsp;'}</div>
+        ${(() => { const cats = (md?.categories || []).filter((c) => c !== 'forge').slice(0, 3); return cats.length ? `<div class="mod-categories">${cats.map((c) => `<span class="mod-category">${esc(c)}</span>`).join('')}</div>` : ''; })()}
         <div class="mod-meta">
           ${md?.author ? `<span class="dim" title="Author">by <strong>${esc(md.author)}</strong></span>` : ''}
           ${md?.downloads != null ? `<span class="dim" title="Downloads">&#11015; ${Number(md.downloads).toLocaleString()}</span>` : ''}
