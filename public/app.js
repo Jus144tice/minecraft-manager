@@ -5129,9 +5129,10 @@ function refreshCurrentTabData() {
 
 async function loadEnvironments() {
   try {
-    const envs = await GET('/environments');
+    const data = await GET('/environments');
+    const envs = data.environments || [];
     envList = envs;
-    activeEnvId = envs.find((e) => e.isActive)?.id || null;
+    activeEnvId = data.activeEnvironment || envs.find((e) => e.isActive)?.id || null;
     if (!selectedEnvId) selectedEnvId = activeEnvId;
     renderEnvSelector();
     updateEnvBanner();
@@ -5196,7 +5197,8 @@ $('btn-new-env').addEventListener('click', () => {
 async function loadEnvManagement() {
   const container = $('env-list');
   try {
-    const envs = await GET('/environments');
+    const data = await GET('/environments');
+    const envs = data.environments || [];
     if (envs.length === 0) {
       container.innerHTML = '<p class="dim">No environments configured.</p>';
       return;
