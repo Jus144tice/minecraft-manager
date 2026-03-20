@@ -111,6 +111,8 @@ let wsReconnectTimer = null;
 let currentModData = {}; // filename -> modrinth data from lookup
 const BROWSE_FETCH_LIMIT = 100; // items fetched per API call (large batch for client-side filtering)
 const BROWSE_PAGE_SIZE = 10; // items shown per display page
+let browseOffset = 0; // current API offset for fetching next batch
+let browseTotal = 0; // total results reported by Modrinth API
 let browsePage = 0; // current page within filtered results (0-indexed)
 let lastBrowseHits = []; // all fetched hits (unfiltered); cached for re-render
 let lastFilteredHits = []; // post-filter cache for stable pagination
@@ -1344,11 +1346,13 @@ $('btn-refresh-mods').addEventListener('click', loadMods);
 let browseLoaded = false;
 
 $('btn-browse-search').addEventListener('click', () => {
+  browseOffset = 0;
   browsePage = 0;
   browseSearch();
 });
 $('browse-query').addEventListener('keydown', (e) => {
   if (e.key === 'Enter') {
+    browseOffset = 0;
     browsePage = 0;
     browseSearch();
   }
@@ -1363,6 +1367,11 @@ $('tab-page-prev').addEventListener('click', () => {
   if (browsePage > 0) {
     browsePage--;
     renderBrowsePage();
+  } else if (browseOffset > 0) {
+    // Go back to previous batch
+    browseOffset -= BROWSE_FETCH_LIMIT;
+    browsePage = 0;
+    ($('browse-query').value.trim() ? browseSearch : browseLoad)();
   }
 });
 $('tab-page-next').addEventListener('click', () => {
@@ -1375,11 +1384,16 @@ $('tab-page-next').addEventListener('click', () => {
   if (browsePage < maxPage) {
     browsePage++;
     renderBrowsePage();
+  } else if (browseOffset + BROWSE_FETCH_LIMIT < browseTotal) {
+    // Exhausted current batch — fetch next batch from API
+    browseOffset += BROWSE_FETCH_LIMIT;
+    browsePage = 0;
+    ($('browse-query').value.trim() ? browseSearch : browseLoad)();
   }
 });
 
 async function browseLoad() {
-  if (browseLoaded && !$('browse-query').value.trim()) {
+  if (browseLoaded && browseOffset === 0 && !$('browse-query').value.trim()) {
     renderBrowseResults(); // re-render from cache (handles back-to-page-1)
     return;
   }
@@ -1387,8 +1401,9 @@ async function browseLoad() {
   $('browse-results').innerHTML = '<p class="dim">Loading popular mods...</p>';
   browsePager.hide();
   try {
-    const params = new URLSearchParams({ limit: BROWSE_FETCH_LIMIT });
+    const params = new URLSearchParams({ limit: BROWSE_FETCH_LIMIT, offset: browseOffset });
     const data = await GET(`/modrinth/browse?${params}`);
+    browseTotal = data.total_hits || 0;
     lastBrowseHits = data.hits || [];
     renderBrowseResults();
     browseLoaded = true;
@@ -1400,6 +1415,7 @@ async function browseLoad() {
 async function browseSearch() {
   const q = $('browse-query').value.trim();
   if (!q) {
+    browseOffset = 0;
     browsePage = 0;
     return browseLoad();
   }
@@ -1408,8 +1424,9 @@ async function browseSearch() {
   $('browse-results').innerHTML = '<p class="dim">Searching Modrinth...</p>';
   browsePager.hide();
   try {
-    const params = new URLSearchParams({ q, side, limit: BROWSE_FETCH_LIMIT });
+    const params = new URLSearchParams({ q, side, limit: BROWSE_FETCH_LIMIT, offset: browseOffset });
     const data = await GET(`/modrinth/search?${params}`);
+    browseTotal = data.total_hits || 0;
     lastBrowseHits = data.hits || [];
     renderBrowseResults();
   } catch (err) {
@@ -1430,10 +1447,11 @@ function rebuildFilteredHits() {
 }
 
 function updateBrowsePagination() {
-  const total = lastFilteredHits.length;
-  const totalPages = Math.max(1, Math.ceil(total / BROWSE_PAGE_SIZE));
-  const page = browsePage + 1;
-  browsePager.update(page, totalPages, total, 'mods');
+  // Pages within the current batch are known exactly; total pages estimated from API total
+  const batchStartPage = Math.floor(browseOffset / BROWSE_PAGE_SIZE);
+  const page = batchStartPage + browsePage + 1;
+  const totalPages = Math.max(page, Math.ceil(browseTotal / BROWSE_PAGE_SIZE)) || 1;
+  browsePager.update(page, totalPages, browseTotal, 'mods');
 }
 
 // Returns a Set of Modrinth project slugs for all currently-installed mods.
