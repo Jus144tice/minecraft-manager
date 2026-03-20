@@ -106,7 +106,7 @@ export function migrateToEnvironments(config) {
   }
 
   // Extract per-env keys into a "default" environment
-  const env = { name: 'Production v1.0' };
+  const env = { name: 'Default' };
   for (const key of ENV_KEYS) {
     if (key in config) {
       env[key] = config[key];

@@ -179,7 +179,7 @@ test('migrateToEnvironments converts flat config to environments structure', () 
   assert.ok(config.environments);
   assert.ok(config.environments.default);
   assert.equal(config.activeEnvironment, 'default');
-  assert.equal(config.environments.default.name, 'Production v1.0');
+  assert.equal(config.environments.default.name, 'Default');
   assert.equal(config.environments.default.serverPath, '/home/minecraft/server');
   assert.equal(config.environments.default.rconPort, 25575);
 
