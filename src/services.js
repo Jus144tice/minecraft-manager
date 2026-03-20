@@ -11,7 +11,18 @@ const RESTART_WINDOW_MS = 600000; // 10-minute sliding window
 const RESTART_DELAY_MS = 10000; // wait 10s before restarting
 const MIN_RUNTIME_MS = 30000; // ignore exits within 30s of start (startup crash)
 
-export function createServices({ config, saveConfig, loadConfig, mc, broadcast, broadcastStatus }) {
+export function createServices({
+  config,
+  saveConfig,
+  loadConfig,
+  mc,
+  broadcast,
+  broadcastStatus,
+  rawConfig,
+  saveRawConfig,
+  saveEnvConfig,
+  resolveConfig,
+}) {
   let rcon = null;
   let rconReconnectTimer = null;
 
@@ -218,6 +229,26 @@ export function createServices({ config, saveConfig, loadConfig, mc, broadcast, 
     }
   }
 
+  // Switch the active environment — updates rawConfig, re-materializes config, disconnects RCON
+  async function switchEnvironment(envId) {
+    if (!rawConfig.environments?.[envId]) {
+      throw new Error(`Environment "${envId}" not found.`);
+    }
+    rawConfig = { ...rawConfig, activeEnvironment: envId };
+    config = resolveConfig(rawConfig);
+    await saveRawConfig();
+    // Disconnect RCON since the new environment may have different RCON settings
+    if (rcon) {
+      try {
+        rcon.disconnect();
+      } catch {
+        /* ok */
+      }
+      rcon = null;
+    }
+    clearTimeout(rconReconnectTimer);
+  }
+
   return {
     get config() {
       return config;
@@ -225,8 +256,18 @@ export function createServices({ config, saveConfig, loadConfig, mc, broadcast, 
     set config(c) {
       config = c;
     },
+    get rawConfig() {
+      return rawConfig;
+    },
+    set rawConfig(rc) {
+      rawConfig = rc;
+    },
     saveConfig,
+    saveEnvConfig,
+    saveRawConfig,
     loadConfig,
+    resolveConfig,
+    switchEnvironment,
     mc,
     broadcast,
     broadcastStatus,

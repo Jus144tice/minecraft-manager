@@ -14,12 +14,13 @@ A self-hosted web control panel for a Minecraft Forge server running on Linux. B
 - Player management — operators (with permission levels 1–4), whitelist, bans
 - Edit `server.properties` in the browser
 - OIDC authentication (Google and/or Microsoft) with email allowlist; optional local password fallback
-- Role-based access — five granular roles (Viewer, Operator, Moderator, Admin, Owner) with 30 capabilities; owners can customize which capabilities each role grants; first OIDC user auto-promoted to admin
+- Role-based access — five granular roles (Viewer, Operator, Moderator, Admin, Owner) with 31 capabilities; owners can customize which capabilities each role grants; first OIDC user auto-promoted to admin
 - WebSocket-based live log streaming
 - Full backup & restore — scheduled nightly (configurable cron), quiesced snapshots via RCON, disk-space preflight checks, concurrent-operation locking. Restore to any point in time from the Backups tab.
 - **Discord bot integration** — slash commands (`/status`, `/start`, `/stop`, `/restart`, `/backup`, `/players`, `/say`) with role-based permissions, plus automatic notifications for server events. See [DISCORD.md](DISCORD.md) for setup.
 - Webhook notifications — server crashes, auto-restarts, backups, lag spikes, player bans/kicks, and mod changes delivered to Discord webhooks or any HTTP endpoint
 - Ops endpoints — `/healthz`, `/readyz`, and `/metrics` (Prometheus format) for systemd, Nginx, UptimeRobot, or Prometheus/Grafana
+- **Multi-environment management** — create, configure, and deploy multiple server environments (production, staging, testing) from the panel. Each environment has fully isolated server path, launch config, mods, and settings. Deploy switches the active server with one click. Only one server runs at a time.
 - TPS monitoring with configurable lag-spike alerts and auto-restart on crash
 - Preflight self-checks — Dashboard warns about missing RCON, bad backup path, insecure bind settings, and other common misconfigurations
 - Production-ready deploy files — example systemd unit and Nginx reverse proxy config in `deploy/`

@@ -1,6 +1,7 @@
 // Input validation helpers for user-supplied values.
 
 import { ROLE_ORDER, PERMISSION_POLICIES, CAPABILITIES } from './permissions.js';
+import { validateEnvironmentConfig, validateEnvironmentId } from './environments.js';
 
 // Minecraft player names: 1–16 characters, alphanumeric or underscore.
 // (Mojang allows 1-16; NPC/Bedrock names may differ but this is conservative for server ops.)
@@ -173,6 +174,29 @@ export function validateConfig(config) {
             }
           }
         }
+      }
+    }
+  }
+
+  // Validate environments structure (if present in raw config)
+  if (config.environments && typeof config.environments === 'object') {
+    if (Object.keys(config.environments).length === 0) {
+      errors.push('environments object must contain at least one environment.');
+    }
+    if (config.activeEnvironment && !config.environments[config.activeEnvironment]) {
+      errors.push(`activeEnvironment "${config.activeEnvironment}" does not match any defined environment.`);
+    }
+    for (const [envId, env] of Object.entries(config.environments)) {
+      if (!validateEnvironmentId(envId)) {
+        errors.push(`environments["${envId}"]: invalid ID. Use lowercase letters, numbers, and hyphens (1-32 chars).`);
+      }
+      if (typeof env !== 'object' || env === null) {
+        errors.push(`environments["${envId}"] must be an object.`);
+        continue;
+      }
+      const envErrors = validateEnvironmentConfig(env);
+      for (const err of envErrors) {
+        errors.push(`environments["${envId}"]: ${err}`);
       }
     }
   }

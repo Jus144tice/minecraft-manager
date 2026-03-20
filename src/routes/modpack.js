@@ -14,6 +14,7 @@ import { audit } from '../audit.js';
 import { isSafeModFilename, isSafeMrpackFilename } from '../validate.js';
 import { acquireOp, releaseOp } from '../operationLock.js';
 import { requireCapability } from '../middleware.js';
+import { getSelectedConfig } from '../environments.js';
 
 // In-memory cache for analyzed .mrpack files (token → { data, expiresAt })
 const mrpackCache = new Map();
@@ -51,6 +52,19 @@ const rawBodyParser = express.raw({ type: 'application/octet-stream', limit: '50
 export default function modpackRoutes(ctx) {
   const router = Router();
 
+  // Resolve the selected environment's config for file operations
+  router.use((req, _res, next) => {
+    if (!ctx.config.demoMode) {
+      req._env = getSelectedConfig(ctx, req);
+    }
+    next();
+  });
+
+  // Helper to get the env config (falls back to ctx.config for demo mode)
+  function envOf(req) {
+    return req._env || ctx.config;
+  }
+
   // ============================================================
   // Existing JSON modpack routes
   // ============================================================
@@ -63,7 +77,7 @@ export default function modpackRoutes(ctx) {
             for (const mod of Demo.DEMO_MODS) m[mod.filename] = { hash: 'demo-' + mod.filename, enabled: mod.enabled };
             return m;
           })()
-        : await SF.hashMods(ctx.config.serverPath, ctx.config.modsFolder, ctx.config.disabledModsFolder);
+        : await SF.hashMods(envOf(req).serverPath, envOf(req).modsFolder, envOf(req).disabledModsFolder);
 
       let modrinthLookup = {};
       if (ctx.config.demoMode) {
@@ -143,7 +157,7 @@ export default function modpackRoutes(ctx) {
           }
         }
       } else {
-        const hashMap = await SF.hashMods(ctx.config.serverPath, ctx.config.modsFolder, ctx.config.disabledModsFolder);
+        const hashMap = await SF.hashMods(envOf(req).serverPath, envOf(req).modsFolder, envOf(req).disabledModsFolder);
         const hashes = Object.values(hashMap).map((v) => v.hash);
         const modrinthLookup = await Modrinth.lookupByHashes(hashes);
         for (const [filename, { hash }] of Object.entries(hashMap)) {
@@ -247,10 +261,10 @@ export default function modpackRoutes(ctx) {
           if (mod.replaceFilename) {
             try {
               await SF.deleteMod(
-                ctx.config.serverPath,
+                envOf(req).serverPath,
                 mod.replaceFilename,
-                ctx.config.modsFolder,
-                ctx.config.disabledModsFolder,
+                envOf(req).modsFolder,
+                envOf(req).disabledModsFolder,
               );
             } catch {
               /* old file may already be gone */
@@ -269,7 +283,7 @@ export default function modpackRoutes(ctx) {
           }
 
           const { buffer } = await Modrinth.downloadModFile(file.url, file.filename, file.hashes?.sha1);
-          await SF.saveMod(ctx.config.serverPath, file.filename, buffer, ctx.config.modsFolder);
+          await SF.saveMod(envOf(req).serverPath, file.filename, buffer, envOf(req).modsFolder);
           report.installed.push({
             title: mod.projectTitle,
             filename: file.filename,
@@ -391,6 +405,7 @@ export default function modpackRoutes(ctx) {
       ctx,
       lockId,
       auditInfo,
+      envOf(req),
     ).catch((err) => {
       ctx.broadcast({ type: 'mrpack-complete', jobId, report: null, error: err.message });
       if (lockId != null) releaseOp(lockId);
@@ -417,7 +432,7 @@ export default function modpackRoutes(ctx) {
             for (const mod of Demo.DEMO_MODS) m[mod.filename] = { hash: 'demo-' + mod.filename, enabled: mod.enabled };
             return m;
           })()
-        : await SF.hashMods(ctx.config.serverPath, ctx.config.modsFolder, ctx.config.disabledModsFolder);
+        : await SF.hashMods(envOf(req).serverPath, envOf(req).modsFolder, envOf(req).disabledModsFolder);
 
       let modrinthLookup = {};
       if (ctx.config.demoMode) {
@@ -488,8 +503,8 @@ export default function modpackRoutes(ctx) {
           try {
             fileSha512 = await SF.hashFileSha512(
               path.join(
-                ctx.config.serverPath,
-                enabled ? ctx.config.modsFolder : ctx.config.disabledModsFolder,
+                envOf(req).serverPath,
+                enabled ? envOf(req).modsFolder : envOf(req).disabledModsFolder,
                 filename,
               ),
             );
@@ -521,7 +536,7 @@ export default function modpackRoutes(ctx) {
       if (includeOverrides && !ctx.config.demoMode) {
         try {
           const { readFile } = await import('fs/promises');
-          const propsPath = path.join(ctx.config.serverPath, 'server.properties');
+          const propsPath = path.join(envOf(req).serverPath, 'server.properties');
           const buf = await readFile(propsPath);
           overrides.push({ relativePath: 'server.properties', buffer: buf });
         } catch {
@@ -628,7 +643,7 @@ function runMrpackImportSync(cached, options) {
 }
 
 /** Production: download mods in background, broadcast progress over WebSocket */
-async function runMrpackImportAsync(jobId, cached, options, ctx, lockId, auditInfo) {
+async function runMrpackImportAsync(jobId, cached, options, ctx, lockId, auditInfo, envConfig) {
   const { toInstall, report } = classifyFiles(cached, options);
 
   // Batch-lookup on Modrinth to identify client-only mods before downloading
@@ -696,7 +711,7 @@ async function runMrpackImportAsync(jobId, cached, options, ctx, lockId, auditIn
           }
         }
 
-        await SF.saveMod(ctx.config.serverPath, filename, buffer, ctx.config.modsFolder);
+        await SF.saveMod(envConfig.serverPath, filename, buffer, envConfig.modsFolder);
         report.installed.push({
           path: file.path,
           filename,
@@ -711,10 +726,10 @@ async function runMrpackImportAsync(jobId, cached, options, ctx, lockId, auditIn
     // Extract overrides if requested
     if (options.includeOverrides) {
       try {
-        const overrides = await Mrpack.extractOverrides(cached.buffer, ctx.config.serverPath);
+        const overrides = await Mrpack.extractOverrides(cached.buffer, envConfig.serverPath);
         for (const entry of overrides) {
           try {
-            await SF.writeOverrideFile(ctx.config.serverPath, entry.relativePath, entry.buffer);
+            await SF.writeOverrideFile(envConfig.serverPath, entry.relativePath, entry.buffer);
             report.overridesApplied++;
           } catch (err) {
             report.warnings.push(`Override ${entry.relativePath}: ${err.message}`);

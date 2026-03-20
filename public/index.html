@@ -57,6 +57,14 @@
         <button class="demo-banner-close" id="demo-banner-close">&times;</button>
       </div>
 
+      <!-- Non-active environment banner (shown when browsing a non-active env) -->
+      <div id="env-banner" class="env-banner hidden">
+        <span class="env-banner-icon">&#9432;</span>
+        <span id="env-banner-text">Viewing a non-active environment</span>
+        <button class="btn btn-xs btn-primary" id="env-banner-deploy">Deploy</button>
+        <button class="btn btn-xs btn-ghost" id="env-banner-switch-active">Switch to Active</button>
+      </div>
+
       <!-- Top nav -->
       <header class="topbar">
         <div class="topbar-left">
@@ -73,6 +81,32 @@
           <button class="tab-btn admin-only" data-tab="settings">Settings</button>
         </nav>
         <div class="topbar-right">
+          <!-- Environment selector — hidden when only one environment exists -->
+          <div id="env-selector-container" class="env-selector-container hidden">
+            <button class="btn btn-sm btn-ghost env-selector-btn" id="env-selector-btn">
+              <span id="env-selector-dot" class="env-dot env-dot-active"></span>
+              <span id="env-selector-name">Default</span>
+              <span class="env-chevron">&#9662;</span>
+            </button>
+            <div id="env-selector-dropdown" class="env-selector-dropdown hidden">
+              <div id="env-selector-list" class="env-selector-list"></div>
+              <hr class="hr-subtle" />
+              <button
+                class="btn btn-sm btn-ghost btn-full env-selector-action"
+                id="btn-new-env"
+                data-cap="environments.manage"
+              >
+                + New Environment
+              </button>
+              <button
+                class="btn btn-sm btn-ghost btn-full env-selector-action"
+                id="btn-manage-envs"
+                data-cap="environments.manage"
+              >
+                Manage Environments
+              </button>
+            </div>
+          </div>
           <span id="server-badge" class="badge badge-stopped">Stopped</span>
           <!-- User menu -->
           <div class="user-menu-container">
@@ -1140,6 +1174,7 @@
           <button class="subtab-btn active" data-subtab="app-cfg">App Config</button>
           <button class="subtab-btn" data-subtab="server-props">server.properties</button>
           <button class="subtab-btn" data-subtab="jvm-args">JVM Arguments</button>
+          <button class="subtab-btn" data-subtab="environments" data-cap="environments.manage">Environments</button>
         </div>
 
         <!-- App config -->
@@ -1286,7 +1321,113 @@
             <p id="jvm-args-msg" class="control-msg"></p>
           </form>
         </div>
+        <!-- Environments management -->
+        <div id="subtab-environments" class="subtab-content hidden">
+          <p class="legend-box">
+            Manage server environments. Each environment has its own server path, launch config, mods, and settings.
+            Only one environment runs at a time — deploy an environment to make it the active server.
+          </p>
+          <div class="btn-row" style="margin-bottom: 16px">
+            <button class="btn btn-primary btn-sm" id="btn-create-env">+ New Environment</button>
+          </div>
+          <div id="env-list" class="env-list">
+            <p class="dim">Loading environments...</p>
+          </div>
+        </div>
       </section>
+
+      <!-- New / Edit Environment modal -->
+      <div id="env-modal" class="modal-overlay hidden">
+        <div class="modal">
+          <div class="modal-header">
+            <h3 id="env-modal-title">New Environment</h3>
+            <button class="btn btn-ghost btn-sm" id="env-modal-close">&times;</button>
+          </div>
+          <div class="modal-body">
+            <form id="env-form">
+              <div class="form-group">
+                <label>Name</label>
+                <input type="text" id="env-name" placeholder="e.g. Testing 1.21" required />
+              </div>
+              <div class="form-group">
+                <label>ID <span class="dim">(auto-generated, URL-safe)</span></label>
+                <input type="text" id="env-id" placeholder="testing-121" />
+                <span class="hint">Lowercase letters, numbers, hyphens. 1-32 characters.</span>
+              </div>
+              <div class="form-group">
+                <label>Server Path</label>
+                <div class="input-row">
+                  <input type="text" id="env-server-path" placeholder="/home/minecraft/testing" required />
+                  <button type="button" class="btn btn-ghost btn-sm" id="btn-browse-env-path">Browse</button>
+                </div>
+              </div>
+              <div class="form-group">
+                <label>Minecraft Version</label>
+                <input type="text" id="env-mc-version" placeholder="1.21" />
+              </div>
+              <div class="form-group">
+                <label>Clone from existing</label>
+                <select id="env-clone-source">
+                  <option value="">Don't clone — point to existing directory</option>
+                </select>
+                <span class="hint">Copies the entire server directory from the selected environment.</span>
+              </div>
+              <hr class="hr-subtle" />
+              <div class="form-group">
+                <label>Executable</label>
+                <input type="text" id="env-executable" placeholder="java" />
+              </div>
+              <div class="form-group">
+                <label>Arguments</label>
+                <textarea id="env-args" rows="3" placeholder="-Xms2G&#10;-Xmx8G&#10;nogui"></textarea>
+              </div>
+              <div class="form-row">
+                <div class="form-group">
+                  <label>RCON Port</label>
+                  <input type="number" id="env-rcon-port" placeholder="25575" />
+                </div>
+                <div class="form-group">
+                  <label>RCON Password</label>
+                  <input type="password" id="env-rcon-password" placeholder="(from server.properties)" />
+                </div>
+              </div>
+              <div class="btn-row">
+                <button type="submit" class="btn btn-primary" id="env-form-submit">Create Environment</button>
+                <button type="button" class="btn btn-ghost" id="env-form-cancel">Cancel</button>
+              </div>
+              <p id="env-form-msg" class="control-msg"></p>
+            </form>
+          </div>
+        </div>
+      </div>
+
+      <!-- Deploy confirmation modal -->
+      <div id="deploy-modal" class="modal-overlay hidden">
+        <div class="modal">
+          <div class="modal-header">
+            <h3>Deploy Environment</h3>
+            <button class="btn btn-ghost btn-sm" id="deploy-modal-close">&times;</button>
+          </div>
+          <div class="modal-body">
+            <p>Deploy <strong id="deploy-env-name"></strong> as the active server?</p>
+            <p class="dim" style="margin-top: 8px">
+              This will stop the currently running server (if any), switch to the selected environment, and optionally
+              start it.
+            </p>
+            <div class="form-group" style="margin-top: 12px">
+              <label class="checkbox-label">
+                <input type="checkbox" id="deploy-auto-start" checked />
+                <span>Start server after deploying</span>
+              </label>
+            </div>
+            <div class="btn-row" style="margin-top: 16px">
+              <button class="btn btn-primary" id="btn-deploy-confirm">Deploy</button>
+              <button class="btn btn-ghost" id="btn-deploy-cancel">Cancel</button>
+            </div>
+            <p id="deploy-msg" class="control-msg"></p>
+          </div>
+        </div>
+      </div>
 
       <!-- Modpack import modal -->
       <div id="modpack-modal" class="modal-overlay hidden">

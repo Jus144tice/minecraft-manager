@@ -283,4 +283,10 @@ export function collectDemoMetrics() {
 }
 
 // Exported for testing
+/** Reset cached mod count and disk usage (e.g. after switching active environment). */
+export function resetCaches() {
+  modCountCache = { count: null, timestamp: 0 };
+  diskCache = { bytes: null, timestamp: 0 };
+}
+
 export { parseTps, isLagSpike };

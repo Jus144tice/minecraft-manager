@@ -449,3 +449,74 @@ test('validateConfig: capabilityOverrides with unknown capability reports error'
   assert.equal(errors.length, 1);
   assert.match(errors[0], /capabilityOverrides.*nonexistent\.cap/);
 });
+
+// --- validateConfig: environments structure ---
+
+test('validateConfig: accepts valid environments config', () => {
+  const errors = validateConfig({
+    ...GOOD_CONFIG,
+    environments: {
+      production: {
+        name: 'Production',
+        serverPath: '/home/minecraft/server',
+        launch: { executable: 'java', args: ['-Xmx8G'] },
+      },
+    },
+    activeEnvironment: 'production',
+  });
+  assert.deepEqual(errors, []);
+});
+
+test('validateConfig: rejects empty environments object', () => {
+  const errors = validateConfig({
+    ...GOOD_CONFIG,
+    environments: {},
+    activeEnvironment: 'production',
+  });
+  assert.ok(errors.some((e) => e.includes('at least one environment')));
+});
+
+test('validateConfig: rejects activeEnvironment pointing to nonexistent env', () => {
+  const errors = validateConfig({
+    ...GOOD_CONFIG,
+    environments: {
+      production: {
+        name: 'Production',
+        serverPath: '/home/minecraft/server',
+        launch: { executable: 'java', args: [] },
+      },
+    },
+    activeEnvironment: 'staging',
+  });
+  assert.ok(errors.some((e) => e.includes('staging')));
+});
+
+test('validateConfig: rejects invalid environment ID', () => {
+  const errors = validateConfig({
+    ...GOOD_CONFIG,
+    environments: {
+      'INVALID ID!': {
+        name: 'Bad',
+        serverPath: '/test',
+        launch: { executable: 'java', args: [] },
+      },
+    },
+    activeEnvironment: 'INVALID ID!',
+  });
+  assert.ok(errors.some((e) => e.includes('INVALID ID!')));
+});
+
+test('validateConfig: reports per-environment validation errors', () => {
+  const errors = validateConfig({
+    ...GOOD_CONFIG,
+    environments: {
+      test: {
+        name: 'Test',
+        serverPath: '', // invalid: empty
+        launch: { executable: 'java', args: [] },
+      },
+    },
+    activeEnvironment: 'test',
+  });
+  assert.ok(errors.some((e) => e.includes('test') && e.includes('serverPath')));
+});

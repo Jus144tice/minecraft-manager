@@ -21,6 +21,7 @@ import {
 } from './src/middleware.js';
 import { getCapabilitiesForRole, roleToAdminLevel, setCapabilityOverrides } from './src/permissions.js';
 import { validateConfig, migrateLaunchConfig, launchToString } from './src/validate.js';
+import { migrateToEnvironments, resolveConfig, ENV_KEYS } from './src/environments.js';
 import { info, setNotifyHook } from './src/audit.js';
 import { initDatabase, getUser } from './src/db.js';
 import * as Backup from './src/backup.js';
@@ -42,6 +43,7 @@ import modpackRoutes from './src/routes/modpack.js';
 import auditRoutes from './src/routes/audit.js';
 import healthRoutes from './src/routes/health.js';
 import identityRoutes from './src/routes/identity.js';
+import environmentRoutes from './src/routes/environments.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const CONFIG_PATH = path.join(__dirname, 'config.json');
@@ -59,21 +61,71 @@ async function loadConfig() {
   }
 }
 
-let config = await loadConfig();
+let rawConfig = await loadConfig();
 
 // Migrate legacy startCommand string → structured launch config
-if (migrateLaunchConfig(config)) {
-  await writeFile(CONFIG_PATH, JSON.stringify(config, null, 2), 'utf8');
+if (migrateLaunchConfig(rawConfig)) {
+  await writeFile(CONFIG_PATH, JSON.stringify(rawConfig, null, 2), 'utf8');
   console.log('Migrated legacy startCommand to structured launch config in config.json');
 }
+
+// Migrate flat config → multi-environment structure
+const envMigration = migrateToEnvironments(rawConfig);
+if (envMigration.migrated) {
+  rawConfig = envMigration.config;
+  await writeFile(CONFIG_PATH, JSON.stringify(rawConfig, null, 2), 'utf8');
+  console.log('Migrated config to multi-environment structure');
+}
+
+// Materialize the active environment into a flat config (backward compatible)
+let config = resolveConfig(rawConfig);
 
 // Apply any custom RBAC capability overrides from config
 setCapabilityOverrides(config.authorization?.capabilityOverrides);
 
+async function saveRawConfig() {
+  await writeFile(CONFIG_PATH, JSON.stringify(rawConfig, null, 2), 'utf8');
+}
+
 async function saveConfig(updates) {
-  config = { ...config, ...updates };
-  await writeFile(CONFIG_PATH, JSON.stringify(config, null, 2), 'utf8');
+  // Split updates into per-env keys and shared keys
+  const envUpdates = {};
+  const sharedUpdates = {};
+  for (const [key, value] of Object.entries(updates)) {
+    if (ENV_KEYS.includes(key)) {
+      envUpdates[key] = value;
+    } else {
+      sharedUpdates[key] = value;
+    }
+  }
+
+  // Apply shared updates to rawConfig top level
+  Object.assign(rawConfig, sharedUpdates);
+
+  // Apply per-env updates to the active environment
+  if (Object.keys(envUpdates).length > 0) {
+    const activeId = rawConfig.activeEnvironment;
+    if (rawConfig.environments?.[activeId]) {
+      Object.assign(rawConfig.environments[activeId], envUpdates);
+    }
+  }
+
+  // Re-materialize flat config
+  config = resolveConfig(rawConfig);
+  await saveRawConfig();
   updateNotificationsConfig(config);
+}
+
+async function saveEnvConfig(envId, updates) {
+  if (!rawConfig.environments?.[envId]) {
+    throw new Error(`Environment "${envId}" not found.`);
+  }
+  Object.assign(rawConfig.environments[envId], updates);
+  // Re-materialize if the updated env is the active one
+  if (envId === rawConfig.activeEnvironment) {
+    config = resolveConfig(rawConfig);
+  }
+  await saveRawConfig();
 }
 
 // ---- Notifications ----
@@ -174,7 +226,18 @@ async function broadcastMetrics() {
   metricsCollecting = false;
 }
 
-const ctx = createServices({ config, saveConfig, loadConfig, mc, broadcast, broadcastStatus });
+const ctx = createServices({
+  config,
+  saveConfig,
+  loadConfig,
+  mc,
+  broadcast,
+  broadcastStatus,
+  rawConfig,
+  saveRawConfig,
+  saveEnvConfig,
+  resolveConfig,
+});
 
 if (config.demoMode) ctx.startDemoActivityTimer();
 
@@ -294,6 +357,7 @@ app.use('/api', backupRoutes(ctx));
 app.use('/api', modpackRoutes(ctx));
 app.use('/api', auditRoutes());
 app.use('/api', identityRoutes(ctx));
+app.use('/api', environmentRoutes(ctx));
 
 app.post('/api/rcon/connect', requireCapability('server.send_console_command'), async (req, res) => {
   if (ctx.config.demoMode) return res.json({ ok: true, connected: true, demo: true });

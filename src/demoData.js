@@ -793,6 +793,40 @@ export async function enrichDemoIcons() {
   }
 }
 
+// --- Environments (multi-environment demo data) ---
+export const DEMO_ENVIRONMENTS = {
+  production: {
+    name: 'Production',
+    serverPath: '/home/minecraft/server',
+    minecraftVersion: '1.20.1',
+    launch: { executable: 'java', args: ['-Xms2G', '-Xmx8G', 'nogui'] },
+    rconHost: '127.0.0.1',
+    rconPort: 25575,
+    modsFolder: 'mods',
+    disabledModsFolder: 'mods_disabled',
+    serverAddress: 'play.example.com',
+    autoStart: true,
+    autoRestart: true,
+    tpsAlertThreshold: 18,
+    createdAt: '2026-01-15T10:00:00Z',
+  },
+  staging: {
+    name: 'Staging (1.21)',
+    serverPath: '/home/minecraft/staging',
+    minecraftVersion: '1.21',
+    launch: { executable: 'java', args: ['-Xms2G', '-Xmx4G', 'nogui'] },
+    rconHost: '127.0.0.1',
+    rconPort: 25576,
+    modsFolder: 'mods',
+    disabledModsFolder: 'mods_disabled',
+    serverAddress: 'staging.example.com',
+    autoStart: false,
+    autoRestart: false,
+    tpsAlertThreshold: 18,
+    createdAt: '2026-03-01T08:00:00Z',
+  },
+};
+
 // --- Panel links (panel user ↔ Minecraft player) ---
 export const DEMO_PANEL_LINKS = [
   {

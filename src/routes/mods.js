@@ -8,6 +8,7 @@ import * as Demo from '../demoData.js';
 import { audit } from '../audit.js';
 import { isSafeModFilename } from '../validate.js';
 import { requireCapability } from '../middleware.js';
+import { getSelectedConfig } from '../environments.js';
 
 export default function modRoutes(ctx) {
   const router = Router();
@@ -15,7 +16,8 @@ export default function modRoutes(ctx) {
   router.get('/mods', async (req, res) => {
     if (ctx.config.demoMode) return res.json({ mods: Demo.DEMO_MODS });
     try {
-      const mods = await SF.listMods(ctx.config.serverPath, ctx.config.modsFolder, ctx.config.disabledModsFolder);
+      const env = getSelectedConfig(ctx, req);
+      const mods = await SF.listMods(env.serverPath, env.modsFolder, env.disabledModsFolder);
       res.json({ mods });
     } catch (err) {
       res.status(500).json({ error: err.message });
@@ -31,7 +33,8 @@ export default function modRoutes(ctx) {
       return res.json(result);
     }
     try {
-      const hashMap = await SF.hashMods(ctx.config.serverPath, ctx.config.modsFolder, ctx.config.disabledModsFolder);
+      const env = getSelectedConfig(ctx, req);
+      const hashMap = await SF.hashMods(env.serverPath, env.modsFolder, env.disabledModsFolder);
       const hashes = Object.values(hashMap).map((v) => v.hash);
       const modrinthData = await Modrinth.lookupByHashes(hashes);
       const result = {};
@@ -54,7 +57,8 @@ export default function modRoutes(ctx) {
       return res.json({ ok: true });
     }
     try {
-      await SF.toggleMod(ctx.config.serverPath, filename, enable, ctx.config.modsFolder, ctx.config.disabledModsFolder);
+      const env = getSelectedConfig(ctx, req);
+      await SF.toggleMod(env.serverPath, filename, enable, env.modsFolder, env.disabledModsFolder);
       audit('MOD_TOGGLE', { user: req.session.user.email, filename, enable, ip: req.ip });
       res.json({ ok: true });
     } catch (err) {
@@ -71,7 +75,8 @@ export default function modRoutes(ctx) {
       return res.json({ ok: true });
     }
     try {
-      await SF.deleteMod(ctx.config.serverPath, filename, ctx.config.modsFolder, ctx.config.disabledModsFolder);
+      const env = getSelectedConfig(ctx, req);
+      await SF.deleteMod(env.serverPath, filename, env.modsFolder, env.disabledModsFolder);
       audit('MOD_DELETE', { user: req.session.user.email, filename, ip: req.ip });
       res.json({ ok: true });
     } catch (err) {

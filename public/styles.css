@@ -2813,3 +2813,158 @@ textarea:focus {
   color: var(--text-dim);
   line-height: 1.6;
 }
+
+/* --- Environment Selector (topbar) --- */
+.env-selector-container {
+  position: relative;
+}
+.env-selector-btn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  white-space: nowrap;
+}
+.env-dot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+.env-dot-active {
+  background: var(--green);
+}
+.env-dot-inactive {
+  background: var(--warning);
+}
+.env-chevron {
+  font-size: 0.7rem;
+  color: var(--text-dim);
+}
+.env-selector-dropdown {
+  position: absolute;
+  top: 100%;
+  right: 0;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  min-width: 240px;
+  padding: 4px 0;
+  z-index: 100;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
+}
+.env-selector-list {
+  display: flex;
+  flex-direction: column;
+}
+.env-selector-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  border: none;
+  background: none;
+  color: var(--text);
+  cursor: pointer;
+  font-size: 0.85rem;
+  text-align: left;
+  width: 100%;
+}
+.env-selector-item:hover {
+  background: var(--surface2);
+}
+.env-selector-item.env-selected {
+  background: var(--surface2);
+}
+.env-item-version {
+  margin-left: auto;
+  font-size: 0.75rem;
+}
+.env-selector-action {
+  text-align: left;
+  font-size: 0.82rem;
+}
+
+/* --- Environment Banner --- */
+.env-banner {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 16px;
+  background: #2a2000;
+  border-bottom: 1px solid #4a3800;
+  color: var(--warning);
+  font-size: 0.85rem;
+}
+.env-banner-icon {
+  font-size: 1rem;
+}
+.env-banner .btn {
+  margin-left: 8px;
+}
+
+/* --- Environment Cards (Settings) --- */
+.env-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.env-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 12px 16px;
+}
+.env-card-active {
+  border-color: var(--green);
+}
+.env-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.env-card-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.env-card-actions {
+  display: flex;
+  gap: 6px;
+}
+.env-card-details {
+  display: flex;
+  gap: 16px;
+  margin-top: 6px;
+  font-size: 0.8rem;
+  flex-wrap: wrap;
+}
+.badge-xs {
+  font-size: 0.65rem;
+  padding: 1px 5px;
+}
+
+/* --- Environment modal/deploy modal --- */
+#env-modal .modal,
+#deploy-modal .modal {
+  max-width: 500px;
+}
+
+@media (max-width: 768px) {
+  .env-selector-dropdown {
+    right: -40px;
+    min-width: 200px;
+  }
+  .env-banner {
+    flex-wrap: wrap;
+  }
+  .env-card-header {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+  .env-card-details {
+    flex-direction: column;
+    gap: 4px;
+  }
+}

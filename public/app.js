@@ -121,6 +121,11 @@ let modsPage = 0;
 const MODS_PAGE_SIZE = 10;
 let statusInterval = null; // guard against duplicate setInterval on re-login
 
+// --- Environment state ---
+let envList = []; // [{ id, name, isActive, minecraftVersion, serverPath }]
+let selectedEnvId = null; // currently selected environment in the UI
+let activeEnvId = null; // currently deployed/running environment
+
 // --- Generic pagination bar ---
 // Creates a controller for a prev/next pagination bar.
 // Call .update(page, totalPages, totalCount, label) to refresh the UI.
@@ -519,6 +524,9 @@ async function initApp() {
     /* ignore */
   }
 
+  // Load full environment details (non-blocking, requires login)
+  if (isLoggedIn && can('environments.manage')) loadEnvironments();
+
   // Load preflight checks (non-blocking)
   loadPreflight();
 
@@ -633,6 +641,10 @@ function connectWs() {
       if (msg.type === 'crash') showCrashAlert(msg);
       if (msg.type === 'mrpack-progress') handleMrpackProgress(msg);
       if (msg.type === 'mrpack-complete') handleMrpackComplete(msg);
+      if (msg.type === 'environment-switched') {
+        loadStatus();
+        loadEnvironments();
+      }
       if (msg.type === 'panel-link-verified') {
         // Auto-refresh MC link section if the user profile modal is open
         const mcContainer = document.getElementById('user-profile-mc-link');
@@ -854,6 +866,22 @@ function updateDashboard(s) {
   } else {
     mcVersionEl.textContent = s.running ? 'Unknown' : 'Not Running';
     mcVersionEl.className = 'stat-value' + (s.running ? '' : ' text-dim');
+  }
+
+  // Environment info from status
+  if (s.environments && s.environments.length > 1) {
+    envList = s.environments;
+    activeEnvId = s.activeEnvironment || null;
+    if (!selectedEnvId) selectedEnvId = s.selectedEnvironment || activeEnvId;
+    renderEnvSelector();
+    updateEnvBanner();
+    updateEnvDisabledControls();
+  } else if (s.environments) {
+    envList = s.environments;
+    activeEnvId = s.activeEnvironment || null;
+    selectedEnvId = activeEnvId;
+    hide('env-selector-container');
+    hide('env-banner');
   }
 
   // Lag spike alert
@@ -4990,4 +5018,420 @@ $('link-instructions-modal').addEventListener('click', (e) => {
 $('panel-link-instructions-close').addEventListener('click', () => hide('panel-link-instructions-modal'));
 $('panel-link-instructions-modal').addEventListener('click', (e) => {
   if (e.target === $('panel-link-instructions-modal')) hide('panel-link-instructions-modal');
+});
+
+// --- Environment Management ---
+
+function isViewingActiveEnv() {
+  return !selectedEnvId || selectedEnvId === activeEnvId;
+}
+
+function renderEnvSelector() {
+  const container = $('env-selector-container');
+  if (envList.length <= 1) {
+    hide(container);
+    return;
+  }
+  show(container);
+
+  // Update selector button
+  const current = envList.find((e) => e.id === selectedEnvId) || envList.find((e) => e.isActive) || envList[0];
+  $('env-selector-name').textContent = current.name;
+  const dot = $('env-selector-dot');
+  dot.className = 'env-dot ' + (current.isActive ? 'env-dot-active' : 'env-dot-inactive');
+
+  // Build dropdown list
+  const list = $('env-selector-list');
+  list.innerHTML = envList
+    .map((env) => {
+      const isSelected = env.id === selectedEnvId;
+      const isActive = env.isActive;
+      return `<button class="env-selector-item${isSelected ? ' env-selected' : ''}" data-env-id="${esc(env.id)}">
+        <span class="env-dot ${isActive ? 'env-dot-active' : 'env-dot-inactive'}"></span>
+        <span class="env-item-name">${esc(env.name)}</span>
+        ${isActive ? '<span class="badge badge-green badge-xs">Active</span>' : ''}
+        <span class="env-item-version dim">${esc(env.minecraftVersion || '')}</span>
+      </button>`;
+    })
+    .join('');
+
+  // Wire click handlers on items
+  list.querySelectorAll('.env-selector-item').forEach((btn) => {
+    btn.addEventListener('click', () => selectEnvironment(btn.dataset.envId));
+  });
+}
+
+function updateEnvBanner() {
+  const banner = $('env-banner');
+  if (isViewingActiveEnv() || envList.length <= 1) {
+    hide(banner);
+    return;
+  }
+  const env = envList.find((e) => e.id === selectedEnvId);
+  if (!env) {
+    hide(banner);
+    return;
+  }
+  $('env-banner-text').innerHTML = `Viewing <strong>${esc(env.name)}</strong> — this is not the running environment.`;
+  show(banner);
+}
+
+function updateEnvDisabledControls() {
+  const notActive = !isViewingActiveEnv();
+  // Disable start/stop/restart/kill buttons when viewing non-active env
+  ['btn-start', 'btn-stop', 'btn-restart', 'btn-kill'].forEach((id) => {
+    const btn = $(id);
+    if (btn) {
+      btn.disabled = notActive;
+      btn.title = notActive ? 'Switch to this environment to control the server' : '';
+    }
+  });
+  // Console tab messaging
+  const consoleNotice = $('console-env-notice');
+  if (consoleNotice) {
+    if (notActive) {
+      const activeEnv = envList.find((e) => e.isActive);
+      consoleNotice.textContent = `Console shows the active environment. Currently running: ${activeEnv?.name || 'Unknown'}`;
+      show(consoleNotice);
+    } else {
+      hide(consoleNotice);
+    }
+  }
+}
+
+async function selectEnvironment(envId) {
+  if (envId === selectedEnvId) {
+    hideEnvDropdown();
+    return;
+  }
+  selectedEnvId = envId;
+  hideEnvDropdown();
+
+  // Update session on server
+  try {
+    await POST('/environments/select', { environmentId: envId });
+  } catch {
+    /* non-fatal */
+  }
+
+  renderEnvSelector();
+  updateEnvBanner();
+  updateEnvDisabledControls();
+
+  // Refresh data for current tab
+  refreshCurrentTabData();
+}
+
+function refreshCurrentTabData() {
+  const activeBtn = document.querySelector('.tab-btn.active');
+  if (activeBtn) onTabActivate(activeBtn.dataset.tab);
+}
+
+async function loadEnvironments() {
+  try {
+    const envs = await GET('/environments');
+    envList = envs;
+    activeEnvId = envs.find((e) => e.isActive)?.id || null;
+    if (!selectedEnvId) selectedEnvId = activeEnvId;
+    renderEnvSelector();
+    updateEnvBanner();
+    updateEnvDisabledControls();
+  } catch {
+    /* ignore */
+  }
+}
+
+// Env selector dropdown toggle
+$('env-selector-btn').addEventListener('click', (e) => {
+  e.stopPropagation();
+  $('env-selector-dropdown').classList.toggle('hidden');
+});
+
+function hideEnvDropdown() {
+  $('env-selector-dropdown').classList.add('hidden');
+}
+
+// Close dropdown when clicking outside
+document.addEventListener('click', (e) => {
+  if (!e.target.closest('.env-selector-container')) {
+    hideEnvDropdown();
+  }
+});
+
+// Env banner buttons
+$('env-banner-deploy').addEventListener('click', () => {
+  openDeployModal(selectedEnvId);
+});
+$('env-banner-switch-active').addEventListener('click', () => {
+  selectEnvironment(activeEnvId);
+});
+
+// Manage Environments button in dropdown
+$('btn-manage-envs').addEventListener('click', () => {
+  hideEnvDropdown();
+  // Switch to settings tab, environments subtab
+  document.querySelectorAll('.tab-btn').forEach((b) => b.classList.remove('active'));
+  document.querySelectorAll('.tab-content').forEach((t) => t.classList.add('hidden'));
+  const settingsBtn = document.querySelector('[data-tab="settings"]');
+  if (settingsBtn) settingsBtn.classList.add('active');
+  show('tab-settings');
+  // Activate environments subtab
+  const settingsTab = $('tab-settings');
+  settingsTab.querySelectorAll('.subtab-btn').forEach((b) => b.classList.remove('active'));
+  settingsTab.querySelectorAll('.subtab-content').forEach((t) => t.classList.add('hidden'));
+  const envSubtab = settingsTab.querySelector('[data-subtab="environments"]');
+  if (envSubtab) envSubtab.classList.add('active');
+  show('subtab-environments');
+  loadEnvManagement();
+});
+
+// New Environment button in dropdown
+$('btn-new-env').addEventListener('click', () => {
+  hideEnvDropdown();
+  openEnvModal();
+});
+
+// --- Environment Management (Settings subtab) ---
+
+async function loadEnvManagement() {
+  const container = $('env-list');
+  try {
+    const envs = await GET('/environments');
+    if (envs.length === 0) {
+      container.innerHTML = '<p class="dim">No environments configured.</p>';
+      return;
+    }
+    container.innerHTML = envs
+      .map(
+        (env) => `
+      <div class="env-card${env.isActive ? ' env-card-active' : ''}">
+        <div class="env-card-header">
+          <div class="env-card-title">
+            <span class="env-dot ${env.isActive ? 'env-dot-active' : 'env-dot-inactive'}"></span>
+            <strong>${esc(env.name)}</strong>
+            ${env.isActive ? '<span class="badge badge-green badge-xs">Active</span>' : ''}
+          </div>
+          <div class="env-card-actions">
+            ${!env.isActive ? `<button class="btn btn-xs btn-primary" data-action="deploy-env" data-env-id="${esc(env.id)}" data-env-name="${esc(env.name)}">Deploy</button>` : ''}
+            <button class="btn btn-xs btn-ghost" data-action="edit-env" data-env-id="${esc(env.id)}">Edit</button>
+            ${!env.isActive ? `<button class="btn btn-xs btn-danger" data-action="delete-env" data-env-id="${esc(env.id)}" data-env-name="${esc(env.name)}">Delete</button>` : ''}
+          </div>
+        </div>
+        <div class="env-card-details">
+          <span class="dim">Path: ${esc(env.serverPath || '')}</span>
+          <span class="dim">MC ${esc(env.minecraftVersion || 'unknown')}</span>
+          <span class="dim">ID: ${esc(env.id)}</span>
+        </div>
+      </div>`,
+      )
+      .join('');
+  } catch (err) {
+    container.innerHTML = `<p class="error-msg">${esc(err.message)}</p>`;
+  }
+}
+
+// Add to subtab handlers
+subtabHandlers['environments'] = () => loadEnvManagement();
+
+// Wire data-action handlers for environment cards
+document.addEventListener('click', async (e) => {
+  const el = e.target.closest('[data-action]');
+  if (!el) return;
+  if (el.dataset.action === 'deploy-env') {
+    openDeployModal(el.dataset.envId, el.dataset.envName);
+  } else if (el.dataset.action === 'edit-env') {
+    openEnvModal(el.dataset.envId);
+  } else if (el.dataset.action === 'delete-env') {
+    await deleteEnvironment(el.dataset.envId, el.dataset.envName);
+  }
+});
+
+// Create Environment button in settings
+$('btn-create-env').addEventListener('click', () => openEnvModal());
+
+// --- Environment Modal (Create / Edit) ---
+
+let editingEnvId = null;
+
+function openEnvModal(envId) {
+  editingEnvId = envId || null;
+  const form = $('env-form');
+  form.reset();
+  $('env-form-msg').textContent = '';
+
+  if (envId) {
+    $('env-modal-title').textContent = 'Edit Environment';
+    $('env-form-submit').textContent = 'Save Changes';
+    $('env-id').disabled = true;
+    // Hide clone option when editing
+    $('env-clone-source').closest('.form-group').classList.add('hidden');
+    // Load env data
+    GET(`/environments/${encodeURIComponent(envId)}`)
+      .then((env) => {
+        $('env-name').value = env.name || '';
+        $('env-id').value = env.id || '';
+        $('env-server-path').value = env.serverPath || '';
+        $('env-mc-version').value = env.minecraftVersion || '';
+        $('env-executable').value = env.launch?.executable || '';
+        $('env-args').value = (env.launch?.args || []).join('\n');
+        $('env-rcon-port').value = env.rconPort || '';
+        $('env-rcon-password').value = '';
+      })
+      .catch((err) => flash('env-form-msg', err.message, true));
+  } else {
+    $('env-modal-title').textContent = 'New Environment';
+    $('env-form-submit').textContent = 'Create Environment';
+    $('env-id').disabled = false;
+    $('env-clone-source').closest('.form-group').classList.remove('hidden');
+    // Populate clone source options
+    const sel = $('env-clone-source');
+    sel.innerHTML = '<option value="">Don\'t clone — point to existing directory</option>';
+    envList.forEach((env) => {
+      sel.innerHTML += `<option value="${esc(env.id)}">${esc(env.name)}</option>`;
+    });
+  }
+
+  show('env-modal');
+}
+
+// Auto-slug name → id
+$('env-name').addEventListener('input', () => {
+  if (!editingEnvId && !$('env-id').dataset.manual) {
+    $('env-id').value = $('env-name')
+      .value.toLowerCase()
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/^-|-$/g, '')
+      .slice(0, 32);
+  }
+});
+$('env-id').addEventListener('input', () => {
+  $('env-id').dataset.manual = '1';
+});
+
+$('env-form').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const data = {
+    name: $('env-name').value.trim(),
+    serverPath: $('env-server-path').value.trim(),
+    minecraftVersion: $('env-mc-version').value.trim(),
+  };
+
+  const exe = $('env-executable').value.trim();
+  const argsText = $('env-args').value.trim();
+  if (exe) {
+    data.launch = {
+      executable: exe,
+      args: argsText
+        ? argsText
+            .split('\n')
+            .map((a) => a.trim())
+            .filter(Boolean)
+        : [],
+    };
+  }
+
+  const rconPort = $('env-rcon-port').value;
+  if (rconPort) data.rconPort = Number(rconPort);
+  const rconPw = $('env-rcon-password').value;
+  if (rconPw) data.rconPassword = rconPw;
+
+  try {
+    if (editingEnvId) {
+      await PUT(`/environments/${encodeURIComponent(editingEnvId)}`, data);
+      flash('env-form-msg', 'Environment updated.');
+    } else {
+      data.id = $('env-id').value.trim();
+      const cloneSource = $('env-clone-source').value;
+      if (cloneSource) {
+        data.clone = { sourceId: cloneSource, destPath: data.serverPath };
+      }
+      await POST('/environments', data);
+      flash('env-form-msg', 'Environment created.');
+    }
+    hide('env-modal');
+    loadEnvManagement();
+    loadEnvironments();
+  } catch (err) {
+    flash('env-form-msg', err.message, true);
+  }
+});
+
+$('env-modal-close').addEventListener('click', () => hide('env-modal'));
+$('env-form-cancel').addEventListener('click', () => hide('env-modal'));
+$('env-modal').addEventListener('click', (e) => {
+  if (e.target === $('env-modal')) hide('env-modal');
+});
+
+async function deleteEnvironment(envId, envName) {
+  if (
+    !confirm(
+      `Delete environment "${envName}"? This only removes the environment from the manager — it does not delete server files.`,
+    )
+  )
+    return;
+  try {
+    await DEL(`/environments/${encodeURIComponent(envId)}`);
+    loadEnvManagement();
+    loadEnvironments();
+  } catch (err) {
+    alert('Failed to delete: ' + err.message);
+  }
+}
+
+// --- Deploy Modal ---
+
+let deployEnvId = null;
+
+function openDeployModal(envId, envName) {
+  deployEnvId = envId;
+  const env = envList.find((e) => e.id === envId);
+  $('deploy-env-name').textContent = envName || env?.name || envId;
+  $('deploy-auto-start').checked = true;
+  $('deploy-msg').textContent = '';
+  show('deploy-modal');
+}
+
+$('btn-deploy-confirm').addEventListener('click', async () => {
+  if (!deployEnvId) return;
+  const btn = $('btn-deploy-confirm');
+  btn.disabled = true;
+  btn.textContent = 'Deploying...';
+  try {
+    await POST(`/environments/${encodeURIComponent(deployEnvId)}/deploy`, {
+      start: $('deploy-auto-start').checked,
+    });
+    hide('deploy-modal');
+    selectedEnvId = deployEnvId;
+    loadStatus();
+    loadEnvironments();
+    refreshCurrentTabData();
+  } catch (err) {
+    flash('deploy-msg', err.message, true);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Deploy';
+  }
+});
+
+$('deploy-modal-close').addEventListener('click', () => hide('deploy-modal'));
+$('btn-deploy-cancel').addEventListener('click', () => hide('deploy-modal'));
+$('deploy-modal').addEventListener('click', (e) => {
+  if (e.target === $('deploy-modal')) hide('deploy-modal');
+});
+
+// Browse for env server path
+$('btn-browse-env-path').addEventListener('click', async () => {
+  const startPath = $('env-server-path').value || '/';
+  try {
+    const dirs = await GET(`/browse-dirs?path=${encodeURIComponent(startPath)}`);
+    if (dirs && dirs.length > 0) {
+      const chosen = prompt(
+        'Available directories:\n' + dirs.map((d, i) => `${i + 1}. ${d}`).join('\n') + '\n\nEnter the full path:',
+        startPath,
+      );
+      if (chosen) $('env-server-path').value = chosen;
+    }
+  } catch {
+    /* ignore */
+  }
 });

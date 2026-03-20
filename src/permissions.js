@@ -73,6 +73,9 @@ export const CAPABILITIES = {
 
   // Audit
   'audit.view': 'View audit logs',
+
+  // Environments
+  'environments.manage': 'Create, edit, delete, and deploy environments',
 };
 
 // ---- Role definitions --------------------------------------
@@ -129,7 +132,7 @@ const ADMIN_CAPS = [
   'discord.manage',
 ];
 
-const OWNER_CAPS = [...ADMIN_CAPS, 'panel.manage_users', 'server.manage_world'];
+const OWNER_CAPS = [...ADMIN_CAPS, 'panel.manage_users', 'server.manage_world', 'environments.manage'];
 
 /** @type {Record<string, { name: string, level: number, description: string, capabilities: string[] }>} */
 export const ROLES = {

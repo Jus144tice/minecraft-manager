@@ -168,6 +168,7 @@ export async function listBackups(config) {
       appVersion: manifest.appVersion || null,
       modCount: manifest.modCount ?? null,
       quiesced: manifest.quiesced || false,
+      environment: manifest.environment || null,
       hasManifest: Object.keys(manifest).length > 0,
     });
   }
@@ -286,6 +287,7 @@ export async function createBackup(config, { type = 'manual', note = '', user = 
       disabledModsFolder: config.disabledModsFolder || 'mods_disabled',
       archiveSize: archiveStat.size,
       archiveHash,
+      environment: config.activeEnvironment || 'default',
     };
     await writeFile(path.join(dir, `${name}.json`), JSON.stringify(manifest, null, 2));
 

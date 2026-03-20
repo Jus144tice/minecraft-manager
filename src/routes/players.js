@@ -8,6 +8,7 @@ import * as Demo from '../demoData.js';
 import { audit } from '../audit.js';
 import { isValidMinecraftName, isSafeCommand, sanitizeReason } from '../validate.js';
 import { requireCapability } from '../middleware.js';
+import { getSelectedConfig } from '../environments.js';
 import { getAllLinks, getLinkByMinecraftName, setLink, removeLink } from '../integrations/discord/links.js';
 import { getLinkByMinecraftName as getPanelLinkByMcName } from '../panelLinks.js';
 
@@ -35,7 +36,8 @@ export default function playerRoutes(ctx) {
   router.get('/players/all', async (req, res) => {
     if (ctx.config.demoMode) return res.json(Demo.DEMO_USERCACHE);
     try {
-      res.json(await SF.getUsercache(ctx.config.serverPath));
+      const env = getSelectedConfig(ctx, req);
+      res.json(await SF.getUsercache(env.serverPath));
     } catch (err) {
       res.status(500).json({ error: err.message });
     }
@@ -43,7 +45,8 @@ export default function playerRoutes(ctx) {
 
   router.get('/players/ops', async (req, res) => {
     if (ctx.config.demoMode) return res.json(Demo.DEMO_OPS);
-    res.json(await SF.getOps(ctx.config.serverPath));
+    const env = getSelectedConfig(ctx, req);
+    res.json(await SF.getOps(env.serverPath));
   });
 
   router.post('/players/op', requireCapability('players.manage_ops'), async (req, res) => {
@@ -61,15 +64,18 @@ export default function playerRoutes(ctx) {
       return res.json({ ok: true });
     }
     try {
-      if (ctx.rconConnected) await ctx.rconCmd(`op ${name}`);
-      const ops = await SF.getOps(ctx.config.serverPath);
+      const env = getSelectedConfig(ctx, req);
+      const isActiveEnv =
+        !req.session?.selectedEnvironment || req.session.selectedEnvironment === ctx.rawConfig.activeEnvironment;
+      if (isActiveEnv && ctx.rconConnected) await ctx.rconCmd(`op ${name}`);
+      const ops = await SF.getOps(env.serverPath);
       const existing = ops.find((o) => o.name.toLowerCase() === name.toLowerCase());
       if (existing) {
         existing.level = Number(level);
       } else {
         ops.push({ uuid: '', name, level: Number(level), bypassesPlayerLimit: false });
       }
-      await SF.setOps(ctx.config.serverPath, ops);
+      await SF.setOps(env.serverPath, ops);
       audit('OP_ADD', { user: req.session.user.email, target: name, level, ip: req.ip });
       res.json({ ok: true });
     } catch (err) {
@@ -86,10 +92,13 @@ export default function playerRoutes(ctx) {
       return res.json({ ok: true });
     }
     try {
-      if (ctx.rconConnected) await ctx.rconCmd(`deop ${name}`);
+      const env = getSelectedConfig(ctx, req);
+      const isActiveEnv =
+        !req.session?.selectedEnvironment || req.session.selectedEnvironment === ctx.rawConfig.activeEnvironment;
+      if (isActiveEnv && ctx.rconConnected) await ctx.rconCmd(`deop ${name}`);
       await SF.setOps(
-        ctx.config.serverPath,
-        (await SF.getOps(ctx.config.serverPath)).filter((o) => o.name.toLowerCase() !== name.toLowerCase()),
+        env.serverPath,
+        (await SF.getOps(env.serverPath)).filter((o) => o.name.toLowerCase() !== name.toLowerCase()),
       );
       audit('OP_REMOVE', { user: req.session.user.email, target: name, ip: req.ip });
       res.json({ ok: true });
@@ -100,7 +109,8 @@ export default function playerRoutes(ctx) {
 
   router.get('/players/whitelist', async (req, res) => {
     if (ctx.config.demoMode) return res.json(Demo.DEMO_WHITELIST);
-    res.json(await SF.getWhitelist(ctx.config.serverPath));
+    const env = getSelectedConfig(ctx, req);
+    res.json(await SF.getWhitelist(env.serverPath));
   });
 
   router.post('/players/whitelist', requireCapability('players.manage_whitelist'), async (req, res) => {
@@ -114,11 +124,14 @@ export default function playerRoutes(ctx) {
       return res.json({ ok: true });
     }
     try {
-      if (ctx.rconConnected) await ctx.rconCmd(`whitelist add ${name}`);
-      const list = await SF.getWhitelist(ctx.config.serverPath);
+      const env = getSelectedConfig(ctx, req);
+      const isActiveEnv =
+        !req.session?.selectedEnvironment || req.session.selectedEnvironment === ctx.rawConfig.activeEnvironment;
+      if (isActiveEnv && ctx.rconConnected) await ctx.rconCmd(`whitelist add ${name}`);
+      const list = await SF.getWhitelist(env.serverPath);
       if (!list.find((e) => e.name.toLowerCase() === name.toLowerCase())) {
         list.push({ uuid: '', name });
-        await SF.setWhitelist(ctx.config.serverPath, list);
+        await SF.setWhitelist(env.serverPath, list);
       }
       audit('WHITELIST_ADD', { user: req.session.user.email, target: name, ip: req.ip });
       res.json({ ok: true });
@@ -136,10 +149,13 @@ export default function playerRoutes(ctx) {
       return res.json({ ok: true });
     }
     try {
-      if (ctx.rconConnected) await ctx.rconCmd(`whitelist remove ${name}`);
+      const env = getSelectedConfig(ctx, req);
+      const isActiveEnv =
+        !req.session?.selectedEnvironment || req.session.selectedEnvironment === ctx.rawConfig.activeEnvironment;
+      if (isActiveEnv && ctx.rconConnected) await ctx.rconCmd(`whitelist remove ${name}`);
       await SF.setWhitelist(
-        ctx.config.serverPath,
-        (await SF.getWhitelist(ctx.config.serverPath)).filter((e) => e.name.toLowerCase() !== name.toLowerCase()),
+        env.serverPath,
+        (await SF.getWhitelist(env.serverPath)).filter((e) => e.name.toLowerCase() !== name.toLowerCase()),
       );
       audit('WHITELIST_REMOVE', { user: req.session.user.email, target: name, ip: req.ip });
       res.json({ ok: true });
@@ -150,9 +166,10 @@ export default function playerRoutes(ctx) {
 
   router.get('/players/banned', async (req, res) => {
     if (ctx.config.demoMode) return res.json(Demo.DEMO_BANS);
+    const env = getSelectedConfig(ctx, req);
     res.json({
-      players: await SF.getBannedPlayers(ctx.config.serverPath),
-      ips: await SF.getBannedIps(ctx.config.serverPath),
+      players: await SF.getBannedPlayers(env.serverPath),
+      ips: await SF.getBannedIps(env.serverPath),
     });
   });
 
@@ -175,12 +192,15 @@ export default function playerRoutes(ctx) {
       return res.json({ ok: true });
     }
     try {
-      if (ctx.rconConnected) {
+      const env = getSelectedConfig(ctx, req);
+      const isActiveEnv =
+        !req.session?.selectedEnvironment || req.session.selectedEnvironment === ctx.rawConfig.activeEnvironment;
+      if (isActiveEnv && ctx.rconConnected) {
         await ctx.rconCmd(`ban ${name} ${reason}`);
       } else {
-        const list = await SF.getBannedPlayers(ctx.config.serverPath);
+        const list = await SF.getBannedPlayers(env.serverPath);
         list.push({ uuid: '', name, source: 'Manager', expires: 'forever', reason, created: new Date().toISOString() });
-        await SF.setBannedPlayers(ctx.config.serverPath, list);
+        await SF.setBannedPlayers(env.serverPath, list);
       }
       audit('PLAYER_BAN', { user: req.session.user.email, target: name, reason, ip: req.ip });
       res.json({ ok: true });
@@ -198,10 +218,13 @@ export default function playerRoutes(ctx) {
       return res.json({ ok: true });
     }
     try {
-      if (ctx.rconConnected) await ctx.rconCmd(`pardon ${name}`);
+      const env = getSelectedConfig(ctx, req);
+      const isActiveEnv =
+        !req.session?.selectedEnvironment || req.session.selectedEnvironment === ctx.rawConfig.activeEnvironment;
+      if (isActiveEnv && ctx.rconConnected) await ctx.rconCmd(`pardon ${name}`);
       await SF.setBannedPlayers(
-        ctx.config.serverPath,
-        (await SF.getBannedPlayers(ctx.config.serverPath)).filter((e) => e.name.toLowerCase() !== name.toLowerCase()),
+        env.serverPath,
+        (await SF.getBannedPlayers(env.serverPath)).filter((e) => e.name.toLowerCase() !== name.toLowerCase()),
       );
       audit('PLAYER_UNBAN', { user: req.session.user.email, target: name, ip: req.ip });
       res.json({ ok: true });
@@ -266,10 +289,11 @@ export default function playerRoutes(ctx) {
         bans = Demo.DEMO_BANS;
         onlinePlayers = ctx.demoState.running ? Demo.DEMO_ONLINE_PLAYERS : [];
       } else {
+        const env = getSelectedConfig(ctx, req);
         [ops, whitelist, bans] = await Promise.all([
-          SF.getOps(ctx.config.serverPath),
-          SF.getWhitelist(ctx.config.serverPath),
-          SF.getBannedPlayers(ctx.config.serverPath),
+          SF.getOps(env.serverPath),
+          SF.getWhitelist(env.serverPath),
+          SF.getBannedPlayers(env.serverPath),
         ]);
         // Try to get online players, but don't fail the whole request
         try {

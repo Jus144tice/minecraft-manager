@@ -13,6 +13,7 @@ import * as Backup from '../backup.js';
 import { audit } from '../audit.js';
 import { runPreflight } from '../preflight.js';
 import { requireCapability } from '../middleware.js';
+import { getSelectedConfig } from '../environments.js';
 import {
   getDiscordStatus,
   testDiscordConnection,
@@ -26,7 +27,8 @@ export default function settingsRoutes(ctx) {
   router.get('/settings/properties', async (req, res) => {
     if (ctx.config.demoMode) return res.json(Demo.DEMO_PROPERTIES);
     try {
-      res.json(await SF.getServerProperties(ctx.config.serverPath));
+      const env = getSelectedConfig(ctx, req);
+      res.json(await SF.getServerProperties(env.serverPath));
     } catch (err) {
       res.status(500).json({ error: err.message });
     }
@@ -38,7 +40,8 @@ export default function settingsRoutes(ctx) {
       return res.json({ ok: true, demo: true });
     }
     try {
-      await SF.setServerProperties(ctx.config.serverPath, req.body);
+      const env = getSelectedConfig(ctx, req);
+      await SF.setServerProperties(env.serverPath, req.body);
       audit('PROPS_SAVE', { user: req.session.user.email, ip: req.ip });
       res.json({ ok: true });
     } catch (err) {
@@ -66,7 +69,8 @@ export default function settingsRoutes(ctx) {
       });
     }
     try {
-      const filePath = path.join(ctx.config.serverPath, JVM_ARGS_FILE);
+      const env = getSelectedConfig(ctx, req);
+      const filePath = path.join(env.serverPath, JVM_ARGS_FILE);
       const content = await readFile(filePath, 'utf8');
       res.json({ content });
     } catch (err) {
@@ -82,7 +86,8 @@ export default function settingsRoutes(ctx) {
     }
     if (ctx.config.demoMode) return res.json({ ok: true, demo: true });
     try {
-      const filePath = path.join(ctx.config.serverPath, JVM_ARGS_FILE);
+      const env = getSelectedConfig(ctx, req);
+      const filePath = path.join(env.serverPath, JVM_ARGS_FILE);
       await writeFile(filePath, content, 'utf8');
       audit('JVM_ARGS_SAVE', { user: req.session.user.email, ip: req.ip });
       res.json({ ok: true });
