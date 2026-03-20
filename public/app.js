@@ -109,13 +109,13 @@ document.addEventListener('click', async (e) => {
 let ws = null;
 let wsReconnectTimer = null;
 let currentModData = {}; // filename -> modrinth data from lookup
-const BROWSE_FETCH_LIMIT = 100; // items fetched per API call (large batch for client-side filtering)
+const BROWSE_FETCH_LIMIT = 100; // items fetched per API call
 const BROWSE_PAGE_SIZE = 10; // items shown per display page
-let browseOffset = 0; // current API offset for fetching next batch
+let browseOffset = 0; // next API offset to fetch
 let browseTotal = 0; // total results reported by Modrinth API
-let browsePage = 0; // current page within filtered results (0-indexed)
-let lastBrowseHits = []; // all fetched hits (unfiltered); cached for re-render
-let lastFilteredHits = []; // post-filter cache for stable pagination
+let browsePage = 0; // current page in filtered results (0-indexed)
+let allBrowseHits = []; // accumulated raw hits across all fetched batches
+let lastFilteredHits = []; // filtered view of allBrowseHits for pagination
 const browseVersionCache = new Map(); // versionId -> { versionNumber, fileSize }
 let modDetailState = null; // { source: 'installed'|'browse', filename?, author? }
 let modsPage = 0;
@@ -134,15 +134,16 @@ let activeEnvId = null; // currently deployed/running environment
 // and both tabs update automatically.
 function createPagination({ prevId, nextId, infoId, containerId }) {
   return {
-    update(page, totalPages, totalCount, label = 'items') {
+    update(page, totalPages, totalCount, label = 'items', { hasMore = false } = {}) {
       if (totalPages < 1) {
         hide(containerId);
         return;
       }
       show(containerId);
-      $(infoId).textContent = `Page ${page} of ${totalPages} (${totalCount.toLocaleString()} ${label})`;
+      const countStr = typeof totalCount === 'string' ? totalCount : totalCount.toLocaleString();
+      $(infoId).textContent = `Page ${page} of ${totalPages}${hasMore ? '+' : ''} (${countStr} ${label})`;
       $(prevId).disabled = page <= 1;
-      $(nextId).disabled = page >= totalPages;
+      $(nextId).disabled = page >= totalPages && !hasMore;
     },
     hide() {
       hide(containerId);
@@ -1346,17 +1347,24 @@ $('btn-refresh-mods').addEventListener('click', loadMods);
 let browseLoaded = false;
 
 $('btn-browse-search').addEventListener('click', () => {
-  browseOffset = 0;
-  browsePage = 0;
+  browseReset();
   browseSearch();
 });
 $('browse-query').addEventListener('keydown', (e) => {
   if (e.key === 'Enter') {
-    browseOffset = 0;
-    browsePage = 0;
+    browseReset();
     browseSearch();
   }
 });
+
+function browseReset() {
+  browseOffset = 0;
+  browseTotal = 0;
+  browsePage = 0;
+  allBrowseHits = [];
+  lastFilteredHits = [];
+  browseLoaded = false;
+}
 
 $('tab-page-prev').addEventListener('click', () => {
   if (activeModsSubtab === 'installed') {
@@ -1367,11 +1375,6 @@ $('tab-page-prev').addEventListener('click', () => {
   if (browsePage > 0) {
     browsePage--;
     renderBrowsePage();
-  } else if (browseOffset > 0) {
-    // Go back to previous batch
-    browseOffset -= BROWSE_FETCH_LIMIT;
-    browsePage = 0;
-    ($('browse-query').value.trim() ? browseSearch : browseLoad)();
   }
 });
 $('tab-page-next').addEventListener('click', () => {
@@ -1384,27 +1387,58 @@ $('tab-page-next').addEventListener('click', () => {
   if (browsePage < maxPage) {
     browsePage++;
     renderBrowsePage();
-  } else if (browseOffset + BROWSE_FETCH_LIMIT < browseTotal) {
-    // Exhausted current batch — fetch next batch from API
-    browseOffset += BROWSE_FETCH_LIMIT;
-    browsePage = 0;
-    ($('browse-query').value.trim() ? browseSearch : browseLoad)();
+  } else if (browseHasMore()) {
+    // Need more data from API to fill next page
+    browseFetchMore();
   }
 });
 
+// True if the API has more results we haven't fetched yet
+function browseHasMore() {
+  return browseOffset < browseTotal;
+}
+
+// Fetch next batch from API and append to accumulated hits
+async function browseFetchMore() {
+  $('browse-results').innerHTML = '<p class="dim">Loading more mods...</p>';
+  try {
+    const q = $('browse-query').value.trim();
+    const params = q
+      ? new URLSearchParams({ q, side: $('browse-side').value, limit: BROWSE_FETCH_LIMIT, offset: browseOffset })
+      : new URLSearchParams({ limit: BROWSE_FETCH_LIMIT, offset: browseOffset });
+    const endpoint = q ? 'search' : 'browse';
+    const data = await GET(`/modrinth/${endpoint}?${params}`);
+    browseTotal = data.total_hits || 0;
+    const hits = data.hits || [];
+    allBrowseHits = allBrowseHits.concat(hits);
+    browseOffset += hits.length;
+    rebuildFilteredHits();
+    // Advance to next page now that we have more data
+    const maxPage = Math.ceil(lastFilteredHits.length / BROWSE_PAGE_SIZE) - 1;
+    if (browsePage < maxPage) browsePage++;
+    renderBrowsePage();
+    enrichBrowseVersions(hits);
+  } catch (err) {
+    $('browse-results').innerHTML = `<p class="error-msg">${esc(err.message)}</p>`;
+  }
+}
+
 async function browseLoad() {
-  if (browseLoaded && browseOffset === 0 && !$('browse-query').value.trim()) {
-    renderBrowseResults(); // re-render from cache (handles back-to-page-1)
+  if (browseLoaded && !$('browse-query').value.trim()) {
+    rebuildFilteredHits();
+    renderBrowsePage();
     return;
   }
   $('browse-heading').textContent = 'Popular server-compatible Forge mods';
   $('browse-results').innerHTML = '<p class="dim">Loading popular mods...</p>';
   browsePager.hide();
+  browseReset();
   try {
-    const params = new URLSearchParams({ limit: BROWSE_FETCH_LIMIT, offset: browseOffset });
+    const params = new URLSearchParams({ limit: BROWSE_FETCH_LIMIT, offset: 0 });
     const data = await GET(`/modrinth/browse?${params}`);
     browseTotal = data.total_hits || 0;
-    lastBrowseHits = data.hits || [];
+    allBrowseHits = data.hits || [];
+    browseOffset = allBrowseHits.length;
     renderBrowseResults();
     browseLoaded = true;
   } catch (err) {
@@ -1415,19 +1449,20 @@ async function browseLoad() {
 async function browseSearch() {
   const q = $('browse-query').value.trim();
   if (!q) {
-    browseOffset = 0;
-    browsePage = 0;
+    browseReset();
     return browseLoad();
   }
   const side = $('browse-side').value;
   $('browse-heading').textContent = `Search results for "${q}"`;
   $('browse-results').innerHTML = '<p class="dim">Searching Modrinth...</p>';
   browsePager.hide();
+  browseReset();
   try {
-    const params = new URLSearchParams({ q, side, limit: BROWSE_FETCH_LIMIT, offset: browseOffset });
+    const params = new URLSearchParams({ q, side, limit: BROWSE_FETCH_LIMIT, offset: 0 });
     const data = await GET(`/modrinth/search?${params}`);
     browseTotal = data.total_hits || 0;
-    lastBrowseHits = data.hits || [];
+    allBrowseHits = data.hits || [];
+    browseOffset = allBrowseHits.length;
     renderBrowseResults();
   } catch (err) {
     $('browse-results').innerHTML = `<p class="error-msg">${esc(err.message)}</p>`;
@@ -1443,15 +1478,15 @@ $('browse-show-installed').addEventListener('change', () => {
 function rebuildFilteredHits() {
   const installed = getInstalledSlugs();
   const showInstalled = $('browse-show-installed').checked;
-  lastFilteredHits = showInstalled ? lastBrowseHits : lastBrowseHits.filter((h) => !installed.has(h.slug));
+  lastFilteredHits = showInstalled ? allBrowseHits : allBrowseHits.filter((h) => !installed.has(h.slug));
 }
 
 function updateBrowsePagination() {
-  // Pages within the current batch are known exactly; total pages estimated from API total
-  const batchStartPage = Math.floor(browseOffset / BROWSE_PAGE_SIZE);
-  const page = batchStartPage + browsePage + 1;
-  const totalPages = Math.max(page, Math.ceil(browseTotal / BROWSE_PAGE_SIZE)) || 1;
-  browsePager.update(page, totalPages, browseTotal, 'mods');
+  const totalFiltered = lastFilteredHits.length;
+  const totalPages = Math.max(1, Math.ceil(totalFiltered / BROWSE_PAGE_SIZE));
+  const page = browsePage + 1;
+  const hasMore = browseHasMore();
+  browsePager.update(page, totalPages, totalFiltered, 'mods', { hasMore });
 }
 
 // Returns a Set of Modrinth project slugs for all currently-installed mods.
@@ -1478,7 +1513,7 @@ function renderBrowsePage() {
   updateBrowsePagination();
 
   if (pageHits.length === 0) {
-    if (lastBrowseHits.length > 0 && !showInstalled) {
+    if (allBrowseHits.length > 0 && !showInstalled) {
       $('browse-results').innerHTML =
         '<p class="dim">All mods on this page are already installed. Check "Show installed" to see them.</p>';
     } else {
@@ -1775,7 +1810,7 @@ window.downloadMod = async function (btn) {
       await enrichInstalledMods();
     }
     // Re-render browse results so the card shows "Installed" badge
-    if (lastBrowseHits.length > 0) renderBrowseResults();
+    if (allBrowseHits.length > 0) renderBrowseResults();
   } catch (err) {
     btn.disabled = false;
     btn.textContent = 'Download';
