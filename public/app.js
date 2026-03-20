@@ -1255,6 +1255,10 @@ function renderMods() {
       const desc = md?.projectDescription || '';
       const ver = md?.versionNumber || '';
 
+      const downloads = md?.downloads != null ? Number(md.downloads).toLocaleString() : '';
+      const follows = md?.follows != null ? Number(md.follows).toLocaleString() : '';
+      const cats = (md?.categories || []).filter((c) => c !== 'forge').slice(0, 3);
+
       return `<div class="mod-card ${mod.enabled ? '' : 'mod-disabled'}">
       ${md?.iconUrl ? `<img class="mod-icon" src="${esc(md.iconUrl)}" alt="" loading="lazy" />` : '<div class="mod-icon-placeholder"></div>'}
       <div class="mod-info">
@@ -1264,21 +1268,16 @@ function renderMods() {
               ? `<span class="mod-title-link" data-action="mod-detail" data-id="${esc(md.projectSlug || md.projectId)}" data-source="installed" data-filename="${esc(mod.filename)}" data-author="${esc(md.author || '')}">${esc(title)}</span>`
               : `<span>${esc(title)}</span>`
           }
-          ${ver ? `<span class="mod-version">v${esc(ver)}</span>` : ''}
           <span class="side-badge ${side.cls}">${side.text}</span>
           ${!mod.enabled ? '<span class="side-badge mod-off-badge">Disabled</span>' : ''}
+          ${cats.map((c) => `<span class="cat-badge">${esc(c)}</span>`).join('')}
         </div>
-        <div class="mod-desc">${desc ? `${esc(desc.slice(0, 120))}${desc.length > 120 ? '...' : ''}` : '&nbsp;'}</div>
-        ${(() => {
-          const cats = (md?.categories || []).filter((c) => c !== 'forge').slice(0, 3);
-          return cats.length
-            ? `<div class="mod-categories">${cats.map((c) => `<span class="mod-category">${esc(c)}</span>`).join('')}</div>`
-            : '';
-        })()}
+        <div class="mod-desc">${desc ? esc(desc.slice(0, 160)) : '&nbsp;'}</div>
         <div class="mod-meta">
           ${md?.author ? `<span class="dim" title="Author">by <strong>${esc(md.author)}</strong></span>` : ''}
-          ${md?.downloads != null ? `<span class="dim" title="Downloads">&#11015; ${Number(md.downloads).toLocaleString()}</span>` : ''}
-          ${md?.follows != null ? `<span class="dim" title="Followers">&#9829; ${Number(md.follows).toLocaleString()}</span>` : ''}
+          ${downloads ? `<span class="dim" title="Downloads">&#11015; ${downloads}</span>` : ''}
+          ${follows ? `<span class="dim" title="Followers">&#9829; ${follows}</span>` : ''}
+          ${ver ? `<span class="dim">v${esc(ver)}</span>` : ''}
           <span class="dim">${formatSize(mod.size)}</span>
         </div>
       </div>
