@@ -1233,14 +1233,13 @@ function renderMods() {
       const title = (md?.projectTitle || m.filename).toLowerCase();
       if (!title.includes(filterText) && !m.filename.toLowerCase().includes(filterText)) return false;
     }
-    // Always exclude client-only mods — they don't belong on a server
     const md = currentModData[m.filename]?.modrinth;
-    if (md && md.serverSide === 'unsupported') return false;
     if (sideFilter !== 'all') {
       if (!md) return sideFilter === 'unknown';
       const { cls } = sideLabel(md.clientSide, md.serverSide);
       if (sideFilter === 'both' && cls !== 'side-both') return false;
       if (sideFilter === 'server' && cls !== 'side-server') return false;
+      if (sideFilter === 'client' && cls !== 'side-client') return false;
     }
     return true;
   });
@@ -1293,7 +1292,9 @@ function renderMods() {
       const hash = currentModData[mod.filename]?.hash;
       const iconSrc = hash ? `/api/mod-icon/${hash}` : md?.iconUrl;
 
-      return `<div class="mod-card ${mod.enabled ? '' : 'mod-disabled'}">
+      const isClientOnly = side.cls === 'side-client';
+      return `<div class="mod-card ${mod.enabled ? '' : 'mod-disabled'}${isClientOnly ? ' mod-client-problem' : ''}">
+      ${isClientOnly ? '<div class="mod-client-warning-banner">⚠ Client-only mod — should not be installed on a server. Disable or delete it.</div>' : ''}
       ${iconSrc ? `<img class="mod-icon" src="${esc(iconSrc)}" alt="" loading="lazy" onerror="this.replaceWith(Object.assign(document.createElement('div'),{className:'mod-icon-placeholder'}))" />` : '<div class="mod-icon-placeholder"></div>'}
       <div class="mod-info">
         <div class="mod-title">

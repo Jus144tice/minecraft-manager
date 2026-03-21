@@ -933,8 +933,8 @@ html {
   color: #d2a8ff;
 }
 .side-client {
-  background: #1c3a2a;
-  color: #56d364;
+  background: #3d1a1a;
+  color: #ff7b7b;
 }
 .side-unknown {
   background: var(--surface2);
@@ -943,6 +943,20 @@ html {
 .mod-off-badge {
   background: #3d3000;
   color: var(--warning);
+}
+.mod-client-problem {
+  border-left: 3px solid #da3633;
+  flex-wrap: wrap;
+}
+.mod-client-warning-banner {
+  flex: 0 0 100%;
+  background: #3d1212;
+  color: #ff7b7b;
+  font-size: 0.8rem;
+  font-weight: 600;
+  padding: 0.35rem 0.75rem;
+  border-radius: 4px;
+  margin-bottom: 0.25rem;
 }
 .installed-badge {
   background: #1a2e1a;
