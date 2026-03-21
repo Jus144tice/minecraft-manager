@@ -191,3 +191,39 @@ test('railways direct match works', () => {
   assert.ok(result);
   assert.equal(result.filename, 'railways-1.20.1-1.6.13.jar');
 });
+
+test('system-sourced ERROR with namespace ref attributes to correct mod', () => {
+  const result = parser.parseLine(
+    "[00:06:39] [Worker-Main-1/ERROR] [minecraft/TagLoader]: Couldn't load tag create:crushed_ores",
+  );
+  assert.ok(result);
+  assert.equal(result.filename, 'create-1.20.1-0.5.1.f.jar');
+  assert.equal(result.status, 'error');
+});
+
+test('system-sourced WARN with mixin ref attributes to correct mod', () => {
+  // "quark" is registered in the map but source is "mixin" (system)
+  const p = new ModStartupParser();
+  p.reset();
+  p.setModIdMap(new Map([['quark', 'quark.jar']]));
+  const result = p.parseLine("[00:06:28] [main/WARN] [mixin/]: Reference map 'quark.refmap.json' could not be read");
+  assert.ok(result);
+  assert.equal(result.filename, 'quark.jar');
+  assert.equal(result.status, 'warning');
+});
+
+test('system-sourced Missing data pack attributes to correct mod', () => {
+  const result = parser.parseLine('[00:06:32] [main/WARN] [minecraft/MinecraftServer]: Missing data pack mod:create');
+  assert.ok(result);
+  assert.equal(result.filename, 'create-1.20.1-0.5.1.f.jar');
+  assert.equal(result.status, 'warning');
+});
+
+test('finalize does not mark unmapped mods (missing mods.toml)', () => {
+  parser.parseLine('[00:06:27] [main/INFO] [voicechat/]: loaded');
+  parser.finalize();
+
+  assert.equal(parser.getStatusForFile('voicechat-1.20.1-2.6.12.jar').status, 'loaded');
+  // A mod not in the modIdMap should NOT get a status — needs investigation
+  assert.equal(parser.getStatusForFile('botarium-1.20.1-2.3.4.jar'), null);
+});

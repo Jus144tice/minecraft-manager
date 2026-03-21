@@ -18,38 +18,44 @@ const modIdFileCache = new Map();
  */
 function readModInfoFromJar(jarPath) {
   return new Promise((resolve) => {
+    let resolved = false;
+    const done = (result) => {
+      if (resolved) return;
+      resolved = true;
+      resolve(result);
+    };
+
     readFile(jarPath)
       .then((buffer) => {
         yauzl.fromBuffer(buffer, { lazyEntries: true }, (err, zipfile) => {
-          if (err) return resolve({ modIds: [], displayNames: [] });
-          const modIds = [];
-          const displayNames = [];
+          if (err) return done({ modIds: [], displayNames: [] });
           zipfile.readEntry();
           zipfile.on('entry', (entry) => {
             if (entry.fileName === 'META-INF/mods.toml') {
               zipfile.openReadStream(entry, (streamErr, stream) => {
                 if (streamErr) {
                   zipfile.close();
-                  return resolve({ modIds: [], displayNames: [] });
+                  return done({ modIds: [], displayNames: [] });
                 }
                 const chunks = [];
                 stream.on('data', (chunk) => chunks.push(chunk));
                 stream.on('end', () => {
                   const toml = Buffer.concat(chunks).toString('utf8');
-                  for (const m of toml.matchAll(/modId\s*=\s*"([^"]+)"/g)) modIds.push(m[1]);
-                  for (const m of toml.matchAll(/displayName\s*=\s*"([^"]+)"/g)) displayNames.push(m[1]);
+                  const modIds = [...toml.matchAll(/modId\s*=\s*"([^"]+)"/g)].map((m) => m[1]);
+                  const displayNames = [...toml.matchAll(/displayName\s*=\s*"([^"]+)"/g)].map((m) => m[1]);
                   zipfile.close();
-                  resolve({ modIds, displayNames });
+                  done({ modIds, displayNames });
                 });
               });
             } else {
               zipfile.readEntry();
             }
           });
-          zipfile.on('end', () => resolve({ modIds, displayNames }));
+          zipfile.on('end', () => done({ modIds: [], displayNames: [] }));
+          zipfile.on('error', () => done({ modIds: [], displayNames: [] }));
         });
       })
-      .catch(() => resolve({ modIds: [], displayNames: [] }));
+      .catch(() => done({ modIds: [], displayNames: [] }));
   });
 }
 
@@ -259,13 +265,22 @@ export class ModStartupParser {
     if (!match) return null;
 
     const [, , level, source, text] = match;
-
-    // Skip system/non-mod sources
-    if (SYSTEM_SOURCES.has(source)) return null;
     const sourceLower = source.toLowerCase();
-    if (SYSTEM_SOURCES.has(sourceLower)) return null;
+    const isSystemSource = SYSTEM_SOURCES.has(source) || SYSTEM_SOURCES.has(sourceLower);
 
-    // Resolve source to filename using multiple strategies
+    // For system sources: only process WARN/ERROR by extracting mod refs from the message text
+    if (isSystemSource) {
+      if (level === 'ERROR' || level === 'FATAL' || level === 'WARN') {
+        const modRef = this._extractModRefFromText(text);
+        if (modRef) {
+          const status = level === 'ERROR' || level === 'FATAL' ? 'error' : 'warning';
+          return this._addMessage(modRef.filename, modRef.modId, status, level, source, text);
+        }
+      }
+      return null; // system source INFO or no mod ref found
+    }
+
+    // Resolve non-system source to filename
     const resolved = this._resolveSource(source, sourceLower);
     if (!resolved) return null;
 
@@ -326,6 +341,50 @@ export class ModStartupParser {
     return null;
   }
 
+  /**
+   * Extract a mod reference from a system-sourced error/warning message.
+   * Looks for patterns like:
+   *   - "modid:path/to/resource" (namespace references)
+   *   - "modid.mixins.json" (mixin config references)
+   *   - "mod:modid" (Missing data pack references)
+   */
+  _extractModRefFromText(text) {
+    // Pattern 1: "mod:modid" from "Missing data pack mod:modid"
+    const dataPack = text.match(/Missing data pack mod:(\w+)/);
+    if (dataPack) {
+      const id = dataPack[1].toLowerCase();
+      const filename = this.modIdMap.get(id);
+      if (filename) return { filename, modId: id };
+    }
+
+    // Pattern 2: "modid.mixins.json" or "modid-common.mixins.json"
+    const mixinRef = text.match(/(\w[\w-]*?)(?:[-_.](?:common|forge|client|server))?\.mixins\.json/);
+    if (mixinRef) {
+      const id = mixinRef[1].toLowerCase().replace(/[-_]/g, '');
+      // Try with and without separators
+      const filename = this.modIdMap.get(id) || this.modIdMap.get(mixinRef[1].toLowerCase());
+      if (filename) return { filename, modId: mixinRef[1].toLowerCase() };
+    }
+
+    // Pattern 3: "modid:resource_path" (Minecraft namespace like "create:crushed_ores")
+    const nsRef = text.match(/\b([a-z_][\w-]*):[\w/.-]+/);
+    if (nsRef && nsRef[1] !== 'minecraft' && nsRef[1] !== 'forge' && nsRef[1] !== 'java' && nsRef[1] !== 'net') {
+      const id = nsRef[1].toLowerCase();
+      const filename = this.modIdMap.get(id);
+      if (filename) return { filename, modId: id };
+    }
+
+    // Pattern 4: "modid.refmap.json" (reference map files)
+    const refmapRef = text.match(/(\w[\w-]*?)(?:[-.].*)?\.refmap\.json/);
+    if (refmapRef) {
+      const id = refmapRef[1].toLowerCase();
+      const filename = this.modIdMap.get(id);
+      if (filename) return { filename, modId: id };
+    }
+
+    return null;
+  }
+
   _addMessage(filename, modId, status, level, source, text) {
     let entry = this.statuses.get(filename);
     if (!entry) {
@@ -351,8 +410,9 @@ export class ModStartupParser {
   }
 
   /**
-   * Finalize: mark all unmapped mods as "loaded" (they loaded silently).
-   * Call when server "Done!" is detected.
+   * Finalize: mark all mapped mods as "loaded" if they weren't seen in logs.
+   * Mods not in the modIdMap (e.g., missing mods.toml) are left without status
+   * so they can be investigated.
    */
   finalize() {
     this._finalized = true;
