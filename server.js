@@ -432,29 +432,35 @@ mc.on('log', (entry) => {
   const msg = JSON.stringify({ type: 'log', ...entry });
   for (const ws of wsClients) if (ws.readyState === 1) ws.send(msg);
 
+  function broadcastModStatusEvent(ev) {
+    if (ev.type === 'status') {
+      const msg = JSON.stringify({ type: 'mod-status', ...ev });
+      for (const ws of wsClients) if (ws.readyState === 1) ws.send(msg);
+    } else if (ev.type === 'complete') {
+      modStartupParser.finalize();
+      const msg = JSON.stringify({ type: 'mod-status-complete', statuses: modStartupParser.getStatuses() });
+      for (const ws of wsClients) if (ws.readyState === 1) ws.send(msg);
+    }
+  }
+
   // Detect server start and reset mod status parser
   if (entry.line === '[Manager] Server process starting...') {
     modStartupParser.reset();
     const resetMsg = JSON.stringify({ type: 'mod-status-reset' });
     for (const ws of wsClients) if (ws.readyState === 1) ws.send(resetMsg);
-    // Build mod ID map in background (don't block log streaming)
+    // Build mod ID map in background — lines are buffered until this completes
     buildModIdMap(config.serverPath, config.modsFolder)
-      .then((map) => modStartupParser.setModIdMap(map))
+      .then((map) => {
+        const bufferedEvents = modStartupParser.setModIdMap(map);
+        // Broadcast events from replayed buffered lines
+        for (const ev of bufferedEvents) broadcastModStatusEvent(ev);
+      })
       .catch(() => {});
   }
 
   // Feed log line to mod startup parser
   const change = modStartupParser.parseLine(entry.line);
-  if (change) {
-    if (change.type === 'status') {
-      const statusMsg = JSON.stringify({ type: 'mod-status', ...change });
-      for (const ws of wsClients) if (ws.readyState === 1) ws.send(statusMsg);
-    } else if (change.type === 'complete') {
-      modStartupParser.finalize();
-      const completeMsg = JSON.stringify({ type: 'mod-status-complete', statuses: modStartupParser.getStatuses() });
-      for (const ws of wsClients) if (ws.readyState === 1) ws.send(completeMsg);
-    }
-  }
+  if (change) broadcastModStatusEvent(change);
 });
 
 const metricsInterval = setInterval(broadcastMetrics, 10000);

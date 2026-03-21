@@ -1,6 +1,7 @@
 // Mod startup status monitoring: parses Forge log output during server startup
 // to track per-mod loading status (loaded, warning, error, critical).
-// Reads mod IDs from JAR files' META-INF/mods.toml for log-to-filename mapping.
+// Reads mod IDs and display names from JAR files' META-INF/mods.toml for
+// log-to-filename mapping. Buffers log lines while the map is being built.
 
 import { readdir, stat, readFile } from 'fs/promises';
 import path from 'path';
@@ -8,63 +9,63 @@ import yauzl from 'yauzl';
 
 // ---- Mod ID extraction from JAR files ----
 
-// Cache: filename+mtimeMs -> [modId, ...]
+// Cache: cacheKey -> { modIds: [string], displayNames: [string] }
 const modIdFileCache = new Map();
 
 /**
- * Read mod IDs from a JAR file's META-INF/mods.toml.
- * Returns array of mod IDs declared in the JAR.
+ * Read mod IDs and display names from a JAR file's META-INF/mods.toml.
+ * Returns { modIds: string[], displayNames: string[] }.
  */
-function readModIdsFromJar(jarPath) {
+function readModInfoFromJar(jarPath) {
   return new Promise((resolve) => {
     readFile(jarPath)
       .then((buffer) => {
         yauzl.fromBuffer(buffer, { lazyEntries: true }, (err, zipfile) => {
-          if (err) return resolve([]);
+          if (err) return resolve({ modIds: [], displayNames: [] });
           const modIds = [];
+          const displayNames = [];
           zipfile.readEntry();
           zipfile.on('entry', (entry) => {
             if (entry.fileName === 'META-INF/mods.toml') {
               zipfile.openReadStream(entry, (streamErr, stream) => {
                 if (streamErr) {
                   zipfile.close();
-                  return resolve([]);
+                  return resolve({ modIds: [], displayNames: [] });
                 }
                 const chunks = [];
                 stream.on('data', (chunk) => chunks.push(chunk));
                 stream.on('end', () => {
                   const toml = Buffer.concat(chunks).toString('utf8');
-                  // Extract modId values from [[mods]] sections
-                  const matches = toml.matchAll(/modId\s*=\s*"([^"]+)"/g);
-                  for (const m of matches) modIds.push(m[1]);
+                  for (const m of toml.matchAll(/modId\s*=\s*"([^"]+)"/g)) modIds.push(m[1]);
+                  for (const m of toml.matchAll(/displayName\s*=\s*"([^"]+)"/g)) displayNames.push(m[1]);
                   zipfile.close();
-                  resolve(modIds);
+                  resolve({ modIds, displayNames });
                 });
               });
             } else {
               zipfile.readEntry();
             }
           });
-          zipfile.on('end', () => resolve(modIds));
+          zipfile.on('end', () => resolve({ modIds, displayNames }));
         });
       })
-      .catch(() => resolve([]));
+      .catch(() => resolve({ modIds: [], displayNames: [] }));
   });
 }
 
 /**
- * Build a mapping of modId -> filename for all JARs in the mods folder.
- * Uses a file-level cache keyed by filename + mtime to avoid re-reading unchanged JARs.
+ * Build a comprehensive lookup map of various source names -> filename.
+ * Includes: mod IDs, display names, display names without spaces, filename stems.
  */
 export async function buildModIdMap(serverPath, modsFolder = 'mods') {
-  const modIdToFilename = new Map();
+  const sourceToFilename = new Map();
   const modsPath = path.join(serverPath, modsFolder);
 
   let entries;
   try {
     entries = await readdir(modsPath);
   } catch {
-    return modIdToFilename;
+    return sourceToFilename;
   }
 
   for (const name of entries) {
@@ -73,20 +74,34 @@ export async function buildModIdMap(serverPath, modsFolder = 'mods') {
     try {
       const s = await stat(fullPath);
       const cacheKey = `${fullPath}:${s.mtimeMs}`;
-      let modIds = modIdFileCache.get(cacheKey);
-      if (!modIds) {
-        modIds = await readModIdsFromJar(fullPath);
-        modIdFileCache.set(cacheKey, modIds);
+      let info = modIdFileCache.get(cacheKey);
+      if (!info) {
+        info = await readModInfoFromJar(fullPath);
+        modIdFileCache.set(cacheKey, info);
       }
-      for (const id of modIds) {
-        modIdToFilename.set(id.toLowerCase(), name);
+
+      // Register mod IDs (primary key)
+      for (const id of info.modIds) {
+        sourceToFilename.set(id.toLowerCase(), name);
       }
+
+      // Register display names (e.g., "Create Deco", "Railways", "FTB Quests Optimizer")
+      for (const dn of info.displayNames) {
+        sourceToFilename.set(dn.toLowerCase(), name);
+        // Also register without spaces for fuzzy matching
+        const noSpaces = dn.replace(/\s+/g, '').toLowerCase();
+        if (noSpaces !== dn.toLowerCase()) sourceToFilename.set(noSpaces, name);
+      }
+
+      // Register filename stem (e.g., "geckolib" from "geckolib-forge-1.20.1-4.7.1.2.jar")
+      const stem = name.replace(/[-_](?:forge|fabric|neoforge|mc|quilt).*$/i, '').replace(/\.jar$/i, '');
+      if (stem.length >= 3) sourceToFilename.set(stem.toLowerCase(), name);
     } catch {
       /* skip unreadable */
     }
   }
 
-  return modIdToFilename;
+  return sourceToFilename;
 }
 
 // ---- Log Parser ----
@@ -108,23 +123,66 @@ const STACK_TRACE_PATTERN = /^\s+at\s|^\s*Caused by:|^\s+\.\.\.\s+\d+\s+more/;
 const VERSION_CHECK_SOURCE = 'ne.mi.fm.VersionChecker';
 
 // Known non-mod sources to ignore for status tracking
-const SYSTEM_SOURCES = new Set(['minecraft', 'mojang', 'forge', 'fml', 'mixin', 'modlauncher', 'cpw.mods', 'STDOUT']);
+const SYSTEM_SOURCES = new Set([
+  'minecraft',
+  'mojang',
+  'forge',
+  'fml',
+  'mixin',
+  'modlauncher',
+  'cpw.mods',
+  'STDOUT',
+  'ne.mi.co.Co.placebo', // Placebo coremod patching
+  'de.ar.ne.fo.NetworkManagerImpl', // Architectury network registration
+  'de.ar.re.re.fo.RegistrarManagerImpl', // Architectury registry
+  'ne.mi.co.ForgeMod',
+  'ne.mi.co.MinecraftForge',
+  'ne.mi.fm.lo.mo.ModFileParser',
+  'ne.mi.ja.se.JarSelector',
+  'ne.mi.fm.lo.RuntimeDistCleaner',
+  'ne.mi.co.ForgeConfigSpec',
+  'mojang',
+  'cp.mo.mo.Launcher',
+  'cp.mo.mo.LaunchServiceHandler',
+  'MixinExtras|Service',
+  'de.gi.js.th.pa.SoundEventParser',
+  'de.gi.js.th.pa.FluidParser',
+  'de.gi.js.th.pa.BlockParser',
+  'de.gi.js.th.pa.ItemParser',
+  'de.gi.js.th.pa.EnchantmentParser',
+  'de.gi.js.th.pa.CreativeModeTabParser',
+  'de.gi.js.th.pa.FluidTypeParser',
+]);
 
 /**
  * Mod startup status parser. Processes log lines and tracks per-mod status.
+ * Buffers lines while waiting for the mod ID map, then replays them.
  */
 export class ModStartupParser {
   constructor() {
-    this.modIdMap = new Map(); // modId -> filename
+    this.modIdMap = new Map(); // source name -> filename (comprehensive)
     this.statuses = new Map(); // filename -> { status, messages[] }
     this._collecting = null; // { filename, messageIndex } when collecting stack trace
     this._started = false;
     this._finalized = false;
+    this._mapReady = false;
+    this._buffer = []; // buffered lines waiting for map
+    this._onMapReady = null; // callback for broadcasting buffered results
   }
 
-  /** Set the modId-to-filename mapping (call before parsing begins). */
-  setModIdMap(map) {
+  /** Set the source-to-filename mapping and replay buffered lines. */
+  setModIdMap(map, onEvent) {
     this.modIdMap = map;
+    this._mapReady = true;
+    this._onMapReady = onEvent || null;
+    // Replay buffered lines
+    const events = [];
+    for (const line of this._buffer) {
+      const event = this._parseLineInternal(line);
+      if (event) events.push(event);
+    }
+    this._buffer = [];
+    return events;
   }
 
   /** Reset all state for a new server start. */
@@ -133,14 +191,31 @@ export class ModStartupParser {
     this._collecting = null;
     this._started = true;
     this._finalized = false;
+    this._mapReady = false;
+    this._buffer = [];
   }
 
   /**
    * Parse a single log line. Returns a change event if status changed, or null.
-   * Change event: { filename, modId, status, message }
+   * If the map isn't ready yet, buffers the line and returns null.
    */
   parseLine(line) {
     if (!this._started || this._finalized) return null;
+
+    if (!this._mapReady) {
+      this._buffer.push(line);
+      // Still check for Done pattern even while buffering
+      if (DONE_PATTERN.test(line)) {
+        this._buffer.push(line);
+      }
+      return null;
+    }
+
+    return this._parseLineInternal(line);
+  }
+
+  _parseLineInternal(line) {
+    if (this._finalized) return null;
 
     // Check for server done
     if (DONE_PATTERN.test(line)) {
@@ -156,13 +231,12 @@ export class ModStartupParser {
         const modId = modMatch[2].toLowerCase();
         const filename = this.modIdMap.get(modId);
         if (filename) {
-          return this._addMessage(filename, modId, 'critical', 'ERROR', modName, line, null);
+          return this._addMessage(filename, modId, 'critical', 'ERROR', modName, line);
         }
       }
     }
 
-    // Stack trace continuation: lines that are part of a stack trace or exception
-    // (whitespace-prefixed, \tat, Caused by:, or any non-log-pattern line while collecting)
+    // Stack trace continuation
     if (this._collecting) {
       const isStackLine = STACK_TRACE_PATTERN.test(line) || /^\s/.test(line);
       const isLogLine = LOG_PATTERN.test(line);
@@ -177,7 +251,6 @@ export class ModStartupParser {
         }
         return null;
       }
-      // It's a new log line — stop collecting
       this._collecting = null;
     }
 
@@ -188,38 +261,24 @@ export class ModStartupParser {
     const [, , level, source, text] = match;
 
     // Skip system/non-mod sources
+    if (SYSTEM_SOURCES.has(source)) return null;
     const sourceLower = source.toLowerCase();
     if (SYSTEM_SOURCES.has(sourceLower)) return null;
 
-    // Try to map source to a filename
-    // Source can be a mod ID, a class path prefix, or a mod name
-    let filename = this.modIdMap.get(sourceLower);
-    let modId = sourceLower;
+    // Resolve source to filename using multiple strategies
+    const resolved = this._resolveSource(source, sourceLower);
+    if (!resolved) return null;
 
-    // If direct lookup failed, try fuzzy matching against known mod IDs
-    if (!filename) {
-      for (const [knownId, knownFile] of this.modIdMap) {
-        if (sourceLower.includes(knownId) || knownId.includes(sourceLower)) {
-          filename = knownFile;
-          modId = knownId;
-          break;
-        }
-      }
-    }
-
-    if (!filename) return null; // unmapped source, skip
+    const { filename, modId } = resolved;
 
     // Skip version check INFO lines (noise)
     if (source === VERSION_CHECK_SOURCE && level === 'INFO') return null;
 
     // Determine status level
-    let status;
     if (level === 'ERROR' || level === 'FATAL') {
-      status = 'error';
+      return this._addMessage(filename, modId, 'error', level, source, text);
     } else if (level === 'WARN') {
-      status = 'warning';
-      // Version check warnings are lower priority
-      if (source === VERSION_CHECK_SOURCE) status = 'warning';
+      return this._addMessage(filename, modId, 'warning', level, source, text);
     } else {
       // INFO — track as loaded (only if no worse status exists)
       const existing = this.statuses.get(filename);
@@ -227,13 +286,47 @@ export class ModStartupParser {
         this.statuses.set(filename, { status: 'loaded', messages: [] });
         return { type: 'status', filename, modId, status: 'loaded', message: null };
       }
-      return null; // already tracked, INFO doesn't change status
+      return null;
     }
-
-    return this._addMessage(filename, modId, status, level, source, text, line);
   }
 
-  _addMessage(filename, modId, status, level, source, text, _rawLine) {
+  /**
+   * Try multiple strategies to map a log source to a filename.
+   * Returns { filename, modId } or null.
+   */
+  _resolveSource(source, sourceLower) {
+    // 1. Direct lookup (mod ID or display name)
+    let filename = this.modIdMap.get(sourceLower);
+    if (filename) return { filename, modId: sourceLower };
+
+    // 2. Source without spaces (e.g., "Create Deco" -> "createdeco")
+    const noSpaces = sourceLower.replace(/\s+/g, '');
+    if (noSpaces !== sourceLower) {
+      filename = this.modIdMap.get(noSpaces);
+      if (filename) return { filename, modId: noSpaces };
+    }
+
+    // 3. For abbreviated class paths like "co.si.cr.Create", extract the last segment
+    if (source.includes('.')) {
+      const lastSegment = source.split('.').pop().toLowerCase();
+      if (lastSegment && lastSegment.length >= 3) {
+        filename = this.modIdMap.get(lastSegment);
+        if (filename) return { filename, modId: lastSegment };
+      }
+    }
+
+    // 4. Fuzzy: check if source contains a known mod ID or vice versa (min 4 chars to avoid false matches)
+    for (const [knownId, knownFile] of this.modIdMap) {
+      if (knownId.length < 4) continue;
+      if (sourceLower.includes(knownId) || knownId.includes(sourceLower)) {
+        return { filename: knownFile, modId: knownId };
+      }
+    }
+
+    return null;
+  }
+
+  _addMessage(filename, modId, status, level, source, text) {
     let entry = this.statuses.get(filename);
     if (!entry) {
       entry = { status: 'loaded', messages: [] };

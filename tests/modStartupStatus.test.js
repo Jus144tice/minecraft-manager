@@ -8,17 +8,20 @@ let parser;
 
 beforeEach(() => {
   parser = new ModStartupParser();
-  // Set up a test mod ID map
+  parser.reset();
+  // Set up a test mod ID map (after reset so buffered lines can be replayed)
   parser.setModIdMap(
     new Map([
       ['voicechat', 'voicechat-1.20.1-2.6.12.jar'],
       ['create', 'create-1.20.1-0.5.1.f.jar'],
       ['quark', 'quark-1.20.1-4.0-460.jar'],
+      ['quark-zeta', 'quark-1.20.1-4.0-460.jar'],
       ['supplementaries', 'supplementaries-1.20-3.1.42.jar'],
       ['overweight_farming', 'overweight_farming-1.20.1-1.2.jar'],
+      ['railways', 'railways-1.20.1-1.6.13.jar'],
+      ['create deco', 'create-deco-1.20.1-2.0.2.jar'],
     ]),
   );
-  parser.reset();
 });
 
 test('parseLine returns null before reset', () => {
@@ -135,8 +138,56 @@ test('multiple messages for same mod are collected', () => {
 });
 
 test('fuzzy matching maps source to mod ID', () => {
-  // Source "quark-zeta" should fuzzy match to "quark"
+  // Source "quark-zeta" should match directly (registered as key)
   const result = parser.parseLine('[00:06:28] [main/WARN] [quark-zeta/]: config issue');
   assert.ok(result);
   assert.equal(result.filename, 'quark-1.20.1-4.0-460.jar');
+});
+
+test('display name matching works', () => {
+  const result = parser.parseLine('[00:06:28] [main/INFO] [Create Deco/]: Registering items');
+  assert.ok(result);
+  assert.equal(result.filename, 'create-deco-1.20.1-2.0.2.jar');
+});
+
+test('class path last segment resolves to mod', () => {
+  // "co.si.cr.Create" -> last segment "Create" -> matches "create"
+  const p = new ModStartupParser();
+  p.reset();
+  p.setModIdMap(new Map([['create', 'create-1.20.1-0.5.1.f.jar']]));
+  const result = p.parseLine('[00:06:27] [main/INFO] [co.si.cr.Create/]: Create initializing');
+  assert.ok(result);
+  assert.equal(result.filename, 'create-1.20.1-0.5.1.f.jar');
+});
+
+test('buffering replays lines when map becomes available', () => {
+  const p = new ModStartupParser();
+  p.reset(); // started but no map yet
+
+  // These lines are buffered (map not ready)
+  p.parseLine('[00:06:27] [main/INFO] [voicechat/]: loaded');
+  p.parseLine('[00:06:28] [main/WARN] [create/]: warning msg');
+
+  // Now set the map — buffered lines should replay
+  const events = p.setModIdMap(
+    new Map([
+      ['voicechat', 'vc.jar'],
+      ['create', 'create.jar'],
+    ]),
+  );
+
+  assert.ok(events.length >= 2);
+  assert.equal(p.getStatusForFile('vc.jar').status, 'loaded');
+  assert.equal(p.getStatusForFile('create.jar').status, 'warning');
+});
+
+test('system sources are ignored', () => {
+  const result = parser.parseLine('[00:06:30] [main/INFO] [ne.mi.co.Co.placebo/COREMODLOG]: Patching something');
+  assert.equal(result, null);
+});
+
+test('railways direct match works', () => {
+  const result = parser.parseLine('[00:06:29] [modloading-worker-0/INFO] [Railways/]: Steam n Rails initializing');
+  assert.ok(result);
+  assert.equal(result.filename, 'railways-1.20.1-1.6.13.jar');
 });
