@@ -888,7 +888,12 @@ html {
 }
 
 /* --- Server URL bar --- */
-.server-url-bar {
+.server-url-row {
+  display: flex;
+  gap: 0.75rem;
+  margin-bottom: 1rem;
+}
+.server-url-bubble {
   display: flex;
   align-items: center;
   gap: 0.75rem;
@@ -896,7 +901,8 @@ html {
   border: 1px solid var(--border);
   border-radius: var(--radius);
   padding: 0.6rem 1rem;
-  margin-bottom: 1rem;
+  flex: 1;
+  min-width: 0;
 }
 .server-url-label {
   color: var(--text-dim);
@@ -908,6 +914,8 @@ html {
   font-size: 0.95rem;
   font-weight: 600;
   flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .side-badge {
@@ -1809,8 +1817,12 @@ textarea:focus {
     gap: 0.5rem;
   }
 
-  /* Server URL bar: stack label above URL */
-  .server-url-bar {
+  /* Server URL bubbles: stack vertically on small screens */
+  .server-url-row {
+    flex-direction: column;
+    gap: 0.4rem;
+  }
+  .server-url-bubble {
     flex-wrap: wrap;
     gap: 0.4rem;
     padding: 0.5rem 0.75rem;
@@ -1913,8 +1925,12 @@ textarea:focus {
     line-height: 1.4;
   }
 
-  /* Server URL bar */
-  .server-url-bar {
+  /* Server URL bubbles */
+  .server-url-row {
+    flex-direction: column;
+    gap: 0.35rem;
+  }
+  .server-url-bubble {
     flex-wrap: wrap;
     gap: 0.35rem;
     padding: 0.5rem 0.75rem;

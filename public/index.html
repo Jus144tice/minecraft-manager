@@ -202,10 +202,17 @@
         </div>
 
         <!-- Server address bar (shown when server is running) -->
-        <div id="server-url-bar" class="server-url-bar hidden">
-          <span class="server-url-label">Server Address</span>
-          <code class="server-url-text" id="server-url-text"></code>
-          <button class="btn btn-sm btn-ghost" id="btn-copy-server-url" title="Copy to clipboard">Copy</button>
+        <div id="server-url-bar" class="server-url-row hidden">
+          <div class="server-url-bubble">
+            <span class="server-url-label">Server Address</span>
+            <code class="server-url-text" id="server-url-text"></code>
+            <button class="btn btn-sm btn-ghost" id="btn-copy-server-url" title="Copy to clipboard">Copy</button>
+          </div>
+          <div class="server-url-bubble hidden" id="voice-chat-bubble">
+            <span class="server-url-label">Voice Chat</span>
+            <code class="server-url-text" id="voice-chat-text"></code>
+            <button class="btn btn-sm btn-ghost" id="btn-copy-voice-url" title="Copy to clipboard">Copy</button>
+          </div>
         </div>
 
         <div class="control-section operator-up">

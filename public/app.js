@@ -417,6 +417,17 @@ $('btn-copy-server-url').addEventListener('click', () => {
     }, 2000);
   });
 });
+$('btn-copy-voice-url').addEventListener('click', () => {
+  const text = $('voice-chat-text').textContent;
+  if (!text) return;
+  navigator.clipboard.writeText(text).then(() => {
+    const btn = $('btn-copy-voice-url');
+    btn.textContent = 'Copied!';
+    setTimeout(() => {
+      btn.textContent = 'Copy';
+    }, 2000);
+  });
+});
 
 // --- Tab navigation ---
 document.querySelectorAll('.tab-btn').forEach((btn) => {
@@ -909,8 +920,14 @@ function updateDashboard(s) {
   const urlBar = $('server-url-bar');
   if (urlBar && window._serverAddress) {
     if (s.running) {
-      const vcInfo = window._voiceChatPort ? `  ·  Voice Chat UDP ${window._voiceChatPort}` : '';
-      $('server-url-text').textContent = window._serverAddress + vcInfo;
+      $('server-url-text').textContent = window._serverAddress;
+      const vcBubble = $('voice-chat-bubble');
+      if (window._voiceChatPort) {
+        $('voice-chat-text').textContent = `${window._serverAddress.replace(/:.*$/, '')}:${window._voiceChatPort} UDP`;
+        show(vcBubble);
+      } else {
+        hide(vcBubble);
+      }
       show(urlBar);
     } else {
       hide(urlBar);
