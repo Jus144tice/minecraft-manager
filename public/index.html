@@ -198,6 +198,7 @@
           <div class="stat-card">
             <div class="stat-label">Installed Mods</div>
             <div class="stat-value" id="stat-mod-count">-</div>
+            <div class="stat-detail" id="stat-mod-detail"></div>
           </div>
         </div>
 
@@ -747,10 +748,11 @@
               <option value="size-asc">Smallest first</option>
               <option value="enabled">Enabled first</option>
             </select>
-            <label class="toggle-label">
-              <input type="checkbox" id="mod-show-disabled" checked />
-              Show disabled
-            </label>
+            <select id="mod-status-filter">
+              <option value="all">All mods</option>
+              <option value="enabled">Enabled only</option>
+              <option value="disabled">Disabled only</option>
+            </select>
           </div>
           <div id="mods-list" class="mods-list">
             <p class="dim">Loading...</p>

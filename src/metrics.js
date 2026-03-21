@@ -95,17 +95,24 @@ async function getModCount(serverPath, modsFolder = 'mods', disabledFolder = 'mo
   if (Date.now() - modCountCache.timestamp < MOD_COUNT_CACHE_TTL) return modCountCache.count;
 
   try {
-    let count = 0;
-    for (const folder of [modsFolder, disabledFolder]) {
+    let enabled = 0;
+    let disabled = 0;
+    for (const [folder, isEnabled] of [
+      [modsFolder, true],
+      [disabledFolder, false],
+    ]) {
       try {
         const entries = await readdir(path.join(serverPath, folder));
-        count += entries.filter((f) => f.endsWith('.jar')).length;
+        const count = entries.filter((f) => f.endsWith('.jar')).length;
+        if (isEnabled) enabled = count;
+        else disabled = count;
       } catch {
         /* folder may not exist */
       }
     }
-    modCountCache = { count, timestamp: Date.now() };
-    return count;
+    const result = { total: enabled + disabled, enabled, disabled };
+    modCountCache = { count: result, timestamp: Date.now() };
+    return result;
   } catch {
     return modCountCache.count; // return stale on error
   }
@@ -280,7 +287,7 @@ export function collectDemoMetrics() {
     cpuPercent: Math.round((12 + Math.sin(t / 30000) * 8) * 10) / 10,
     memBytes: 2_147_483_648 + Math.floor(Math.sin(t / 45000) * 200_000_000), // ~2 GB
     diskBytes: 1_610_612_736, // ~1.5 GB
-    modCount: 22,
+    modCount: { total: 22, enabled: 20, disabled: 2 },
     onlineCount: 3,
     players: ['Steve', 'Alex', 'CreeperSlayer99'],
     lagSpike: false,

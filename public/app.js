@@ -880,8 +880,16 @@ function updateDashboard(s) {
 
   // Mod count
   if (s.modCount != null) {
-    $('stat-mod-count').textContent = String(s.modCount);
-    $('stat-mod-count').className = 'stat-value';
+    const mc = s.modCount;
+    if (typeof mc === 'object') {
+      $('stat-mod-count').textContent = String(mc.total);
+      $('stat-mod-detail').textContent = `${mc.enabled} enabled · ${mc.disabled} disabled`;
+      $('stat-mod-count').className = 'stat-value';
+    } else {
+      $('stat-mod-count').textContent = String(mc);
+      $('stat-mod-detail').textContent = '';
+      $('stat-mod-count').className = 'stat-value';
+    }
   }
 
   // Quick Broadcast: enable only when RCON is connected
@@ -1223,11 +1231,12 @@ async function enrichInstalledMods() {
 function renderMods() {
   const filterText = $('mod-filter').value.toLowerCase();
   const sideFilter = $('mod-side-filter').value;
-  const showDisabled = $('mod-show-disabled').checked;
+  const statusFilter = $('mod-status-filter').value;
   const sortOrder = $('mod-sort').value;
 
   let mods = allMods.filter((m) => {
-    if (!showDisabled && !m.enabled) return false;
+    if (statusFilter === 'enabled' && !m.enabled) return false;
+    if (statusFilter === 'disabled' && m.enabled) return false;
     if (filterText) {
       const md = currentModData[m.filename]?.modrinth;
       const title = (md?.projectTitle || m.filename).toLowerCase();
@@ -1369,7 +1378,7 @@ $('mod-sort').addEventListener('change', () => {
   modsPage = 0;
   renderMods();
 });
-$('mod-show-disabled').addEventListener('change', () => {
+$('mod-status-filter').addEventListener('change', () => {
   modsPage = 0;
   renderMods();
 });

@@ -280,6 +280,11 @@ html {
   font-size: 1.3rem;
   font-weight: 700;
 }
+.stat-detail {
+  font-size: 0.75rem;
+  color: var(--text-dim);
+  margin-top: 0.15rem;
+}
 
 /* --- Crash alert --- */
 .crash-alert {
