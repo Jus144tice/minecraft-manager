@@ -405,6 +405,21 @@ async function refreshSession() {
 // Demo banner dismiss
 $('demo-banner-close').addEventListener('click', () => hide('demo-banner'));
 
+// Server address bar — renders independently of status updates so it appears immediately
+function updateServerAddressBar() {
+  const urlBar = $('server-url-bar');
+  if (!urlBar || !window._serverAddress) return;
+  $('server-url-text').textContent = window._serverAddress;
+  const vcBubble = $('voice-chat-bubble');
+  if (window._voiceChatPort) {
+    $('voice-chat-text').textContent = `${window._serverAddress.replace(/:.*$/, '')}:${window._voiceChatPort} UDP`;
+    show(vcBubble);
+  } else {
+    hide(vcBubble);
+  }
+  show(urlBar);
+}
+
 // Server URL copy button
 $('btn-copy-server-url').addEventListener('click', () => {
   const addr = window._serverAddress;
@@ -532,12 +547,16 @@ async function initApp() {
     } else {
       window._demoMode = false;
     }
-    // Server address for the copy widget
+    // Server address for the copy widget — render immediately
     window._serverAddress = cfg.serverAddress || '';
+    updateServerAddressBar();
     // Load voice chat port for address bar display (non-blocking)
     GET('/settings/voicechat')
       .then((vc) => {
-        if (vc && vc.port) window._voiceChatPort = vc.port;
+        if (vc && vc.port) {
+          window._voiceChatPort = vc.port;
+          updateServerAddressBar();
+        }
       })
       .catch(() => {});
   } catch {
@@ -916,23 +935,7 @@ function updateDashboard(s) {
   // Clear crash alert once the server is back up
   if (s.running) hide('crash-alert');
 
-  // Server address bar — show when running and serverAddress is configured
-  const urlBar = $('server-url-bar');
-  if (urlBar && window._serverAddress) {
-    if (s.running) {
-      $('server-url-text').textContent = window._serverAddress;
-      const vcBubble = $('voice-chat-bubble');
-      if (window._voiceChatPort) {
-        $('voice-chat-text').textContent = `${window._serverAddress.replace(/:.*$/, '')}:${window._voiceChatPort} UDP`;
-        show(vcBubble);
-      } else {
-        hide(vcBubble);
-      }
-      show(urlBar);
-    } else {
-      hide(urlBar);
-    }
-  }
+  updateServerAddressBar();
 
   // Online players — auto-update from WebSocket data
   if (s.running && s.players) {
