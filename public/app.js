@@ -1260,6 +1260,7 @@ function renderMods() {
   const filterText = $('mod-filter').value.toLowerCase();
   const sideFilter = $('mod-side-filter').value;
   const statusFilter = $('mod-status-filter').value;
+  const startupFilter = $('mod-startup-filter').value;
   const sortOrder = $('mod-sort').value;
 
   let mods = allMods.filter((m) => {
@@ -1277,6 +1278,14 @@ function renderMods() {
       if (sideFilter === 'both' && cls !== 'side-both') return false;
       if (sideFilter === 'server' && cls !== 'side-server') return false;
       if (sideFilter === 'client' && cls !== 'side-client') return false;
+    }
+    if (startupFilter !== 'all') {
+      const ss = modStartupStatuses[m.filename]?.status || '';
+      if (startupFilter === 'issues') {
+        if (!ss || ss === 'loaded') return false;
+      } else if (ss !== startupFilter) {
+        return false;
+      }
     }
     return true;
   });
@@ -1408,6 +1417,10 @@ $('mod-sort').addEventListener('change', () => {
   renderMods();
 });
 $('mod-status-filter').addEventListener('change', () => {
+  modsPage = 0;
+  renderMods();
+});
+$('mod-startup-filter').addEventListener('change', () => {
   modsPage = 0;
   renderMods();
 });
