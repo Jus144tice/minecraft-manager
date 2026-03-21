@@ -90,18 +90,24 @@ function getProcessMemory(pid) {
 let modCountCache = { count: null, timestamp: 0 };
 const MOD_COUNT_CACHE_TTL = 30_000; // refresh every 30 seconds
 
-async function getModCount(serverPath, modsFolder = 'mods') {
+async function getModCount(serverPath, modsFolder = 'mods', disabledFolder = 'mods_disabled') {
   if (!serverPath) return null;
   if (Date.now() - modCountCache.timestamp < MOD_COUNT_CACHE_TTL) return modCountCache.count;
 
   try {
-    const modsPath = path.join(serverPath, modsFolder);
-    const entries = await readdir(modsPath);
-    const count = entries.filter((f) => f.endsWith('.jar')).length;
+    let count = 0;
+    for (const folder of [modsFolder, disabledFolder]) {
+      try {
+        const entries = await readdir(path.join(serverPath, folder));
+        count += entries.filter((f) => f.endsWith('.jar')).length;
+      } catch {
+        /* folder may not exist */
+      }
+    }
     modCountCache = { count, timestamp: Date.now() };
     return count;
   } catch {
-    return modCountCache.count; // return stale on error (folder may not exist)
+    return modCountCache.count; // return stale on error
   }
 }
 
@@ -205,7 +211,7 @@ export async function collectMetrics({ mc, rconCmd, rconConnected, config }) {
   };
 
   // Mod count is useful even when server is stopped
-  metrics.modCount = await getModCount(config.serverPath, config.modsFolder);
+  metrics.modCount = await getModCount(config.serverPath, config.modsFolder, config.disabledModsFolder);
 
   if (!mc.running) return metrics;
 
