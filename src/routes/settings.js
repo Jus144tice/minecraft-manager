@@ -139,8 +139,8 @@ export default function settingsRoutes(ctx) {
         max_force_loaded_chunks: '25',
         hard_team_claim_limit: '0',
         hard_team_force_limit: '0',
-        party_limit_mode: 'LARGEST',
-        _path: 'world/serverconfig/ftbchunks-server.snbt',
+        party_limit_mode: 'largest',
+        _path: 'world/serverconfig/ftbchunks-world.snbt',
         ftbRanksInstalled: false,
       });
     }

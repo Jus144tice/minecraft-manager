@@ -2682,7 +2682,7 @@ async function loadFtbChunks() {
     $('ftbc-max-forceloaded').value = config.max_force_loaded_chunks || '25';
     $('ftbc-hard-team-claim').value = config.hard_team_claim_limit || '0';
     $('ftbc-hard-team-force').value = config.hard_team_force_limit || '0';
-    $('ftbc-party-limit-mode').value = config.party_limit_mode || 'LARGEST';
+    $('ftbc-party-limit-mode').value = config.party_limit_mode || 'largest';
     $('ftbchunks-path').textContent = `Config file: ${config._path || 'world/serverconfig/ftbchunks-server.snbt'}`;
     // FTB Ranks warning
     if (config.ftbRanksInstalled) {

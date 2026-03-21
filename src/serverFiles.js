@@ -178,7 +178,7 @@ export async function setVoicechatProperties(serverPath, props) {
 
 // --- FTB Chunks config (SNBT format in world/serverconfig/) ---
 
-const FTBCHUNKS_CONFIG = path.join('world', 'serverconfig', 'ftbchunks-server.snbt');
+const FTBCHUNKS_CONFIG = path.join('world', 'serverconfig', 'ftbchunks-world.snbt');
 const FTBRANKS_JAR_PATTERN = /^ftb-?ranks/i;
 
 // FTB Chunks SNBT keys we care about
