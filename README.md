@@ -270,7 +270,7 @@ Access is controlled by five roles, each adding capabilities on top of the previ
 | **Operator**  | 1     | + start/stop/restart server, create backups, broadcast messages                       |
 | **Moderator** | 2     | + send console commands, manage whitelist and bans                                    |
 | **Admin**     | 3     | + configure panel/server, manage mods and files, restore backups, view identity links |
-| **Owner**     | 4     | + manage users and roles, regenerate worlds, delete backups                           |
+| **Owner**     | 4     | + manage users and roles, regenerate worlds, delete backups, manage environments      |
 
 **Automatic role assignment:**
 
@@ -501,7 +501,7 @@ Every user has one of five roles (cumulative — each role includes all capabili
 | **Operator**  | + start/stop/restart server, create backups, broadcast messages                       |
 | **Moderator** | + send console commands, manage whitelist and bans                                    |
 | **Admin**     | + configure panel/server, manage mods and files, restore backups, view identity links |
-| **Owner**     | + manage users and roles, regenerate worlds, delete backups                           |
+| **Owner**     | + manage users and roles, regenerate worlds, delete backups, manage environments      |
 
 **How roles are assigned:**
 
