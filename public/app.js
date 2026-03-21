@@ -524,9 +524,11 @@ async function initApp() {
     // Server address for the copy widget
     window._serverAddress = cfg.serverAddress || '';
     // Load voice chat port for address bar display (non-blocking)
-    GET('/settings/voicechat').then((vc) => {
-      if (vc && vc.port) window._voiceChatPort = vc.port;
-    }).catch(() => {});
+    GET('/settings/voicechat')
+      .then((vc) => {
+        if (vc && vc.port) window._voiceChatPort = vc.port;
+      })
+      .catch(() => {});
   } catch {
     /* ignore */
   }
@@ -2465,7 +2467,9 @@ async function loadVoicechat() {
     $('vc-force-voice-chat').checked = props.force_voice_chat === 'true';
     const form = $('voicechat-form');
     if (form) {
-      Array.from(form.elements).forEach((el) => { el.disabled = !can('panel.configure'); });
+      Array.from(form.elements).forEach((el) => {
+        el.disabled = !can('panel.configure');
+      });
       const submit = form.querySelector('[type=submit]');
       if (submit) submit.classList.toggle('hidden', !can('panel.configure'));
     }

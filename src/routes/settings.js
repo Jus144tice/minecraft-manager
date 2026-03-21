@@ -100,7 +100,14 @@ export default function settingsRoutes(ctx) {
 
   router.get('/settings/voicechat', async (req, res) => {
     if (ctx.config.demoMode) {
-      return res.json({ port: '24454', max_voice_distance: '48.0', whisper_distance: '24.0', enable_groups: 'true', allow_recording: 'true', force_voice_chat: 'false' });
+      return res.json({
+        port: '24454',
+        max_voice_distance: '48.0',
+        whisper_distance: '24.0',
+        enable_groups: 'true',
+        allow_recording: 'true',
+        force_voice_chat: 'false',
+      });
     }
     try {
       const env = getSelectedConfig(ctx, req);
