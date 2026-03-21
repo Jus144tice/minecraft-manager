@@ -61,12 +61,16 @@ export default function modRoutes(ctx) {
         }
       }
 
-      // Merge cached + fresh
+      // Merge cached + fresh, and ensure icons are cached
       const result = {};
       for (const [filename, { hash, enabled }] of Object.entries(hashMap)) {
         const cachedEntry = cached.get(hash);
         const modrinth = cachedEntry?.found ? cachedEntry.metadata : freshData[hash] || null;
         result[filename] = { hash, enabled, modrinth };
+        // Ensure icon is cached for cache hits that may be missing the icon file
+        if (cachedEntry?.found && modrinth?.iconUrl && !ModCache.getIconPath(hash)) {
+          ModCache.cacheIcon(hash, modrinth.iconUrl).catch(() => {});
+        }
       }
       res.json(result);
     } catch (err) {
