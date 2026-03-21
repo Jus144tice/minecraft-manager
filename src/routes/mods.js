@@ -1,10 +1,11 @@
-// Installed mod routes: list, Modrinth lookup (bulk SHA1), toggle, delete.
+// Installed mod routes: list, Modrinth lookup (bulk SHA1), toggle, delete, cache management.
 // Mutating endpoints (toggle, delete) require admin access.
 
 import { Router } from 'express';
 import * as SF from '../serverFiles.js';
 import * as Modrinth from '../modrinth.js';
 import * as Demo from '../demoData.js';
+import * as ModCache from '../modCache.js';
 import { audit } from '../audit.js';
 import { isSafeModFilename } from '../validate.js';
 import { requireCapability } from '../middleware.js';
@@ -35,16 +36,50 @@ export default function modRoutes(ctx) {
     try {
       const env = getSelectedConfig(ctx, req);
       const hashMap = await SF.hashMods(env.serverPath, env.modsFolder, env.disabledModsFolder);
-      const hashes = Object.values(hashMap).map((v) => v.hash);
-      const modrinthData = await Modrinth.lookupByHashes(hashes);
+      const allHashes = Object.values(hashMap).map((v) => v.hash);
+
+      // Check cache first
+      const cached = await ModCache.getCachedBatch(allHashes);
+      const missHashes = allHashes.filter((h) => !cached.has(h));
+
+      // Fetch only cache misses from Modrinth
+      let freshData = {};
+      if (missHashes.length > 0) {
+        freshData = await Modrinth.lookupByHashes(missHashes);
+        // Store results + negatives in cache
+        const entries = missHashes.map((h) => ({
+          sha1: h,
+          found: !!freshData[h],
+          metadata: freshData[h] || null,
+        }));
+        await ModCache.setCachedBatch(entries);
+        // Cache icons (fire-and-forget)
+        for (const entry of entries) {
+          if (entry.metadata?.iconUrl) {
+            ModCache.cacheIcon(entry.sha1, entry.metadata.iconUrl).catch(() => {});
+          }
+        }
+      }
+
+      // Merge cached + fresh
       const result = {};
       for (const [filename, { hash, enabled }] of Object.entries(hashMap)) {
-        result[filename] = { hash, enabled, modrinth: modrinthData[hash] || null };
+        const cachedEntry = cached.get(hash);
+        const modrinth = cachedEntry?.found ? cachedEntry.metadata : freshData[hash] || null;
+        result[filename] = { hash, enabled, modrinth };
       }
       res.json(result);
     } catch (err) {
       res.status(500).json({ error: err.message });
     }
+  });
+
+  // Cache invalidation
+  router.post('/mods/cache/invalidate', requireCapability('server.manage_mods'), async (req, res) => {
+    if (ctx.config.demoMode) return res.json({ ok: true });
+    await ModCache.invalidateAll();
+    audit('MOD_CACHE_INVALIDATE', { user: req.session?.user?.email, ip: req.ip });
+    res.json({ ok: true });
   });
 
   router.post('/mods/toggle', requireCapability('server.manage_mods'), async (req, res) => {

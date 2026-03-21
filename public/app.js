@@ -1270,8 +1270,11 @@ function renderMods() {
       const follows = md?.follows != null ? Number(md.follows).toLocaleString() : '';
       const cats = (md?.categories || []).filter((c) => c !== 'forge').slice(0, 3);
 
+      const hash = currentModData[mod.filename]?.hash;
+      const iconSrc = hash ? `/api/mod-icon/${hash}` : md?.iconUrl;
+
       return `<div class="mod-card ${mod.enabled ? '' : 'mod-disabled'}">
-      ${md?.iconUrl ? `<img class="mod-icon" src="${esc(md.iconUrl)}" alt="" loading="lazy" />` : '<div class="mod-icon-placeholder"></div>'}
+      ${iconSrc ? `<img class="mod-icon" src="${esc(iconSrc)}" alt="" loading="lazy" onerror="this.replaceWith(Object.assign(document.createElement('div'),{className:'mod-icon-placeholder'}))" />` : '<div class="mod-icon-placeholder"></div>'}
       <div class="mod-info">
         <div class="mod-title">
           ${
@@ -1350,6 +1353,19 @@ $('mod-show-disabled').addEventListener('change', () => {
   renderMods();
 });
 $('btn-refresh-mods').addEventListener('click', loadMods);
+$('btn-refresh-metadata').addEventListener('click', async () => {
+  const btn = $('btn-refresh-metadata');
+  btn.disabled = true;
+  btn.textContent = 'Re-identifying...';
+  try {
+    await POST('/mods/cache/invalidate');
+    currentModData = {};
+    await loadMods();
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Re-identify Mods';
+  }
+});
 
 // --- Browse Modrinth ---
 let browseLoaded = false;

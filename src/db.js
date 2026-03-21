@@ -59,6 +59,13 @@ CREATE TABLE IF NOT EXISTS panel_links (
   linked_at       TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 CREATE INDEX IF NOT EXISTS idx_panel_links_mc_name ON panel_links (minecraft_name);
+
+CREATE TABLE IF NOT EXISTS mod_cache (
+  sha1       TEXT NOT NULL PRIMARY KEY,
+  found      BOOLEAN NOT NULL,
+  metadata   JSONB,
+  cached_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
 `;
 
 // ---- Lifecycle ----
@@ -320,6 +327,61 @@ export async function deletePanelLink(email) {
   if (!pool) return false;
   const { rowCount } = await pool.query('DELETE FROM panel_links WHERE user_email = $1', [email]);
   return rowCount > 0;
+}
+
+// ---- Mod Cache ----
+
+/** Batch-lookup cached mod metadata by SHA1 hashes. Returns rows for hashes that exist in cache. */
+export async function getModCacheBatch(hashes) {
+  if (!pool || hashes.length === 0) return [];
+  const { rows } = await pool.query('SELECT sha1, found, metadata, cached_at FROM mod_cache WHERE sha1 = ANY($1)', [
+    hashes,
+  ]);
+  return rows;
+}
+
+/** Upsert a single mod cache entry. */
+export async function upsertModCache(sha1, found, metadata) {
+  if (!pool) return;
+  await pool.query(
+    `INSERT INTO mod_cache (sha1, found, metadata, cached_at) VALUES ($1, $2, $3, NOW())
+     ON CONFLICT (sha1) DO UPDATE SET found = $2, metadata = $3, cached_at = NOW()`,
+    [sha1, found, metadata ? JSON.stringify(metadata) : null],
+  );
+}
+
+/** Upsert multiple mod cache entries in a single transaction. */
+export async function upsertModCacheBatch(entries) {
+  if (!pool || entries.length === 0) return;
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    for (const { sha1, found, metadata } of entries) {
+      await client.query(
+        `INSERT INTO mod_cache (sha1, found, metadata, cached_at) VALUES ($1, $2, $3, NOW())
+         ON CONFLICT (sha1) DO UPDATE SET found = $2, metadata = $3, cached_at = NOW()`,
+        [sha1, found, metadata ? JSON.stringify(metadata) : null],
+      );
+    }
+    await client.query('COMMIT');
+  } catch (err) {
+    await client.query('ROLLBACK');
+    throw err;
+  } finally {
+    client.release();
+  }
+}
+
+/** Delete a single mod cache entry. */
+export async function deleteModCache(sha1) {
+  if (!pool) return;
+  await pool.query('DELETE FROM mod_cache WHERE sha1 = $1', [sha1]);
+}
+
+/** Clear all mod cache entries. */
+export async function clearModCache() {
+  if (!pool) return;
+  await pool.query('DELETE FROM mod_cache');
 }
 
 export async function shutdownDatabase() {

@@ -6,6 +6,7 @@ import { Router } from 'express';
 import * as SF from '../serverFiles.js';
 import * as Modrinth from '../modrinth.js';
 import * as Demo from '../demoData.js';
+import * as ModCache from '../modCache.js';
 import { audit } from '../audit.js';
 import { isSafeModFilename } from '../validate.js';
 import { marked } from 'marked';
@@ -192,6 +193,17 @@ export default function modrinthRoutes(ctx) {
       if (!isSafeModFilename(name)) throw new Error(`Unsafe filename from Modrinth: ${name}`);
       const { buffer } = await Modrinth.downloadModFile(file.url, name, file.hashes?.sha1);
       await SF.saveMod(ctx.config.serverPath, name, buffer, ctx.config.modsFolder);
+      // Pre-populate mod cache with downloaded file's hash
+      if (file.hashes?.sha1) {
+        const metadata = {
+          projectId: version.project_id,
+          versionId: version.id,
+          versionNumber: version.version_number,
+          gameVersions: version.game_versions,
+          loaders: version.loaders,
+        };
+        ModCache.setCachedBatch([{ sha1: file.hashes.sha1, found: true, metadata }]).catch(() => {});
+      }
       audit('MOD_INSTALL', { user: req.session.user.email, filename: name, versionId, ip: req.ip });
       res.json({ ok: true, filename: name, size: buffer.length });
     } catch (err) {

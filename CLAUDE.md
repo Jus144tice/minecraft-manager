@@ -104,6 +104,7 @@ In `server.js`, routes are mounted in two groups. **Do not move routes between g
 | `pathUtils.js`        | Path traversal prevention                           | `safeJoin()`                                                                                                                                                                                                                                                                                         |
 | `serverFiles.js`      | CRUD for MC server JSON files & mods                | `getOps()`, `getWhitelist()`, `getServerProperties()`, `listMods()`, `hashMods()`, `saveMod()`                                                                                                                                                                                                       |
 | `modrinth.js`         | Modrinth API v2 wrapper                             | `searchMods()`, `lookupByHashes()`, `downloadModFile()`, `getVersion()`, `getVersionsBatch()`                                                                                                                                                                                                        |
+| `modCache.js`         | Mod metadata cache (DB + in-memory + icon files)    | `initIconCache()`, `getCachedBatch()`, `setCachedBatch()`, `invalidateHash()`, `invalidateAll()`, `cacheIcon()`, `getIconPath()`                                                                                                                                                                     |
 | `mrpack.js`           | .mrpack ZIP parsing & building                      | `parseMrpack()`, `buildMrpack()`, `analyzeForServer()`, `classifyEntry()`, `extractOverrides()`                                                                                                                                                                                                      |
 | `panelLinks.js`       | Panel user ↔ MC player linking                      | `setLink()`, `getLink()`, `removeLink()`, `getLinkByMinecraftName()`                                                                                                                                                                                                                                 |
 | `demoData.js`         | Seed data for demo mode                             | `DEMO_ONLINE_PLAYERS`, `DEMO_MODS`, `DEMO_OPS`, `DEMO_ENVIRONMENTS`, `enrichDemoIcons()`                                                                                                                                                                                                             |
@@ -117,7 +118,7 @@ All export `(ctx) => router`. Mounted under `/api/` in server.js unless noted.
 | `status.js`       | `GET /status`                                                                                                                                                                                                       |
 | `server.js`       | `POST /server/{start,stop,kill,restart,command,stdin,regenerate-world}`                                                                                                                                             |
 | `players.js`      | `GET /players/{online,all,ops,whitelist,banned}`, `GET /players/profile/:name`, `POST /players/{op,whitelist,ban,kick,say}`, `DELETE /players/{op,whitelist,ban}/:name`, `GET/POST/DELETE /players/discord-link(s)` |
-| `mods.js`         | `GET /mods`, `GET /mods/lookup`, `POST /mods/toggle`, `DELETE /mods/:filename`                                                                                                                                      |
+| `mods.js`         | `GET /mods`, `GET /mods/lookup`, `POST /mods/toggle`, `DELETE /mods/:filename`, `POST /mods/cache/invalidate`                                                                                                       |
 | `modrinth.js`     | `GET /modrinth/{browse,search,project/:id,versions/:id,versions/batch}`, `POST /modrinth/download`. Browse/search support `excludeSlugs` for server-side installed-mod filtering with guaranteed page sizes.        |
 | `modpack.js`      | `GET /modpack/export`, `POST /modpack/{analyze,import}`, `POST /modpack/mrpack/{analyze,import}`, `GET /modpack/mrpack/export`                                                                                      |
 | `backups.js`      | `GET /backups`, `POST /backups`, `POST /backups/{restore,validate}`, `DELETE /backups/:filename`, `GET /backups/{schedule,lock}`, `GET /operations`                                                                 |
@@ -179,6 +180,7 @@ All export `(ctx) => router`. Mounted under `/api/` in server.js unless noted.
 | `identity.test.js`          | Identity/linking routes, challenge flow                                        |
 | `environments.test.js`      | Environment migration, resolution, CRUD, validation, slugification             |
 | `environmentRoutes.test.js` | Environment REST API endpoints, permission checks, deploy flow                 |
+| `modCache.test.js`          | Mod metadata cache: positive/negative entries, batch, invalidation, TTL        |
 | `crashDetection.test.js`    | Auto-restart, restart window                                                   |
 | `frontend.test.js`          | HTML/CSS parsing (jsdom)                                                       |
 | `demoIcons.integration.js`  | Modrinth API icon fetch (network-dependent, excluded from `npm test`)          |
@@ -260,6 +262,7 @@ Defined in `db.js` → `SCHEMA_SQL`:
 | `session`       | `sid`        | Express sessions (connect-pg-simple)                      |
 | `discord_links` | `discord_id` | Discord ↔ MC player links                                 |
 | `panel_links`   | `user_email` | Panel ↔ MC player links                                   |
+| `mod_cache`     | `sha1`       | Modrinth metadata cache (found flag, JSONB metadata, TTL) |
 
 ## Identity Linking
 

@@ -27,6 +27,7 @@ import { initDatabase, getUser } from './src/db.js';
 import * as Backup from './src/backup.js';
 import { createServices } from './src/services.js';
 import { collectMetrics, collectDemoMetrics } from './src/metrics.js';
+import { initIconCache, getIconPath } from './src/modCache.js';
 import { initNotifications, onAuditEvent, notifyLagSpike, updateNotificationsConfig } from './src/notify.js';
 import { initDiscord, shutdownDiscord, notifyDiscord } from './src/integrations/discord/index.js';
 
@@ -241,6 +242,9 @@ const ctx = createServices({
 
 if (config.demoMode) ctx.startDemoActivityTimer();
 
+// Init icon cache directory
+await initIconCache();
+
 // ============================================================
 // Middleware stack
 // ============================================================
@@ -250,6 +254,16 @@ app.use(buildHelmet(process.env.APP_URL));
 app.use(sessionMiddleware);
 app.use(express.json({ limit: '64mb' }));
 app.use(express.static(path.join(__dirname, 'public')));
+
+// Mod icon cache — serve locally cached Modrinth icons
+app.get('/api/mod-icon/:sha1', (req, res) => {
+  const iconPath = getIconPath(req.params.sha1);
+  if (iconPath) {
+    res.set('Cache-Control', 'public, max-age=604800');
+    return res.sendFile(iconPath);
+  }
+  res.status(404).json({ error: 'Icon not cached' });
+});
 
 // Ops endpoints — unauthenticated so probes/scrapers work without sessions
 const appStartTime = Date.now();
