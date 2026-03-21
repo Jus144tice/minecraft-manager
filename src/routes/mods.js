@@ -87,6 +87,12 @@ export default function modRoutes(ctx) {
     res.json({ ok: true });
   });
 
+  router.get('/mods/startup-status', (req, res) => {
+    if (ctx.config.demoMode) return res.json(Demo.DEMO_MOD_STARTUP_STATUSES || {});
+    const parser = ctx.modStartupParser;
+    res.json(parser ? parser.getStatuses() : {});
+  });
+
   router.post('/mods/toggle', requireCapability('server.manage_mods'), async (req, res) => {
     const { filename, enable } = req.body;
     if (!filename) return res.status(400).json({ error: 'filename required' });

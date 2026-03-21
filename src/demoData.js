@@ -827,6 +827,38 @@ export const DEMO_ENVIRONMENTS = {
   },
 };
 
+// --- Mod startup statuses (demo) ---
+export const DEMO_MOD_STARTUP_STATUSES = {
+  'jei-1.20.1-forge-15.20.0.106.jar': { status: 'loaded', messages: [] },
+  'create-1.20.1-0.5.1.f.jar': { status: 'loaded', messages: [] },
+  'quark-1.20.1-4.0-460.jar': {
+    status: 'warning',
+    messages: [
+      {
+        level: 'WARN',
+        source: 'quark-zeta',
+        text: "Waiting for server start before accepting filewatcher changes to quark's config",
+        stackTrace: null,
+      },
+    ],
+  },
+  'overweight_farming-1.20.1-1.2.jar': {
+    status: 'error',
+    messages: [
+      {
+        level: 'ERROR',
+        source: 'ne.mi.co.ForgeHooks',
+        text: "Couldn't parse element loot_tables:overweight_farming:blocks/overweight_ginger_block",
+        stackTrace: [
+          "com.google.gson.JsonSyntaxException: Expected name to be an item, was unknown string 'snowyspirit:ginger'",
+          '\tat net.minecraft.util.GsonHelper.m_13866_(GsonHelper.java:145)',
+          '\tat java.util.Optional.orElseThrow(Optional.java:403)',
+        ],
+      },
+    ],
+  },
+};
+
 // --- Panel links (panel user ↔ Minecraft player) ---
 export const DEMO_PANEL_LINKS = [
   {

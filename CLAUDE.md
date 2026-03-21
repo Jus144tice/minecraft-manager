@@ -105,6 +105,7 @@ In `server.js`, routes are mounted in two groups. **Do not move routes between g
 | `serverFiles.js`      | CRUD for MC server JSON files & mods                | `getOps()`, `getWhitelist()`, `getServerProperties()`, `listMods()`, `hashMods()`, `saveMod()`                                                                                                                                                                                                       |
 | `modrinth.js`         | Modrinth API v2 wrapper                             | `searchMods()`, `lookupByHashes()`, `downloadModFile()`, `getVersion()`, `getVersionsBatch()`                                                                                                                                                                                                        |
 | `modCache.js`         | Mod metadata cache (DB + in-memory + icon files)    | `initIconCache()`, `getCachedBatch()`, `setCachedBatch()`, `invalidateHash()`, `invalidateAll()`, `cacheIcon()`, `getIconPath()`                                                                                                                                                                     |
+| `modStartupStatus.js` | Forge log parser for per-mod startup status         | `buildModIdMap()`, `class ModStartupParser` — `reset()`, `parseLine()`, `finalize()`, `getStatuses()`, `getStatusForFile()`                                                                                                                                                                          |
 | `mrpack.js`           | .mrpack ZIP parsing & building                      | `parseMrpack()`, `buildMrpack()`, `analyzeForServer()`, `classifyEntry()`, `extractOverrides()`                                                                                                                                                                                                      |
 | `panelLinks.js`       | Panel user ↔ MC player linking                      | `setLink()`, `getLink()`, `removeLink()`, `getLinkByMinecraftName()`                                                                                                                                                                                                                                 |
 | `demoData.js`         | Seed data for demo mode                             | `DEMO_ONLINE_PLAYERS`, `DEMO_MODS`, `DEMO_OPS`, `DEMO_ENVIRONMENTS`, `enrichDemoIcons()`                                                                                                                                                                                                             |
@@ -118,7 +119,7 @@ All export `(ctx) => router`. Mounted under `/api/` in server.js unless noted.
 | `status.js`       | `GET /status`                                                                                                                                                                                                       |
 | `server.js`       | `POST /server/{start,stop,kill,restart,command,stdin,regenerate-world}`                                                                                                                                             |
 | `players.js`      | `GET /players/{online,all,ops,whitelist,banned}`, `GET /players/profile/:name`, `POST /players/{op,whitelist,ban,kick,say}`, `DELETE /players/{op,whitelist,ban}/:name`, `GET/POST/DELETE /players/discord-link(s)` |
-| `mods.js`         | `GET /mods`, `GET /mods/lookup`, `POST /mods/toggle`, `DELETE /mods/:filename`, `POST /mods/cache/invalidate`                                                                                                       |
+| `mods.js`         | `GET /mods`, `GET /mods/lookup`, `GET /mods/startup-status`, `POST /mods/toggle`, `DELETE /mods/:filename`, `POST /mods/cache/invalidate`                                                                           |
 | `modrinth.js`     | `GET /modrinth/{browse,search,project/:id,versions/:id,versions/batch}`, `POST /modrinth/download`. Browse/search support `excludeSlugs` for server-side installed-mod filtering with guaranteed page sizes.        |
 | `modpack.js`      | `GET /modpack/export`, `POST /modpack/{analyze,import}`, `POST /modpack/mrpack/{analyze,import}`, `GET /modpack/mrpack/export`                                                                                      |
 | `backups.js`      | `GET /backups`, `POST /backups`, `POST /backups/{restore,validate}`, `DELETE /backups/:filename`, `GET /backups/{schedule,lock}`, `GET /operations`                                                                 |
@@ -181,6 +182,7 @@ All export `(ctx) => router`. Mounted under `/api/` in server.js unless noted.
 | `environments.test.js`      | Environment migration, resolution, CRUD, validation, slugification             |
 | `environmentRoutes.test.js` | Environment REST API endpoints, permission checks, deploy flow                 |
 | `modCache.test.js`          | Mod metadata cache: positive/negative entries, batch, invalidation, TTL        |
+| `modStartupStatus.test.js`  | Forge log parsing: INFO/WARN/ERROR tracking, stack traces, finalization        |
 | `crashDetection.test.js`    | Auto-restart, restart window                                                   |
 | `frontend.test.js`          | HTML/CSS parsing (jsdom)                                                       |
 | `demoIcons.integration.js`  | Modrinth API icon fetch (network-dependent, excluded from `npm test`)          |
@@ -209,7 +211,7 @@ All route files export `(ctx) => router`. The `ctx` object (built in `services.j
 
 ### WebSocket Messages
 
-Backend broadcasts these `msg.type` values: `log`, `status`, `crash`, `mrpack-progress`, `mrpack-complete`, `panel-link-verified`, `environment-switched`. Frontend handles them in `connectWs()` in `app.js`.
+Backend broadcasts these `msg.type` values: `log`, `status`, `crash`, `mrpack-progress`, `mrpack-complete`, `panel-link-verified`, `environment-switched`, `mod-status-reset`, `mod-status`, `mod-status-complete`. Frontend handles them in `connectWs()` in `app.js`.
 
 ### Multi-Environment
 

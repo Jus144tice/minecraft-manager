@@ -32,6 +32,12 @@ document.addEventListener('click', async (e) => {
         author: el.dataset.author || '',
       });
       break;
+    case 'mod-startup-detail':
+      openModStartupDetail(el.dataset.filename);
+      break;
+    case 'close-mod-startup-modal':
+      hide('mod-startup-modal');
+      break;
     case 'toggle-mod':
       await toggleMod(el);
       break;
@@ -117,6 +123,7 @@ let browseLoading = false; // true while fetching from API
 const browseCache = new Map(); // pageNumber -> { hits, nextOffset }
 const browseVersionCache = new Map(); // versionId -> { versionNumber, fileSize }
 let modDetailState = null; // { source: 'installed'|'browse', filename?, author? }
+let modStartupStatuses = {}; // { filename: { status, messages[] } }
 let modsPage = 0;
 const MODS_PAGE_SIZE = 10;
 let statusInterval = null; // guard against duplicate setInterval on re-login
@@ -684,6 +691,23 @@ function connectWs() {
         loadStatus();
         loadEnvironments();
       }
+      if (msg.type === 'mod-status-reset') {
+        modStartupStatuses = {};
+        if (activeModsSubtab === 'installed') renderMods();
+      }
+      if (msg.type === 'mod-status' && msg.filename) {
+        if (!modStartupStatuses[msg.filename]) modStartupStatuses[msg.filename] = { status: msg.status, messages: [] };
+        const entry = modStartupStatuses[msg.filename];
+        const pri = { loaded: 0, warning: 1, error: 2, critical: 3 };
+        if (pri[msg.status] >= pri[entry.status]) entry.status = msg.status;
+        if (msg.message) entry.messages.push(msg.message);
+        // Targeted DOM update for the visible card
+        updateModStartupBadge(msg.filename);
+      }
+      if (msg.type === 'mod-status-complete') {
+        modStartupStatuses = msg.statuses || {};
+        if (activeModsSubtab === 'installed') renderMods();
+      }
       if (msg.type === 'panel-link-verified') {
         // Auto-refresh MC link section if the user profile modal is open
         const mcContainer = document.getElementById('user-profile-mc-link');
@@ -1213,6 +1237,10 @@ async function loadMods() {
     if (needsLookup && allMods.length > 0) {
       enrichInstalledMods();
     }
+    // Load startup status (non-blocking)
+    loadModStartupStatuses().then(() => {
+      if (activeModsSubtab === 'installed') renderMods();
+    });
   } catch (err) {
     $('mods-list').innerHTML = `<p class="error-msg">${esc(err.message)}</p>`;
   }
@@ -1315,6 +1343,7 @@ function renderMods() {
           <span class="side-badge ${side.cls}">${side.text}</span>
           ${!mod.enabled ? '<span class="side-badge mod-off-badge">Disabled</span>' : ''}
           ${cats.map((c) => `<span class="cat-badge">${esc(c)}</span>`).join('')}
+          ${renderStartupBadge(mod.filename)}
         </div>
         <div class="mod-desc">${desc ? esc(desc.slice(0, 160)) : '&nbsp;'}</div>
         <div class="mod-meta">
@@ -1661,6 +1690,85 @@ async function enrichBrowseVersions(hits) {
 }
 
 $('btn-mod-detail-back').addEventListener('click', closeModDetail);
+
+// --- Mod Startup Status ---
+
+// Fetch startup status on initial mods load (for clients connecting after startup)
+async function loadModStartupStatuses() {
+  try {
+    modStartupStatuses = await GET('/mods/startup-status');
+  } catch {
+    /* non-fatal */
+  }
+}
+
+function renderStartupBadge(filename) {
+  const s = modStartupStatuses[filename];
+  if (!s) return '';
+  const icons = { loaded: '●', warning: '⚠', error: '✖', critical: '💥' };
+  const labels = { loaded: 'Loaded', warning: 'Warning', error: 'Error', critical: 'Critical' };
+  const icon = icons[s.status] || '';
+  const label = labels[s.status] || s.status;
+  const count = s.messages?.length || 0;
+  const countText = count > 1 ? ` (${count})` : '';
+  if (s.status === 'loaded' && count === 0) {
+    return `<span class="startup-badge startup-loaded" title="Loaded OK">${icon}</span>`;
+  }
+  return `<span class="startup-badge startup-${s.status}" data-action="mod-startup-detail" data-filename="${esc(filename)}" title="Startup: ${label}">${icon} ${label}${countText}</span>`;
+}
+
+function updateModStartupBadge(filename) {
+  // Find the card with this filename and update just the badge (avoid full re-render)
+  const cards = document.querySelectorAll('.mod-card');
+  for (const card of cards) {
+    const toggle = card.querySelector('[data-action="toggle-mod"]');
+    if (toggle && toggle.dataset.filename === filename) {
+      const existing = card.querySelector('.startup-badge');
+      const badge = renderStartupBadge(filename);
+      if (existing) {
+        existing.outerHTML = badge;
+      } else {
+        // Append to the mod-title div
+        const titleDiv = card.querySelector('.mod-title');
+        if (titleDiv) titleDiv.insertAdjacentHTML('beforeend', badge);
+      }
+      break;
+    }
+  }
+}
+
+function openModStartupDetail(filename) {
+  const s = modStartupStatuses[filename];
+  if (!s) return;
+  const md = currentModData[filename]?.modrinth;
+  const title = md?.projectTitle || filename.replace(/\.jar$/i, '');
+  $('mod-startup-modal-title').textContent =
+    `${title} — Startup ${s.status.charAt(0).toUpperCase() + s.status.slice(1)}`;
+
+  let html = '';
+  if (s.messages.length === 0) {
+    html = '<p class="dim">Mod loaded without any messages.</p>';
+  } else {
+    for (const msg of s.messages) {
+      const levelCls = msg.level === 'ERROR' || msg.level === 'FATAL' ? 'startup-level-error' : 'startup-level-warn';
+      html += `<div class="startup-message">
+        <div class="startup-message-header">
+          <span class="startup-level-badge ${levelCls}">${esc(msg.level)}</span>
+          <span class="dim">${esc(msg.source)}</span>
+        </div>
+        <div class="startup-message-text">${esc(msg.text)}</div>`;
+      if (msg.stackTrace && msg.stackTrace.length > 0) {
+        html += `<details class="startup-stacktrace">
+          <summary>Stack trace (${msg.stackTrace.length} lines)</summary>
+          <pre>${esc(msg.stackTrace.join('\n'))}</pre>
+        </details>`;
+      }
+      html += '</div>';
+    }
+  }
+  $('mod-startup-modal-content').innerHTML = html;
+  show('mod-startup-modal');
+}
 
 function closeModDetail() {
   hide('mod-detail-panel');

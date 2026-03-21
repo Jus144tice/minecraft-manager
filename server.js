@@ -28,6 +28,7 @@ import * as Backup from './src/backup.js';
 import { createServices } from './src/services.js';
 import { collectMetrics, collectDemoMetrics } from './src/metrics.js';
 import { initIconCache, getIconPath } from './src/modCache.js';
+import { ModStartupParser, buildModIdMap } from './src/modStartupStatus.js';
 import { initNotifications, onAuditEvent, notifyLagSpike, updateNotificationsConfig } from './src/notify.js';
 import { initDiscord, shutdownDiscord, notifyDiscord } from './src/integrations/discord/index.js';
 
@@ -422,10 +423,38 @@ wss.on('connection', (ws, req) => {
   });
 });
 
+// Mod startup status parser — tracks per-mod loading events
+const modStartupParser = new ModStartupParser();
+ctx.modStartupParser = modStartupParser;
+
 mc.on('log', (entry) => {
   if (config.demoMode) return;
   const msg = JSON.stringify({ type: 'log', ...entry });
   for (const ws of wsClients) if (ws.readyState === 1) ws.send(msg);
+
+  // Detect server start and reset mod status parser
+  if (entry.line === '[Manager] Server process starting...') {
+    modStartupParser.reset();
+    const resetMsg = JSON.stringify({ type: 'mod-status-reset' });
+    for (const ws of wsClients) if (ws.readyState === 1) ws.send(resetMsg);
+    // Build mod ID map in background (don't block log streaming)
+    buildModIdMap(config.serverPath, config.modsFolder)
+      .then((map) => modStartupParser.setModIdMap(map))
+      .catch(() => {});
+  }
+
+  // Feed log line to mod startup parser
+  const change = modStartupParser.parseLine(entry.line);
+  if (change) {
+    if (change.type === 'status') {
+      const statusMsg = JSON.stringify({ type: 'mod-status', ...change });
+      for (const ws of wsClients) if (ws.readyState === 1) ws.send(statusMsg);
+    } else if (change.type === 'complete') {
+      modStartupParser.finalize();
+      const completeMsg = JSON.stringify({ type: 'mod-status-complete', statuses: modStartupParser.getStatuses() });
+      for (const ws of wsClients) if (ws.readyState === 1) ws.send(completeMsg);
+    }
+  }
 });
 
 const metricsInterval = setInterval(broadcastMetrics, 10000);

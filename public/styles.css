@@ -1353,6 +1353,105 @@ textarea:focus {
   text-transform: capitalize;
 }
 
+/* Mod startup status badges */
+.startup-badge {
+  font-size: 0.68rem;
+  padding: 0.1rem 0.45rem;
+  border-radius: 20px;
+  cursor: pointer;
+  font-weight: 600;
+  white-space: nowrap;
+}
+.startup-badge:hover {
+  filter: brightness(1.2);
+}
+.startup-loaded {
+  background: #1a3a1a;
+  color: #4ade80;
+  border: 1px solid #2d5a2d;
+}
+.startup-warning {
+  background: #3a2e0a;
+  color: #fbbf24;
+  border: 1px solid #5a4a1a;
+}
+.startup-error {
+  background: #3a1a1a;
+  color: #f87171;
+  border: 1px solid #5a2d2d;
+}
+.startup-critical {
+  background: #4a0a0a;
+  color: #ff4444;
+  border: 1px solid #7a1a1a;
+  animation: pulse-critical 2s infinite;
+}
+@keyframes pulse-critical {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.7;
+  }
+}
+
+/* Mod startup detail modal */
+.startup-message {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 0.75rem;
+  margin-bottom: 0.5rem;
+}
+.startup-message-header {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 0.25rem;
+}
+.startup-level-badge {
+  font-size: 0.7rem;
+  padding: 0.1rem 0.35rem;
+  border-radius: 4px;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+.startup-level-warn {
+  background: #3a2e0a;
+  color: #fbbf24;
+}
+.startup-level-error {
+  background: #3a1a1a;
+  color: #f87171;
+}
+.startup-message-text {
+  font-size: 0.88rem;
+  color: var(--text);
+  word-break: break-word;
+}
+.startup-stacktrace {
+  margin-top: 0.5rem;
+}
+.startup-stacktrace summary {
+  cursor: pointer;
+  font-size: 0.78rem;
+  color: var(--text-dim);
+}
+.startup-stacktrace pre {
+  margin: 0.25rem 0 0;
+  padding: 0.5rem;
+  background: #0d0d0d;
+  border-radius: 4px;
+  font-size: 0.72rem;
+  color: #ccc;
+  overflow-x: auto;
+  max-height: 200px;
+  overflow-y: auto;
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+
 /* --- Players --- */
 .player-table-wrap {
   overflow-x: auto;
