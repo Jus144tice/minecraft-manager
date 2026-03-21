@@ -130,6 +130,43 @@ export default function settingsRoutes(ctx) {
     }
   });
 
+  // --- FTB Chunks config ---
+
+  router.get('/settings/ftbchunks', async (req, res) => {
+    if (ctx.config.demoMode) {
+      return res.json({
+        max_claimed_chunks: '500',
+        max_force_loaded_chunks: '25',
+        hard_team_claim_limit: '0',
+        hard_team_force_limit: '0',
+        party_limit_mode: 'LARGEST',
+        _path: 'world/serverconfig/ftbchunks-server.snbt',
+        ftbRanksInstalled: false,
+      });
+    }
+    try {
+      const env = getSelectedConfig(ctx, req);
+      const config = await SF.getFtbChunksConfig(env.serverPath);
+      if (!config) return res.json(null); // mod not installed
+      config.ftbRanksInstalled = await SF.isFtbRanksInstalled(env.serverPath, env.modsFolder);
+      res.json(config);
+    } catch (err) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  router.post('/settings/ftbchunks', requireCapability('panel.configure'), async (req, res) => {
+    if (ctx.config.demoMode) return res.json({ ok: true, demo: true });
+    try {
+      const env = getSelectedConfig(ctx, req);
+      await SF.setFtbChunksConfig(env.serverPath, req.body);
+      audit('FTBCHUNKS_CONFIG_SAVE', { user: req.session.user.email, ip: req.ip });
+      res.json({ ok: true });
+    } catch (err) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
   router.get('/config', (req, res) => {
     const { webPassword: _1, rconPassword: _2, ...safe } = ctx.config;
     // Redact Discord bot token — it comes from env vars, but never echo it

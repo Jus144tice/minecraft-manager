@@ -1504,6 +1504,11 @@ textarea:focus {
   margin-bottom: 1rem;
   line-height: 1.7;
 }
+.warning-box {
+  background: #2a2000;
+  border-color: #5a4a1a;
+  color: #e0c060;
+}
 
 .player-chips {
   display: flex;

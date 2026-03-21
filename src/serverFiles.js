@@ -176,6 +176,110 @@ export async function setVoicechatProperties(serverPath, props) {
   await fs.writeFile(filePath, updated.join('\n'), 'utf8');
 }
 
+// --- FTB Chunks config (SNBT format in world/serverconfig/) ---
+
+const FTBCHUNKS_CONFIG = path.join('world', 'serverconfig', 'ftbchunks-server.snbt');
+const FTBRANKS_JAR_PATTERN = /^ftb-?ranks/i;
+
+// FTB Chunks SNBT keys we care about
+const FTBCHUNKS_KEYS = [
+  'max_claimed_chunks',
+  'max_force_loaded_chunks',
+  'hard_team_claim_limit',
+  'hard_team_force_limit',
+  'party_limit_mode',
+];
+
+/**
+ * Parse a simple SNBT config file (key: value pairs, possibly nested).
+ * FTB Chunks uses a flat-ish format with lines like: `max_claimed_chunks: 500`
+ */
+function parseSnbt(text) {
+  const props = {};
+  for (const line of text.split('\n')) {
+    const trimmed = line.trim();
+    if (!trimmed || trimmed.startsWith('//') || trimmed === '{' || trimmed === '}') continue;
+    // Match key: value (SNBT uses colon separator)
+    const match = trimmed.match(/^(\w+)\s*:\s*(.+?)$/);
+    if (match) {
+      let value = match[2].trim();
+      // Remove trailing comma if present
+      if (value.endsWith(',')) value = value.slice(0, -1).trim();
+      // Remove quotes if string
+      if (value.startsWith('"') && value.endsWith('"')) value = value.slice(1, -1);
+      props[match[1]] = value;
+    }
+  }
+  return props;
+}
+
+/**
+ * Update values in an SNBT file, preserving structure and comments.
+ */
+function updateSnbt(text, updates) {
+  const handled = new Set();
+  const lines = text.split('\n');
+  const updated = lines.map((line) => {
+    const trimmed = line.trim();
+    if (!trimmed || trimmed.startsWith('//') || trimmed === '{' || trimmed === '}') return line;
+    const match = trimmed.match(/^(\w+)\s*:\s*(.+?)$/);
+    if (match && match[1] in updates) {
+      const key = match[1];
+      handled.add(key);
+      const indent = line.match(/^(\s*)/)[1];
+      const oldValue = match[2].trim();
+      const hasComma = oldValue.endsWith(',');
+      const newValue = updates[key];
+      // Preserve type formatting: integers stay bare, strings get quotes
+      const formatted = /^\d+$/.test(String(newValue)) ? newValue : `"${newValue}"`;
+      return `${indent}${key}: ${formatted}${hasComma ? ',' : ''}`;
+    }
+    return line;
+  });
+  return updated.join('\n');
+}
+
+export async function getFtbChunksConfig(serverPath) {
+  const filePath = path.join(serverPath, FTBCHUNKS_CONFIG);
+  try {
+    const text = await fs.readFile(filePath, 'utf8');
+    const all = parseSnbt(text);
+    // Return only the keys we care about
+    const result = {};
+    for (const key of FTBCHUNKS_KEYS) {
+      if (key in all) result[key] = all[key];
+    }
+    result._path = FTBCHUNKS_CONFIG;
+    return result;
+  } catch (err) {
+    if (err.code === 'ENOENT') return null; // mod not installed or world not generated
+    return null;
+  }
+}
+
+export async function setFtbChunksConfig(serverPath, props) {
+  const filePath = path.join(serverPath, FTBCHUNKS_CONFIG);
+  const existing = await fs.readFile(filePath, 'utf8');
+
+  // Only allow known keys
+  const updates = {};
+  for (const key of FTBCHUNKS_KEYS) {
+    if (key in props) updates[key] = props[key];
+  }
+
+  const updated = updateSnbt(existing, updates);
+  await fs.writeFile(filePath, updated, 'utf8');
+}
+
+export async function isFtbRanksInstalled(serverPath, modsFolder = 'mods') {
+  try {
+    const entries = await fs.readdir(path.join(serverPath, modsFolder));
+    return entries.some((e) => FTBRANKS_JAR_PATTERN.test(e) && e.endsWith('.jar'));
+  } catch {
+    return false;
+  }
+}
+
 // --- Mods folder ---
 
 export async function listMods(serverPath, modsFolder = 'mods', disabledFolder = 'mods_disabled') {

@@ -2662,6 +2662,62 @@ $('voicechat-form').addEventListener('submit', async (e) => {
   }
 });
 
+// --- Settings: FTB Chunks ---
+
+subtabHandlers['ftbchunks'] = () => loadFtbChunks();
+
+async function loadFtbChunks() {
+  try {
+    const config = await GET('/settings/ftbchunks');
+    const notInstalled = $('ftbchunks-not-installed');
+    const configDiv = $('ftbchunks-config');
+    if (config === null) {
+      notInstalled.classList.remove('hidden');
+      configDiv.classList.add('hidden');
+      return;
+    }
+    notInstalled.classList.add('hidden');
+    configDiv.classList.remove('hidden');
+    $('ftbc-max-claimed').value = config.max_claimed_chunks || '500';
+    $('ftbc-max-forceloaded').value = config.max_force_loaded_chunks || '25';
+    $('ftbc-hard-team-claim').value = config.hard_team_claim_limit || '0';
+    $('ftbc-hard-team-force').value = config.hard_team_force_limit || '0';
+    $('ftbc-party-limit-mode').value = config.party_limit_mode || 'LARGEST';
+    $('ftbchunks-path').textContent = `Config file: ${config._path || 'world/serverconfig/ftbchunks-server.snbt'}`;
+    // FTB Ranks warning
+    if (config.ftbRanksInstalled) {
+      $('ftbchunks-ranks-warning').classList.remove('hidden');
+    } else {
+      $('ftbchunks-ranks-warning').classList.add('hidden');
+    }
+    // Disable fields if user lacks permission
+    const form = $('ftbchunks-form');
+    if (form) {
+      Array.from(form.elements).forEach((el) => {
+        el.disabled = !can('panel.configure');
+      });
+    }
+  } catch (err) {
+    flash('ftbchunks-msg', 'Could not load FTB Chunks config: ' + err.message, true);
+  }
+}
+
+$('ftbchunks-form').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  try {
+    await POST('/settings/ftbchunks', {
+      max_claimed_chunks: $('ftbc-max-claimed').value,
+      max_force_loaded_chunks: $('ftbc-max-forceloaded').value,
+      hard_team_claim_limit: $('ftbc-hard-team-claim').value,
+      hard_team_force_limit: $('ftbc-hard-team-force').value,
+      party_limit_mode: $('ftbc-party-limit-mode').value,
+    });
+    flash('ftbchunks-msg', 'FTB Chunks config saved! Restart the Minecraft server to apply changes.');
+  } catch (err) {
+    flash('ftbchunks-msg', err.message, true);
+  }
+});
+
 // ============================================================
 // Access Control
 // ============================================================
