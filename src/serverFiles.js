@@ -107,6 +107,60 @@ export async function setServerProperties(serverPath, props) {
   await fs.writeFile(filePath, updated.join('\n'), 'utf8');
 }
 
+// --- Simple Voice Chat config ---
+
+const VOICECHAT_CONFIG = path.join('config', 'voicechat', 'voicechat-server.properties');
+
+export async function getVoicechatProperties(serverPath) {
+  const filePath = path.join(serverPath, VOICECHAT_CONFIG);
+  try {
+    const text = await fs.readFile(filePath, 'utf8');
+    const props = {};
+    for (const line of text.split('\n')) {
+      const trimmed = line.trim();
+      if (!trimmed || trimmed.startsWith('#')) continue;
+      const eq = trimmed.indexOf('=');
+      if (eq === -1) continue;
+      props[trimmed.slice(0, eq)] = trimmed.slice(eq + 1);
+    }
+    return props;
+  } catch (err) {
+    if (err.code === 'ENOENT') return null; // mod not installed
+    return {};
+  }
+}
+
+export async function setVoicechatProperties(serverPath, props) {
+  const filePath = path.join(serverPath, VOICECHAT_CONFIG);
+  let existing = '';
+  try {
+    existing = await fs.readFile(filePath, 'utf8');
+  } catch {
+    /* ok */
+  }
+
+  const lines = existing.split('\n');
+  const handled = new Set();
+  const updated = lines.map((line) => {
+    const trimmed = line.trim();
+    if (!trimmed || trimmed.startsWith('#')) return line;
+    const eq = trimmed.indexOf('=');
+    if (eq === -1) return line;
+    const key = trimmed.slice(0, eq);
+    if (key in props) {
+      handled.add(key);
+      return `${key}=${props[key]}`;
+    }
+    return line;
+  });
+
+  for (const [k, v] of Object.entries(props)) {
+    if (!handled.has(k)) updated.push(`${k}=${v}`);
+  }
+
+  await fs.writeFile(filePath, updated.join('\n'), 'utf8');
+}
+
 // --- Mods folder ---
 
 export async function listMods(serverPath, modsFolder = 'mods', disabledFolder = 'mods_disabled') {

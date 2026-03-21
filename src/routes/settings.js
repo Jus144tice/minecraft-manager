@@ -96,6 +96,33 @@ export default function settingsRoutes(ctx) {
     }
   });
 
+  // --- Simple Voice Chat config ---
+
+  router.get('/settings/voicechat', async (req, res) => {
+    if (ctx.config.demoMode) {
+      return res.json({ port: '24454', max_voice_distance: '48.0', whisper_distance: '24.0', enable_groups: 'true', allow_recording: 'true', force_voice_chat: 'false' });
+    }
+    try {
+      const env = getSelectedConfig(ctx, req);
+      const props = await SF.getVoicechatProperties(env.serverPath);
+      res.json(props); // null = mod not installed
+    } catch (err) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  router.post('/settings/voicechat', requireCapability('panel.configure'), async (req, res) => {
+    if (ctx.config.demoMode) return res.json({ ok: true, demo: true });
+    try {
+      const env = getSelectedConfig(ctx, req);
+      await SF.setVoicechatProperties(env.serverPath, req.body);
+      audit('VOICECHAT_PROPS_SAVE', { user: req.session.user.email, ip: req.ip });
+      res.json({ ok: true });
+    } catch (err) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
   router.get('/config', (req, res) => {
     const { webPassword: _1, rconPassword: _2, ...safe } = ctx.config;
     // Redact Discord bot token — it comes from env vars, but never echo it

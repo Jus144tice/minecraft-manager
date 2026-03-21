@@ -462,6 +462,7 @@ function onTabActivate(tab) {
     loadAppConfig();
     loadServerProps();
     loadJvmArgs();
+    loadVoicechat();
   }
 }
 
@@ -479,6 +480,7 @@ const subtabHandlers = {
   bans: () => loadBans(),
   'server-props': () => loadServerProps(),
   'app-cfg': () => loadAppConfig(),
+  voicechat: () => loadVoicechat(),
   installed: () => {
     activeModsSubtab = 'installed';
     renderMods();
@@ -521,6 +523,10 @@ async function initApp() {
     }
     // Server address for the copy widget
     window._serverAddress = cfg.serverAddress || '';
+    // Load voice chat port for address bar display (non-blocking)
+    GET('/settings/voicechat').then((vc) => {
+      if (vc && vc.port) window._voiceChatPort = vc.port;
+    }).catch(() => {});
   } catch {
     /* ignore */
   }
@@ -901,7 +907,8 @@ function updateDashboard(s) {
   const urlBar = $('server-url-bar');
   if (urlBar && window._serverAddress) {
     if (s.running) {
-      $('server-url-text').textContent = window._serverAddress;
+      const vcInfo = window._voiceChatPort ? `  ·  Voice Chat UDP ${window._voiceChatPort}` : '';
+      $('server-url-text').textContent = window._serverAddress + vcInfo;
       show(urlBar);
     } else {
       hide(urlBar);
@@ -2433,6 +2440,54 @@ $('btn-jvm-save-restart').addEventListener('click', async () => {
     flash('jvm-args-msg', 'JVM arguments saved. Server is restarting...');
   } catch (err) {
     flash('jvm-args-msg', err.message, true);
+  }
+});
+
+// --- Settings: Simple Voice Chat ---
+
+async function loadVoicechat() {
+  try {
+    const props = await GET('/settings/voicechat');
+    const notInstalled = $('voicechat-not-installed');
+    const config = $('voicechat-config');
+    if (props === null) {
+      notInstalled.classList.remove('hidden');
+      config.classList.add('hidden');
+      return;
+    }
+    notInstalled.classList.add('hidden');
+    config.classList.remove('hidden');
+    $('vc-port').value = props.port ?? '';
+    $('vc-max-distance').value = props.max_voice_distance ?? '';
+    $('vc-whisper-distance').value = props.whisper_distance ?? '';
+    $('vc-enable-groups').checked = props.enable_groups !== 'false';
+    $('vc-allow-recording').checked = props.allow_recording !== 'false';
+    $('vc-force-voice-chat').checked = props.force_voice_chat === 'true';
+    const form = $('voicechat-form');
+    if (form) {
+      Array.from(form.elements).forEach((el) => { el.disabled = !can('panel.configure'); });
+      const submit = form.querySelector('[type=submit]');
+      if (submit) submit.classList.toggle('hidden', !can('panel.configure'));
+    }
+  } catch (err) {
+    flash('voicechat-msg', 'Could not load voice chat config: ' + err.message, true);
+  }
+}
+
+$('voicechat-form').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  try {
+    await POST('/settings/voicechat', {
+      port: $('vc-port').value,
+      max_voice_distance: $('vc-max-distance').value,
+      whisper_distance: $('vc-whisper-distance').value,
+      enable_groups: String($('vc-enable-groups').checked),
+      allow_recording: String($('vc-allow-recording').checked),
+      force_voice_chat: String($('vc-force-voice-chat').checked),
+    });
+    flash('voicechat-msg', 'Voice chat config saved! Restart the Minecraft server to apply changes.');
+  } catch (err) {
+    flash('voicechat-msg', err.message, true);
   }
 });
 
