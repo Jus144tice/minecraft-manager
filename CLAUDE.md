@@ -1,12 +1,14 @@
 # CLAUDE.md — Minecraft Manager
 
-> **Self-maintenance rule**: When you modify any file in this project, check whether the change affects
-> this document or `README.md`. Update both in the same commit if needed. For CLAUDE.md, keep symbol
-> references and structural landmarks accurate. For README.md, keep feature descriptions and role/auth
-> documentation consistent with the implementation.
+> **Implementation workflow** (follow this order for every feature/fix):
 >
-> **Pre-push rule**: ALWAYS run `npm run lint && npx prettier --check .` before committing. Fix any
-> issues before pushing. CI fails on lint errors and formatting — never push without checking both.
+> 1. **Implement** — write the code (backend, frontend, tests)
+> 2. **Test** — run `npm test` to verify correctness. Fix failures before proceeding
+> 3. **Update docs** — update `CLAUDE.md` and `README.md` in the same commit if the change affects them. Keep symbol references, line landmarks, file maps, and route tables accurate
+> 4. **Lint + format** — run `npm run lint && npx prettier --check .` once at the end. Fix any issues with `npm run lint:fix` and `npx prettier --write .`. Do NOT run formatting checks between intermediate steps — save it for the final pass
+> 5. **Commit + push** — stage, commit, push. CI fails on lint/format errors, so step 4 must pass first
+>
+> This order avoids repeatedly re-checking formatting after each file edit.
 
 ## Source of Truth
 
