@@ -6,7 +6,7 @@ import * as SF from '../serverFiles.js';
 import * as Modrinth from '../modrinth.js';
 import * as Demo from '../demoData.js';
 import * as ModCache from '../modCache.js';
-import { audit } from '../audit.js';
+import { audit, info } from '../audit.js';
 import { isSafeModFilename } from '../validate.js';
 import { requireCapability } from '../middleware.js';
 import { getSelectedConfig } from '../environments.js';
@@ -43,6 +43,7 @@ export default function modRoutes(ctx) {
       const missHashes = allHashes.filter((h) => !cached.has(h));
 
       // Fetch only cache misses from Modrinth
+      info(`Mod lookup: ${allHashes.length} mods, ${cached.size} cache hits, ${missHashes.length} cache misses`);
       let freshData = {};
       if (missHashes.length > 0) {
         freshData = await Modrinth.lookupByHashes(missHashes);

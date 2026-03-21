@@ -9,6 +9,21 @@ import crypto from 'crypto';
 import { createReadStream } from 'fs';
 import { safeJoin } from './pathUtils.js';
 
+// --- SHA1 hash cache (avoids re-hashing unchanged files) ---
+// Key: filePath, Value: { mtimeMs, size, hash }
+const hashCache = new Map();
+
+async function hashFileCached(filePath) {
+  const stat = await fs.stat(filePath);
+  const cached = hashCache.get(filePath);
+  if (cached && cached.mtimeMs === stat.mtimeMs && cached.size === stat.size) {
+    return cached.hash;
+  }
+  const hash = await hashFile(filePath);
+  hashCache.set(filePath, { mtimeMs: stat.mtimeMs, size: stat.size, hash });
+  return hash;
+}
+
 // --- JSON data files ---
 
 async function readJson(filePath, fallback = []) {
@@ -275,7 +290,7 @@ export async function hashMods(serverPath, modsFolder = 'mods', disabledFolder =
       for (const name of entries) {
         if (!name.endsWith('.jar')) continue;
         try {
-          result[name] = { hash: await hashFile(path.join(dir, name)), enabled };
+          result[name] = { hash: await hashFileCached(path.join(dir, name)), enabled };
         } catch {
           /* skip unreadable */
         }
