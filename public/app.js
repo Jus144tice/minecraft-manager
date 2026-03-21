@@ -1724,10 +1724,8 @@ function renderStartupBadge(filename) {
   const label = labels[s.status] || s.status;
   const count = s.messages?.length || 0;
   const countText = count > 1 ? ` (${count})` : '';
-  if (s.status === 'loaded' && count === 0) {
-    return `<span class="startup-badge startup-loaded" title="Loaded OK">${icon}</span>`;
-  }
-  return `<span class="startup-badge startup-${s.status}" data-action="mod-startup-detail" data-filename="${esc(filename)}" title="Startup: ${label}">${icon} ${label}${countText}</span>`;
+  // All badges are clickable — loaded shows INFO messages, others show warnings/errors
+  return `<span class="startup-badge startup-${s.status}" data-action="mod-startup-detail" data-filename="${esc(filename)}" title="Startup: ${label}">${icon}${s.status !== 'loaded' ? ` ${label}${countText}` : ''}</span>`;
 }
 
 function updateModStartupBadge(filename) {
@@ -1760,10 +1758,15 @@ function openModStartupDetail(filename) {
 
   let html = '';
   if (s.messages.length === 0) {
-    html = '<p class="dim">Mod loaded without any messages.</p>';
+    html = '<p class="dim">Mod loaded cleanly — no log output during startup.</p>';
   } else {
     for (const msg of s.messages) {
-      const levelCls = msg.level === 'ERROR' || msg.level === 'FATAL' ? 'startup-level-error' : 'startup-level-warn';
+      const levelCls =
+        msg.level === 'ERROR' || msg.level === 'FATAL'
+          ? 'startup-level-error'
+          : msg.level === 'WARN'
+            ? 'startup-level-warn'
+            : 'startup-level-info';
       html += `<div class="startup-message">
         <div class="startup-message-header">
           <span class="startup-level-badge ${levelCls}">${esc(msg.level)}</span>

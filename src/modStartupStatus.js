@@ -268,13 +268,14 @@ export class ModStartupParser {
     const sourceLower = source.toLowerCase();
     const isSystemSource = SYSTEM_SOURCES.has(source) || SYSTEM_SOURCES.has(sourceLower);
 
-    // For system sources: only process WARN/ERROR by extracting mod refs from the message text
+    // For system sources: only process WARN/ERROR by extracting mod refs from the message text.
+    // System-sourced issues (tag loading, recipe parsing, mixin refs) are always "warning" —
+    // the mod itself loaded, but some of its data/config has problems.
     if (isSystemSource) {
       if (level === 'ERROR' || level === 'FATAL' || level === 'WARN') {
         const modRef = this._extractModRefFromText(text);
         if (modRef) {
-          const status = level === 'ERROR' || level === 'FATAL' ? 'error' : 'warning';
-          return this._addMessage(modRef.filename, modRef.modId, status, level, source, text);
+          return this._addMessage(modRef.filename, modRef.modId, 'warning', level, source, text);
         }
       }
       return null; // system source INFO or no mod ref found
@@ -295,13 +296,20 @@ export class ModStartupParser {
     } else if (level === 'WARN') {
       return this._addMessage(filename, modId, 'warning', level, source, text);
     } else {
-      // INFO — track as loaded (only if no worse status exists)
-      const existing = this.statuses.get(filename);
-      if (!existing) {
-        this.statuses.set(filename, { status: 'loaded', messages: [] });
-        return { type: 'status', filename, modId, status: 'loaded', message: null };
+      // INFO — track as loaded and collect the message for reference
+      let entry = this.statuses.get(filename);
+      if (!entry) {
+        entry = { status: 'loaded', messages: [] };
+        this.statuses.set(filename, entry);
       }
-      return null;
+      entry.messages.push({ level, source, text, stackTrace: null });
+      return {
+        type: 'status',
+        filename,
+        modId,
+        status: entry.status,
+        message: { level, source, text, stackTrace: null },
+      };
     }
   }
 

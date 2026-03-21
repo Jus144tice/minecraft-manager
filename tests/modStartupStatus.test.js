@@ -192,13 +192,13 @@ test('railways direct match works', () => {
   assert.equal(result.filename, 'railways-1.20.1-1.6.13.jar');
 });
 
-test('system-sourced ERROR with namespace ref attributes to correct mod', () => {
+test('system-sourced ERROR with namespace ref is warning (mod loaded, data issue)', () => {
   const result = parser.parseLine(
     "[00:06:39] [Worker-Main-1/ERROR] [minecraft/TagLoader]: Couldn't load tag create:crushed_ores",
   );
   assert.ok(result);
   assert.equal(result.filename, 'create-1.20.1-0.5.1.f.jar');
-  assert.equal(result.status, 'error');
+  assert.equal(result.status, 'warning'); // system-sourced = warning, not error
 });
 
 test('system-sourced WARN with mixin ref attributes to correct mod', () => {

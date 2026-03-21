@@ -1417,6 +1417,10 @@ textarea:focus {
   font-weight: 700;
   text-transform: uppercase;
 }
+.startup-level-info {
+  background: #0a2a3a;
+  color: #60a5fa;
+}
 .startup-level-warn {
   background: #3a2e0a;
   color: #fbbf24;
