@@ -1500,7 +1500,7 @@ $('browse-show-installed').addEventListener('change', () => {
 function updateBrowsePagination() {
   const totalPages = Math.max(1, Math.ceil(browseFilteredTotal / BROWSE_PAGE_SIZE));
   const page = browsePage + 1;
-  browsePager.update(page, totalPages, browseFilteredTotal, 'mods', { hasMore: !browseExhausted });
+  browsePager.update(page, totalPages, browseFilteredTotal, 'mods');
 }
 
 // Returns a Set of Modrinth project slugs for all currently-installed mods.
