@@ -56,14 +56,6 @@ export default function playerRoutes(ctx) {
           p.lastAction = ls ? ls.action : null;
           p.firstSeen = fs ? fs.timestamp : null;
         }
-      } else {
-        // Estimate last seen from usercache expiresOn (last join + 30 days)
-        for (const p of usercache) {
-          if (p.expiresOn) {
-            const expiry = new Date(p.expiresOn);
-            p.lastSeen = new Date(expiry.getTime() - 30 * 24 * 60 * 60 * 1000).toISOString();
-          }
-        }
       }
 
       res.json(usercache);
