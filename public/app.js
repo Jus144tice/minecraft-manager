@@ -1275,6 +1275,7 @@ function renderMods() {
     if (sideFilter !== 'all') {
       if (!md) return sideFilter === 'unknown';
       const { cls } = sideLabel(md.clientSide, md.serverSide);
+      if (sideFilter === 'unknown' && cls !== 'side-unknown') return false;
       if (sideFilter === 'both' && cls !== 'side-both') return false;
       if (sideFilter === 'server' && cls !== 'side-server') return false;
       if (sideFilter === 'client' && cls !== 'side-client') return false;
