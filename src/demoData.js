@@ -142,7 +142,7 @@ export const DEMO_PROPERTIES = {
   'op-permission-level': '4',
   'view-distance': '10',
   'simulation-distance': '8',
-  'allow-flight': 'false',
+  'allow-flight': 'true',
   'spawn-monsters': 'true',
   'spawn-animals': 'true',
   'spawn-npcs': 'true',

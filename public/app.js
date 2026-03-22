@@ -2512,6 +2512,7 @@ const IMPORTANT_PROPS = [
   'rcon.password',
   'white-list',
   'online-mode',
+  'allow-flight',
   'max-players',
   'server-port',
   'motd',
