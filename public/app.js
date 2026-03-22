@@ -495,7 +495,6 @@ function onTabActivate(tab) {
     loadAppConfig();
     loadServerProps();
     loadJvmArgs();
-    loadVoicechat();
   }
 }
 
@@ -513,7 +512,7 @@ const subtabHandlers = {
   bans: () => loadBans(),
   'server-props': () => loadServerProps(),
   'app-cfg': () => loadAppConfig(),
-  voicechat: () => loadVoicechat(),
+  'mod-configs': () => loadModConfigs(),
   installed: () => {
     activeModsSubtab = 'installed';
     renderMods();
@@ -2630,111 +2629,161 @@ $('btn-jvm-save-restart').addEventListener('click', async () => {
   }
 });
 
-// --- Settings: Simple Voice Chat ---
+// --- Settings: Dynamic Mod Configs ---
 
-async function loadVoicechat() {
+async function loadModConfigs() {
+  const container = $('mod-configs-list');
   try {
-    const props = await GET('/settings/voicechat');
-    const notInstalled = $('voicechat-not-installed');
-    const config = $('voicechat-config');
-    if (props === null) {
-      notInstalled.classList.remove('hidden');
-      config.classList.add('hidden');
+    const { configs } = await GET('/settings/mod-configs');
+    if (!configs || configs.length === 0) {
+      container.innerHTML = '<p class="dim">No mod config files found.</p>';
       return;
     }
-    notInstalled.classList.add('hidden');
-    config.classList.remove('hidden');
-    $('vc-port').value = props.port ?? '';
-    $('vc-max-distance').value = props.max_voice_distance ?? '';
-    $('vc-whisper-distance').value = props.whisper_distance ?? '';
-    $('vc-enable-groups').checked = props.enable_groups !== 'false';
-    $('vc-allow-recording').checked = props.allow_recording !== 'false';
-    $('vc-force-voice-chat').checked = props.force_voice_chat === 'true';
-    const form = $('voicechat-form');
-    if (form) {
-      Array.from(form.elements).forEach((el) => {
-        el.disabled = !can('panel.configure');
-      });
-      const submit = form.querySelector('[type=submit]');
-      if (submit) submit.classList.toggle('hidden', !can('panel.configure'));
+    container.innerHTML = '';
+    for (const cfg of configs) {
+      container.appendChild(createModConfigPanel(cfg));
     }
   } catch (err) {
-    flash('voicechat-msg', 'Could not load voice chat config: ' + err.message, true);
+    container.innerHTML = `<p class="error-msg">${esc(err.message)}</p>`;
   }
 }
 
-$('voicechat-form').addEventListener('submit', async (e) => {
-  e.preventDefault();
-  try {
-    await POST('/settings/voicechat', {
-      port: $('vc-port').value,
-      max_voice_distance: $('vc-max-distance').value,
-      whisper_distance: $('vc-whisper-distance').value,
-      enable_groups: String($('vc-enable-groups').checked),
-      allow_recording: String($('vc-allow-recording').checked),
-      force_voice_chat: String($('vc-force-voice-chat').checked),
-    });
-    flash('voicechat-msg', 'Voice chat config saved! Restart the Minecraft server to apply changes.');
-  } catch (err) {
-    flash('voicechat-msg', err.message, true);
-  }
-});
+function createModConfigPanel(cfg) {
+  const details = document.createElement('details');
+  details.className = 'mod-config-panel';
 
-// --- Settings: FTB Chunks ---
+  const summary = document.createElement('summary');
+  summary.innerHTML = `<strong>${esc(cfg.displayName)}</strong> <span class="dim" style="font-size:0.78rem; margin-left:0.5rem">${esc(cfg.configId)}</span>`;
+  details.appendChild(summary);
 
-subtabHandlers['ftbchunks'] = () => loadFtbChunks();
+  const body = document.createElement('div');
+  body.className = 'mod-config-body';
+  body.dataset.loaded = 'false';
+  body.innerHTML = '<p class="dim" style="padding:0.5rem 0">Loading...</p>';
+  details.appendChild(body);
 
-async function loadFtbChunks() {
-  try {
-    const config = await GET('/settings/ftbchunks');
-    const notInstalled = $('ftbchunks-not-installed');
-    const configDiv = $('ftbchunks-config');
-    if (config === null) {
-      notInstalled.classList.remove('hidden');
-      configDiv.classList.add('hidden');
-      return;
+  details.addEventListener('toggle', () => {
+    if (details.open && body.dataset.loaded === 'false') {
+      loadModConfigEntries(cfg.configId, body);
     }
-    notInstalled.classList.add('hidden');
-    configDiv.classList.remove('hidden');
-    $('ftbc-max-claimed').value = config.max_claimed_chunks || '500';
-    $('ftbc-max-forceloaded').value = config.max_force_loaded_chunks || '25';
-    $('ftbc-hard-team-claim').value = config.hard_team_claim_limit || '0';
-    $('ftbc-hard-team-force').value = config.hard_team_force_limit || '0';
-    $('ftbc-party-limit-mode').value = config.party_limit_mode || 'largest';
-    $('ftbchunks-path').textContent = `Config file: ${config._path || 'world/serverconfig/ftbchunks-server.snbt'}`;
-    // FTB Ranks warning
-    if (config.ftbRanksInstalled) {
-      $('ftbchunks-ranks-warning').classList.remove('hidden');
-    } else {
-      $('ftbchunks-ranks-warning').classList.add('hidden');
-    }
-    // Disable fields if user lacks permission
-    const form = $('ftbchunks-form');
-    if (form) {
-      Array.from(form.elements).forEach((el) => {
-        el.disabled = !can('panel.configure');
-      });
-    }
-  } catch (err) {
-    flash('ftbchunks-msg', 'Could not load FTB Chunks config: ' + err.message, true);
-  }
+  });
+
+  return details;
 }
 
-$('ftbchunks-form').addEventListener('submit', async (e) => {
-  e.preventDefault();
+async function loadModConfigEntries(configId, container) {
   try {
-    await POST('/settings/ftbchunks', {
-      max_claimed_chunks: $('ftbc-max-claimed').value,
-      max_force_loaded_chunks: $('ftbc-max-forceloaded').value,
-      hard_team_claim_limit: $('ftbc-hard-team-claim').value,
-      hard_team_force_limit: $('ftbc-hard-team-force').value,
-      party_limit_mode: $('ftbc-party-limit-mode').value,
+    const data = await GET('/settings/mod-configs/file/' + configId.split('/').map(encodeURIComponent).join('/'));
+    const form = document.createElement('form');
+    form.className = 'settings-form';
+
+    let currentSection = null;
+    for (const entry of data.entries) {
+      if (entry.section !== currentSection) {
+        currentSection = entry.section;
+        if (currentSection) {
+          const h4 = document.createElement('h4');
+          h4.className = 'mod-config-section';
+          h4.textContent = currentSection.replace(/([a-z])([A-Z])/g, '$1 $2').replace(/^./, (c) => c.toUpperCase());
+          form.appendChild(h4);
+        }
+      }
+
+      const group = document.createElement('div');
+      group.className = 'form-group';
+      const label = entry.description || entry.key;
+
+      if (entry.type === 'boolean') {
+        group.innerHTML = `<label class="checkbox-label">
+          <input type="checkbox" data-key="${esc(entry.fullKey)}" ${entry.value ? 'checked' : ''} />
+          <span>${esc(label)}</span>
+        </label>`;
+      } else if (entry.allowedValues && entry.allowedValues.length > 0) {
+        const opts = entry.allowedValues
+          .map((v) => `<option value="${esc(v)}" ${String(entry.value) === v ? 'selected' : ''}>${esc(v)}</option>`)
+          .join('');
+        group.innerHTML = `<label>${esc(label)}</label><select data-key="${esc(entry.fullKey)}">${opts}</select>`;
+      } else if (entry.type === 'integer' || entry.type === 'double') {
+        const min = entry.range ? `min="${entry.range.min}"` : '';
+        const max = entry.range ? `max="${entry.range.max}"` : '';
+        const step = entry.type === 'double' ? 'step="0.1"' : '';
+        group.innerHTML = `<label>${esc(label)}</label><input type="number" data-key="${esc(entry.fullKey)}" value="${esc(String(entry.value))}" ${min} ${max} ${step} />`;
+      } else if (entry.type === 'list') {
+        const val = Array.isArray(entry.value) ? entry.value.join('\n') : String(entry.value);
+        group.innerHTML = `<label>${esc(label)}</label><textarea data-key="${esc(entry.fullKey)}" rows="3" style="font-family:monospace;font-size:0.85rem">${esc(val)}</textarea>`;
+      } else {
+        group.innerHTML = `<label>${esc(label)}</label><input type="text" data-key="${esc(entry.fullKey)}" value="${esc(String(entry.value))}" />`;
+      }
+
+      const hints = [];
+      if (entry.range) hints.push(`Range: ${entry.range.min} \u2013 ${entry.range.max}`);
+      if (entry.defaultValue) hints.push(`Default: ${entry.defaultValue}`);
+      if (hints.length) {
+        const hint = document.createElement('span');
+        hint.className = 'hint';
+        hint.textContent = hints.join(' \u00b7 ');
+        group.appendChild(hint);
+      }
+
+      if (!can('panel.configure')) {
+        group.querySelectorAll('input, select, textarea').forEach((el) => {
+          el.disabled = true;
+        });
+      }
+
+      form.appendChild(group);
+    }
+
+    if (can('panel.configure')) {
+      const btnRow = document.createElement('div');
+      btnRow.className = 'btn-row';
+      btnRow.innerHTML = '<button type="submit" class="btn btn-primary">Save</button>';
+      form.appendChild(btnRow);
+    }
+
+    const msg = document.createElement('p');
+    msg.className = 'control-msg';
+    form.appendChild(msg);
+
+    form.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const values = {};
+      for (const entry of data.entries) {
+        const el = form.querySelector(`[data-key="${entry.fullKey}"]`);
+        if (!el) continue;
+        if (entry.type === 'boolean') {
+          values[entry.fullKey] = el.checked;
+        } else if (entry.type === 'list') {
+          values[entry.fullKey] = el.value
+            .split('\n')
+            .map((l) => l.trim())
+            .filter((l) => l);
+        } else if (entry.type === 'integer') {
+          values[entry.fullKey] = parseInt(el.value, 10);
+        } else if (entry.type === 'double') {
+          values[entry.fullKey] = parseFloat(el.value);
+        } else {
+          values[entry.fullKey] = el.value;
+        }
+      }
+      try {
+        await POST('/settings/mod-configs/file/' + configId.split('/').map(encodeURIComponent).join('/'), { values });
+        msg.textContent = 'Saved! Restart the Minecraft server to apply changes.';
+        msg.className = 'control-msg text-green';
+      } catch (err) {
+        msg.textContent = err.message;
+        msg.className = 'control-msg text-red';
+      }
     });
-    flash('ftbchunks-msg', 'FTB Chunks config saved! Restart the Minecraft server to apply changes.');
+
+    container.innerHTML = '';
+    container.appendChild(form);
+    container.dataset.loaded = 'true';
   } catch (err) {
-    flash('ftbchunks-msg', err.message, true);
+    container.innerHTML = `<p class="error-msg">${esc(err.message)}</p>`;
+    container.dataset.loaded = 'true';
   }
-});
+}
 
 // ============================================================
 // Access Control

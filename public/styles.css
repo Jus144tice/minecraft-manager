@@ -1543,6 +1543,38 @@ textarea:focus {
   color: #e0c060;
 }
 
+/* Mod config panels (dynamic) */
+.mod-config-panel {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  margin-bottom: 0.5rem;
+}
+.mod-config-panel summary {
+  padding: 0.65rem 1rem;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  user-select: none;
+}
+.mod-config-panel summary:hover {
+  background: var(--surface2);
+}
+.mod-config-panel[open] summary {
+  border-bottom: 1px solid var(--border);
+}
+.mod-config-body {
+  padding: 0.75rem 1rem;
+}
+.mod-config-section {
+  font-size: 0.9rem;
+  color: var(--primary);
+  margin: 1rem 0 0.5rem;
+  padding-bottom: 0.25rem;
+  border-bottom: 1px solid var(--border);
+}
+
 .player-chips {
   display: flex;
   flex-wrap: wrap;

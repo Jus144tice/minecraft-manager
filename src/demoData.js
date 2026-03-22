@@ -907,6 +907,140 @@ export const DEMO_MOD_STARTUP_STATUSES = {
   },
 };
 
+// --- Mod config list (demo) ---
+export const DEMO_MOD_CONFIG_LIST = [
+  {
+    configId: 'config/voicechat/voicechat-server.properties',
+    fileName: 'voicechat-server.properties',
+    format: 'properties',
+    modId: 'voicechat',
+    displayName: 'Voicechat',
+  },
+  {
+    configId: 'world/serverconfig/ftbchunks-world.snbt',
+    fileName: 'ftbchunks-world.snbt',
+    format: 'snbt',
+    modId: 'ftbchunks',
+    displayName: 'Ftbchunks',
+  },
+  {
+    configId: 'config/create-common.toml',
+    fileName: 'create-common.toml',
+    format: 'toml',
+    modId: 'create',
+    displayName: 'Create',
+  },
+];
+
+export const DEMO_MOD_CONFIG_ENTRIES = {
+  'config/voicechat/voicechat-server.properties': {
+    configId: 'config/voicechat/voicechat-server.properties',
+    format: 'properties',
+    entries: [
+      {
+        section: null,
+        key: 'port',
+        fullKey: 'port',
+        value: 24454,
+        type: 'integer',
+        description: 'Voice chat UDP port',
+        range: null,
+        defaultValue: '24454',
+        allowedValues: null,
+      },
+      {
+        section: null,
+        key: 'max_voice_distance',
+        fullKey: 'max_voice_distance',
+        value: 48.0,
+        type: 'double',
+        description: 'Max voice distance in blocks',
+        range: null,
+        defaultValue: '48.0',
+        allowedValues: null,
+      },
+      {
+        section: null,
+        key: 'enable_groups',
+        fullKey: 'enable_groups',
+        value: true,
+        type: 'boolean',
+        description: 'Enable group chats',
+        range: null,
+        defaultValue: 'true',
+        allowedValues: null,
+      },
+    ],
+  },
+  'world/serverconfig/ftbchunks-world.snbt': {
+    configId: 'world/serverconfig/ftbchunks-world.snbt',
+    format: 'snbt',
+    entries: [
+      {
+        section: null,
+        key: 'max_claimed_chunks',
+        fullKey: 'max_claimed_chunks',
+        value: 500,
+        type: 'integer',
+        description: 'Max chunks a player/team can claim',
+        range: { min: 0, max: 1000000 },
+        defaultValue: '500',
+        allowedValues: null,
+      },
+      {
+        section: null,
+        key: 'max_force_loaded_chunks',
+        fullKey: 'max_force_loaded_chunks',
+        value: 25,
+        type: 'integer',
+        description: 'Max force-loaded chunks',
+        range: { min: 0, max: 1000000 },
+        defaultValue: '25',
+        allowedValues: null,
+      },
+      {
+        section: null,
+        key: 'party_limit_mode',
+        fullKey: 'party_limit_mode',
+        value: 'largest',
+        type: 'string',
+        description: 'How team chunk limits are calculated',
+        range: null,
+        defaultValue: 'largest',
+        allowedValues: ['largest', 'sum', 'owner', 'average'],
+      },
+    ],
+  },
+  'config/create-common.toml': {
+    configId: 'config/create-common.toml',
+    format: 'toml',
+    entries: [
+      {
+        section: 'recipes',
+        key: 'bulkPressing',
+        fullKey: 'recipes.bulkPressing',
+        value: true,
+        type: 'boolean',
+        description: 'Allow pressing multiple items at once',
+        range: null,
+        defaultValue: 'true',
+        allowedValues: null,
+      },
+      {
+        section: 'recipes',
+        key: 'allowStonecuttingOnSaw',
+        fullKey: 'recipes.allowStonecuttingOnSaw',
+        value: true,
+        type: 'boolean',
+        description: 'Allow stonecutting recipes on the mechanical saw',
+        range: null,
+        defaultValue: 'true',
+        allowedValues: null,
+      },
+    ],
+  },
+};
+
 // --- Panel links (panel user ↔ Minecraft player) ---
 export const DEMO_PANEL_LINKS = [
   {

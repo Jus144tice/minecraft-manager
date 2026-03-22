@@ -1201,8 +1201,7 @@
           <button class="subtab-btn" data-subtab="server-props">server.properties</button>
           <button class="subtab-btn" data-subtab="jvm-args">JVM Arguments</button>
           <button class="subtab-btn" data-subtab="environments" data-cap="environments.manage">Environments</button>
-          <button class="subtab-btn" data-subtab="voicechat">Voice Chat</button>
-          <button class="subtab-btn" data-subtab="ftbchunks">FTB Chunks</button>
+          <button class="subtab-btn" data-subtab="mod-configs">Mod Configs</button>
         </div>
 
         <!-- App config -->
@@ -1362,130 +1361,14 @@
             <p class="dim">Loading environments...</p>
           </div>
         </div>
-        <!-- Voice Chat -->
-        <div id="subtab-voicechat" class="subtab-content hidden">
-          <div id="voicechat-not-installed" class="hidden">
-            <p class="legend-box">
-              Simple Voice Chat mod is not installed. Install it via the Mods tab to configure it here.
-            </p>
-          </div>
-          <div id="voicechat-config">
-            <p class="legend-box">
-              Configure the Simple Voice Chat mod. Audio is transmitted over <strong>UDP</strong> on the port below —
-              make sure it is forwarded in your router to <strong>this server's local IP</strong>.
-              <strong>Restart the Minecraft server</strong> after saving changes.
-            </p>
-            <form id="voicechat-form" class="settings-form">
-              <div class="form-row">
-                <div class="form-group">
-                  <label>Voice Chat Port (UDP)</label>
-                  <input type="number" id="vc-port" placeholder="24454" />
-                  <span class="hint">Forward this UDP port in your router. Default: 24454</span>
-                </div>
-                <div class="form-group">
-                  <label>Max Voice Distance</label>
-                  <input type="number" id="vc-max-distance" placeholder="48.0" step="0.5" />
-                  <span class="hint">How far (in blocks) voice can be heard</span>
-                </div>
-              </div>
-              <div class="form-row">
-                <div class="form-group">
-                  <label>Whisper Distance</label>
-                  <input type="number" id="vc-whisper-distance" placeholder="24.0" step="0.5" />
-                  <span class="hint">How far whispered voice can be heard</span>
-                </div>
-              </div>
-              <div class="form-group">
-                <label class="checkbox-label">
-                  <input type="checkbox" id="vc-enable-groups" />
-                  <span>Enable Group Chats</span>
-                </label>
-              </div>
-              <div class="form-group">
-                <label class="checkbox-label">
-                  <input type="checkbox" id="vc-allow-recording" />
-                  <span>Allow Recording</span>
-                </label>
-              </div>
-              <div class="form-group">
-                <label class="checkbox-label">
-                  <input type="checkbox" id="vc-force-voice-chat" />
-                  <span>Force Voice Chat (kick players without mod)</span>
-                </label>
-              </div>
-              <div class="btn-row">
-                <button type="submit" class="btn btn-primary">Save Voice Chat Config</button>
-              </div>
-              <p id="voicechat-msg" class="control-msg"></p>
-            </form>
-          </div>
-        </div>
-
-        <!-- FTB Chunks config -->
-        <div id="subtab-ftbchunks" class="subtab-content hidden">
-          <div id="ftbchunks-not-installed" class="hidden">
-            <p class="legend-box">
-              FTB Chunks is not installed, or the world has not been generated yet. The config file is created when the
-              server starts with the mod installed.
-            </p>
-          </div>
-          <div id="ftbchunks-config" class="hidden">
-            <p class="legend-box">
-              Configure chunk claiming and force-loading limits for FTB Chunks.
-              <strong>Restart the Minecraft server</strong> after saving changes.
-            </p>
-            <div id="ftbchunks-ranks-warning" class="legend-box warning-box hidden">
-              <strong>Note:</strong> FTB Ranks is also installed. Rank-based permissions can override these limits on a
-              per-player or per-group basis. Values set here act as defaults.
-            </div>
-            <form id="ftbchunks-form" class="settings-form">
-              <div class="form-row">
-                <div class="form-group">
-                  <label>Max Claimed Chunks</label>
-                  <input type="number" id="ftbc-max-claimed" min="0" />
-                  <span class="hint"
-                    >Chunks a player/team can claim (protected from others). 0 = no limit. Default: 500</span
-                  >
-                </div>
-                <div class="form-group">
-                  <label>Max Force-Loaded Chunks</label>
-                  <input type="number" id="ftbc-max-forceloaded" min="0" />
-                  <span class="hint"
-                    >Chunks kept loaded even when no players are nearby (for automation). 0 = no limit. Default:
-                    25</span
-                  >
-                </div>
-              </div>
-              <div class="form-row">
-                <div class="form-group">
-                  <label>Hard Team Claim Limit</label>
-                  <input type="number" id="ftbc-hard-team-claim" min="0" />
-                  <span class="hint">Absolute max claimed chunks per team. 0 = use per-player limit. Default: 0</span>
-                </div>
-                <div class="form-group">
-                  <label>Hard Team Force-Load Limit</label>
-                  <input type="number" id="ftbc-hard-team-force" min="0" />
-                  <span class="hint"
-                    >Absolute max force-loaded chunks per team. 0 = use per-player limit. Default: 0</span
-                  >
-                </div>
-              </div>
-              <div class="form-group">
-                <label>Party Limit Mode</label>
-                <select id="ftbc-party-limit-mode">
-                  <option value="largest">Largest — use the highest limit among team members</option>
-                  <option value="sum">Sum — add all members' limits together</option>
-                  <option value="owner">Owner — use the team owner's limit</option>
-                  <option value="average">Average — average of all members' limits</option>
-                </select>
-                <span class="hint">How team chunk limits are calculated from member limits</span>
-              </div>
-              <div class="btn-row">
-                <button type="submit" class="btn btn-primary">Save FTB Chunks Config</button>
-              </div>
-              <p id="ftbchunks-msg" class="control-msg"></p>
-              <p id="ftbchunks-path" class="dim" style="font-size: 0.78rem; margin-top: 0.5rem"></p>
-            </form>
+        <!-- Mod Configs (dynamic) -->
+        <div id="subtab-mod-configs" class="subtab-content hidden">
+          <p class="legend-box">
+            Edit configuration files for installed mods. <strong>Restart the Minecraft server</strong> after saving
+            changes. Descriptions and valid values are extracted from the config file comments.
+          </p>
+          <div id="mod-configs-list">
+            <p class="dim">Loading mod configs...</p>
           </div>
         </div>
       </section>

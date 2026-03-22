@@ -14,6 +14,7 @@ import { audit } from '../audit.js';
 import { runPreflight } from '../preflight.js';
 import { requireCapability } from '../middleware.js';
 import { getSelectedConfig } from '../environments.js';
+import { discoverModConfigs, readModConfig, writeModConfig } from '../modConfigs.js';
 import {
   getDiscordStatus,
   testDiscordConnection,
@@ -96,7 +97,48 @@ export default function settingsRoutes(ctx) {
     }
   });
 
-  // --- Simple Voice Chat config ---
+  // --- Dynamic Mod Configs ---
+
+  router.get('/settings/mod-configs', async (req, res) => {
+    if (ctx.config.demoMode) return res.json({ configs: Demo.DEMO_MOD_CONFIG_LIST || [] });
+    try {
+      const env = getSelectedConfig(ctx, req);
+      const configs = await discoverModConfigs(env.serverPath);
+      res.json({ configs });
+    } catch (err) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  router.get('/settings/mod-configs/file/*', async (req, res) => {
+    const configId = req.params[0];
+    if (ctx.config.demoMode) {
+      const demo = Demo.DEMO_MOD_CONFIG_ENTRIES?.[configId];
+      return demo ? res.json(demo) : res.status(404).json({ error: 'Config not found' });
+    }
+    try {
+      const env = getSelectedConfig(ctx, req);
+      const data = await readModConfig(env.serverPath, configId);
+      res.json(data);
+    } catch (err) {
+      res.status(err.message.includes('Invalid') ? 400 : 500).json({ error: err.message });
+    }
+  });
+
+  router.post('/settings/mod-configs/file/*', requireCapability('panel.configure'), async (req, res) => {
+    const configId = req.params[0];
+    if (ctx.config.demoMode) return res.json({ ok: true, demo: true });
+    try {
+      const env = getSelectedConfig(ctx, req);
+      await writeModConfig(env.serverPath, configId, req.body.values || {});
+      audit('MOD_CONFIG_SAVE', { user: req.session.user.email, configId, ip: req.ip });
+      res.json({ ok: true });
+    } catch (err) {
+      res.status(err.message.includes('Invalid') ? 400 : 500).json({ error: err.message });
+    }
+  });
+
+  // --- Simple Voice Chat config (legacy — kept for backward compatibility) ---
 
   router.get('/settings/voicechat', async (req, res) => {
     if (ctx.config.demoMode) {
