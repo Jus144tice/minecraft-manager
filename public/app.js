@@ -2090,6 +2090,18 @@ async function loadOnlinePlayers() {
 }
 
 // --- Players: All ---
+function formatLastSeen(ts) {
+  if (!ts) return '—';
+  const d = new Date(ts);
+  const now = Date.now();
+  const diff = now - d.getTime();
+  if (diff < 60000) return 'Just now';
+  if (diff < 3600000) return `${Math.floor(diff / 60000)}m ago`;
+  if (diff < 86400000) return `${Math.floor(diff / 3600000)}h ago`;
+  if (diff < 604800000) return `${Math.floor(diff / 86400000)}d ago`;
+  return d.toLocaleDateString();
+}
+
 async function loadAllPlayers() {
   const el = $('all-players-list');
   try {
@@ -2127,7 +2139,7 @@ async function loadAllPlayers() {
     const canWl = can('players.manage_whitelist');
     const canManagePlayers = canBan || canOp || canWl;
     el.innerHTML = `<table class="player-table">
-      <thead><tr><th>Player</th><th>Status</th><th>Discord</th><th>Panel</th>${canManagePlayers ? '<th>Actions</th>' : ''}</tr></thead>
+      <thead><tr><th>Player</th><th>Status</th><th>Last Seen</th><th>Discord</th><th>Panel</th>${canManagePlayers ? '<th>Actions</th>' : ''}</tr></thead>
       <tbody>${sorted
         .map((p) => {
           const lower = p.name.toLowerCase();
@@ -2170,6 +2182,7 @@ async function loadAllPlayers() {
             </div>
           </td>
           <td><div class="badge-row">${badges.join('')}</div></td>
+          <td class="dim">${online ? 'Now' : formatLastSeen(p.lastSeen)}</td>
           <td>${discordLinkCell(p.name, linksMap)}</td>
           <td>${panelLinkCell(p.name, panelMap)}</td>
           ${canManagePlayers ? `<td class="action-cell">${actions.join('')}</td>` : ''}
@@ -4997,6 +5010,42 @@ function renderPlayerProfile(p, container) {
       </div>
     </div>
     <div class="profile-badges">${badges.join('')}</div>`;
+
+  // Activity section
+  if (p.firstSeen || p.lastSeen || (p.sessionHistory && p.sessionHistory.length > 0)) {
+    html += `
+    <div class="profile-section">
+      <h4>Activity</h4>`;
+    if (p.firstSeen) {
+      html += `<div class="profile-detail-row">
+        <span class="profile-detail-label">First Seen</span>
+        <span class="profile-detail-value">${new Date(p.firstSeen).toLocaleString()}</span>
+      </div>`;
+    }
+    if (p.lastSeen) {
+      html += `<div class="profile-detail-row">
+        <span class="profile-detail-label">Last Seen</span>
+        <span class="profile-detail-value">${new Date(p.lastSeen).toLocaleString()} (${formatLastSeen(p.lastSeen)})</span>
+      </div>`;
+    }
+    if (p.sessionHistory && p.sessionHistory.length > 0) {
+      html += `<details style="margin-top:0.5rem">
+        <summary class="dim" style="cursor:pointer;font-size:0.82rem">Recent sessions (${p.sessionHistory.length})</summary>
+        <div class="session-history">
+          ${p.sessionHistory
+            .map(
+              (s) =>
+                `<div class="session-entry">
+              <span class="session-action ${s.action}">${s.action === 'join' ? '→ Joined' : '← Left'}</span>
+              <span class="dim">${new Date(s.timestamp).toLocaleString()}</span>
+            </div>`,
+            )
+            .join('')}
+        </div>
+      </details>`;
+    }
+    html += '</div>';
+  }
 
   // Op details
   if (p.op) {

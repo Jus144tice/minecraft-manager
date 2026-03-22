@@ -259,14 +259,15 @@ Default capabilities (owners can customize per-role via Access Control UI):
 
 Defined in `db.js` → `SCHEMA_SQL`:
 
-| Table           | Primary Key  | Purpose                                                   |
-| --------------- | ------------ | --------------------------------------------------------- |
-| `users`         | `email`      | Panel accounts (email, name, provider, role, admin_level) |
-| `audit_logs`    | `id`         | Structured audit trail (action, user, ip, details JSONB)  |
-| `session`       | `sid`        | Express sessions (connect-pg-simple)                      |
-| `discord_links` | `discord_id` | Discord ↔ MC player links                                 |
-| `panel_links`   | `user_email` | Panel ↔ MC player links                                   |
-| `mod_cache`     | `sha1`       | Modrinth metadata cache (found flag, JSONB metadata, TTL) |
+| Table             | Primary Key  | Purpose                                                   |
+| ----------------- | ------------ | --------------------------------------------------------- |
+| `users`           | `email`      | Panel accounts (email, name, provider, role, admin_level) |
+| `audit_logs`      | `id`         | Structured audit trail (action, user, ip, details JSONB)  |
+| `session`         | `sid`        | Express sessions (connect-pg-simple)                      |
+| `discord_links`   | `discord_id` | Discord ↔ MC player links                                 |
+| `panel_links`     | `user_email` | Panel ↔ MC player links                                   |
+| `mod_cache`       | `sha1`       | Modrinth metadata cache (found flag, JSONB metadata, TTL) |
+| `player_sessions` | `id`         | Player join/leave events (name, uuid, action, timestamp)  |
 
 ## Identity Linking
 

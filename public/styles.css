@@ -529,6 +529,30 @@ html {
 .profile-detail-value {
   font-weight: 500;
 }
+.session-history {
+  max-height: 200px;
+  overflow-y: auto;
+  margin-top: 0.35rem;
+}
+.session-entry {
+  display: flex;
+  justify-content: space-between;
+  padding: 0.2rem 0;
+  font-size: 0.8rem;
+  border-bottom: 1px solid var(--border);
+}
+.session-entry:last-child {
+  border-bottom: none;
+}
+.session-action {
+  font-weight: 600;
+}
+.session-action.join {
+  color: #4ade80;
+}
+.session-action.leave {
+  color: #f87171;
+}
 .profile-discord-linked {
   display: flex;
   align-items: center;

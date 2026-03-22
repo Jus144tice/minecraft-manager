@@ -11,6 +11,7 @@ import { requireCapability } from '../middleware.js';
 import { getSelectedConfig } from '../environments.js';
 import { getAllLinks, getLinkByMinecraftName, setLink, removeLink } from '../integrations/discord/links.js';
 import { getLinkByMinecraftName as getPanelLinkByMcName } from '../panelLinks.js';
+import { isConnected as dbConnected, getPlayerLastSeen, getPlayerFirstSeen, getPlayerSessionHistory } from '../db.js';
 
 export default function playerRoutes(ctx) {
   const router = Router();
@@ -37,7 +38,35 @@ export default function playerRoutes(ctx) {
     if (ctx.config.demoMode) return res.json(Demo.DEMO_USERCACHE);
     try {
       const env = getSelectedConfig(ctx, req);
-      res.json(await SF.getUsercache(env.serverPath));
+      const usercache = await SF.getUsercache(env.serverPath);
+
+      // Enrich with session data from the database
+      if (dbConnected()) {
+        const [lastSeenRows, firstSeenRows] = await Promise.all([getPlayerLastSeen(), getPlayerFirstSeen()]);
+        const lastSeenMap = {};
+        for (const r of lastSeenRows) lastSeenMap[r.player_name.toLowerCase()] = r;
+        const firstSeenMap = {};
+        for (const r of firstSeenRows) firstSeenMap[r.player_name.toLowerCase()] = r;
+
+        for (const p of usercache) {
+          const lower = p.name.toLowerCase();
+          const ls = lastSeenMap[lower];
+          const fs = firstSeenMap[lower];
+          p.lastSeen = ls ? ls.timestamp : null;
+          p.lastAction = ls ? ls.action : null;
+          p.firstSeen = fs ? fs.timestamp : null;
+        }
+      } else {
+        // Estimate last seen from usercache expiresOn (last join + 30 days)
+        for (const p of usercache) {
+          if (p.expiresOn) {
+            const expiry = new Date(p.expiresOn);
+            p.lastSeen = new Date(expiry.getTime() - 30 * 24 * 60 * 60 * 1000).toISOString();
+          }
+        }
+      }
+
+      res.json(usercache);
     } catch (err) {
       res.status(500).json({ error: err.message });
     }
@@ -317,6 +346,18 @@ export default function playerRoutes(ctx) {
       // Panel link info
       const panelLink = await getPanelLinkByMcName(name);
 
+      // Session history from database
+      let sessionHistory = [];
+      let firstSeen = null;
+      let lastSeen = null;
+      if (dbConnected()) {
+        sessionHistory = await getPlayerSessionHistory(name, 50);
+        if (sessionHistory.length > 0) {
+          lastSeen = sessionHistory[0].timestamp;
+          firstSeen = sessionHistory[sessionHistory.length - 1].timestamp;
+        }
+      }
+
       res.json({
         name: op?.name || wl?.name || ban?.name || name,
         uuid: op?.uuid || wl?.uuid || null,
@@ -330,6 +371,9 @@ export default function playerRoutes(ctx) {
         panelUser: panelLink
           ? { email: panelLink.email, verified: panelLink.verified, linkedAt: panelLink.linkedAt }
           : null,
+        firstSeen,
+        lastSeen,
+        sessionHistory,
       });
     } catch (err) {
       res.status(500).json({ error: err.message });

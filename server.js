@@ -23,7 +23,7 @@ import { getCapabilitiesForRole, roleToAdminLevel, setCapabilityOverrides } from
 import { validateConfig, migrateLaunchConfig, launchToString } from './src/validate.js';
 import { migrateToEnvironments, resolveConfig, ENV_KEYS } from './src/environments.js';
 import { info, setNotifyHook } from './src/audit.js';
-import { initDatabase, getUser } from './src/db.js';
+import { initDatabase, getUser, insertPlayerSession, isConnected as dbConnected } from './src/db.js';
 import * as Backup from './src/backup.js';
 import { createServices } from './src/services.js';
 import { collectMetrics, collectDemoMetrics } from './src/metrics.js';
@@ -461,6 +461,14 @@ mc.on('log', (entry) => {
   // Feed log line to mod startup parser
   const change = modStartupParser.parseLine(entry.line);
   if (change) broadcastModStatusEvent(change);
+
+  // Track player join/leave events in the database
+  if (dbConnected()) {
+    const joinMatch = entry.line.match(/\[Server thread\/INFO\].*?:\s+(\w{3,16}) joined the game$/);
+    const leaveMatch = !joinMatch && entry.line.match(/\[Server thread\/INFO\].*?:\s+(\w{3,16}) left the game$/);
+    if (joinMatch) insertPlayerSession(joinMatch[1], null, 'join').catch(() => {});
+    if (leaveMatch) insertPlayerSession(leaveMatch[1], null, 'leave').catch(() => {});
+  }
 });
 
 const metricsInterval = setInterval(broadcastMetrics, 10000);
@@ -537,6 +545,29 @@ httpServer.listen(PORT, BIND_HOST, () => {
     }
     console.log(`Server path: ${config.serverPath}`);
     console.log(`Launch: ${launchToString(config.launch)}`);
+
+    // Seed player session data from usercache.json (only for players not yet tracked)
+    if (dbConnected()) {
+      import('./src/serverFiles.js')
+        .then(async (SF) => {
+          try {
+            const cache = await SF.getUsercache(config.serverPath);
+            const { seedPlayerSession } = await import('./src/db.js');
+            for (const p of cache) {
+              if (p.expiresOn) {
+                // expiresOn is "last join + 30 days" — subtract 30 days to estimate last seen
+                const expiry = new Date(p.expiresOn);
+                const lastSeen = new Date(expiry.getTime() - 30 * 24 * 60 * 60 * 1000);
+                await seedPlayerSession(p.name, p.uuid, 'join', lastSeen);
+              }
+            }
+            info(`Seeded player sessions from usercache.json (${cache.length} players)`);
+          } catch (err) {
+            info('Could not seed player sessions from usercache', { error: err.message });
+          }
+        })
+        .catch(() => {});
+    }
 
     // Auto-start Minecraft server on boot
     if (config.autoStart) {

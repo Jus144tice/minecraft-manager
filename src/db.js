@@ -60,6 +60,16 @@ CREATE TABLE IF NOT EXISTS panel_links (
 );
 CREATE INDEX IF NOT EXISTS idx_panel_links_mc_name ON panel_links (minecraft_name);
 
+CREATE TABLE IF NOT EXISTS player_sessions (
+  id             SERIAL PRIMARY KEY,
+  player_name    TEXT NOT NULL,
+  uuid           TEXT,
+  action         TEXT NOT NULL,
+  timestamp      TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_player_sessions_name ON player_sessions (player_name);
+CREATE INDEX IF NOT EXISTS idx_player_sessions_ts ON player_sessions (timestamp DESC);
+
 CREATE TABLE IF NOT EXISTS mod_cache (
   sha1       TEXT NOT NULL PRIMARY KEY,
   found      BOOLEAN NOT NULL,
@@ -382,6 +392,68 @@ export async function deleteModCache(sha1) {
 export async function clearModCache() {
   if (!pool) return;
   await pool.query('DELETE FROM mod_cache');
+}
+
+// ---- Player Sessions ----
+
+/** Record a player join or leave event. */
+export async function insertPlayerSession(playerName, uuid, action) {
+  if (!pool) return;
+  await pool.query('INSERT INTO player_sessions (player_name, uuid, action) VALUES ($1, $2, $3)', [
+    playerName,
+    uuid || null,
+    action,
+  ]);
+}
+
+/** Get the latest session event for each player (last seen). */
+export async function getPlayerLastSeen() {
+  if (!pool) return [];
+  const { rows } = await pool.query(`
+    SELECT DISTINCT ON (LOWER(player_name))
+      player_name, uuid, action, timestamp
+    FROM player_sessions
+    ORDER BY LOWER(player_name), timestamp DESC
+  `);
+  return rows;
+}
+
+/** Get first seen for each player. */
+export async function getPlayerFirstSeen() {
+  if (!pool) return [];
+  const { rows } = await pool.query(`
+    SELECT DISTINCT ON (LOWER(player_name))
+      player_name, uuid, timestamp
+    FROM player_sessions
+    ORDER BY LOWER(player_name), timestamp ASC
+  `);
+  return rows;
+}
+
+/** Get session history for a specific player. */
+export async function getPlayerSessionHistory(playerName, limit = 50) {
+  if (!pool) return [];
+  const { rows } = await pool.query(
+    'SELECT action, timestamp FROM player_sessions WHERE LOWER(player_name) = LOWER($1) ORDER BY timestamp DESC LIMIT $2',
+    [playerName, limit],
+  );
+  return rows;
+}
+
+/** Seed a session record only if the player has no existing sessions. */
+export async function seedPlayerSession(playerName, uuid, action, timestamp) {
+  if (!pool) return;
+  const { rowCount } = await pool.query('SELECT 1 FROM player_sessions WHERE LOWER(player_name) = LOWER($1) LIMIT 1', [
+    playerName,
+  ]);
+  if (rowCount === 0) {
+    await pool.query('INSERT INTO player_sessions (player_name, uuid, action, timestamp) VALUES ($1, $2, $3, $4)', [
+      playerName,
+      uuid || null,
+      action,
+      timestamp,
+    ]);
+  }
 }
 
 export async function shutdownDatabase() {
