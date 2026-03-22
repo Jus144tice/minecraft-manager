@@ -662,6 +662,11 @@ html {
   gap: 0.25rem;
   flex-wrap: wrap;
 }
+.action-btns {
+  display: flex;
+  gap: 0.25rem;
+  flex-wrap: wrap;
+}
 .discord-linked-badge {
   display: inline-block;
   font-size: 0.72rem;
@@ -2200,7 +2205,7 @@ textarea:focus {
     height: 120px;
   }
 
-  /* Tables — hide UUID column on mobile */
+  /* Tables — hide low-priority columns on mobile */
   .player-table {
     font-size: 0.8rem;
   }
@@ -2208,8 +2213,36 @@ textarea:focus {
   .player-table td {
     padding: 0.4rem 0.5rem;
   }
-  .player-table .small {
+  .player-table .small,
+  .hide-mobile {
     display: none;
+  }
+  /* Compact action buttons on mobile — single row with minimal gaps */
+  .action-btns {
+    display: flex;
+    gap: 0.2rem;
+    flex-wrap: nowrap;
+  }
+  .action-btns .btn-xs {
+    padding: 0.15rem 0.3rem;
+    font-size: 0.65rem;
+    white-space: nowrap;
+  }
+
+  /* Dropdowns — prevent overflow on narrow screens */
+  .user-menu-dropdown {
+    right: 0;
+    min-width: min(200px, calc(100vw - 2rem));
+  }
+  .env-selector-dropdown {
+    right: 0;
+    min-width: min(200px, calc(100vw - 2rem));
+  }
+
+  /* Filter bar — force stacking on tablet edge */
+  .filter-bar select,
+  .filter-bar input {
+    min-width: 0;
   }
 
   /* Modals — full-width on phones */
@@ -3120,8 +3153,8 @@ textarea:focus {
 
 @media (max-width: 768px) {
   .env-selector-dropdown {
-    right: -40px;
-    min-width: 200px;
+    right: 0;
+    min-width: min(200px, calc(100vw - 2rem));
   }
   .env-banner {
     flex-wrap: wrap;

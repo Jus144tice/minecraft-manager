@@ -2057,7 +2057,7 @@ async function loadOnlinePlayers() {
     }
     const canKickBan = can('players.manage_bans');
     el.innerHTML = `<table class="player-table">
-      <thead><tr><th>Player</th><th>Discord</th><th>Panel</th>${canKickBan ? '<th>Actions</th>' : ''}</tr></thead>
+      <thead><tr><th>Player</th><th class="hide-mobile">Discord</th><th class="hide-mobile">Panel</th>${canKickBan ? '<th>Actions</th>' : ''}</tr></thead>
       <tbody>${players
         .map(
           (name) => `
@@ -2068,14 +2068,14 @@ async function loadOnlinePlayers() {
               <strong class="player-name-link" data-action="player-profile" data-name="${esc(name)}">${esc(name)}</strong>
             </div>
           </td>
-          <td>${discordLinkCell(name, linksMap)}</td>
-          <td>${panelLinkCell(name, panelMap)}</td>
+          <td class="hide-mobile">${discordLinkCell(name, linksMap)}</td>
+          <td class="hide-mobile">${panelLinkCell(name, panelMap)}</td>
           ${
             canKickBan
-              ? `<td class="action-cell">
+              ? `<td class="action-cell"><div class="action-btns">
             <button class="btn btn-xs btn-warning" data-action="kick-player" data-name="${esc(name)}">Kick</button>
             <button class="btn btn-xs btn-danger" data-action="ban-from-list" data-name="${esc(name)}">Ban</button>
-          </td>`
+          </div></td>`
               : ''
           }
         </tr>`,
@@ -2139,7 +2139,7 @@ async function loadAllPlayers() {
     const canWl = can('players.manage_whitelist');
     const canManagePlayers = canBan || canOp || canWl;
     el.innerHTML = `<table class="player-table">
-      <thead><tr><th>Player</th><th>Status</th><th>Last Seen</th><th>Discord</th><th>Panel</th>${canManagePlayers ? '<th>Actions</th>' : ''}</tr></thead>
+      <thead><tr><th>Player</th><th>Status</th><th>Last Seen</th><th class="hide-mobile">Discord</th><th class="hide-mobile">Panel</th>${canManagePlayers ? '<th>Actions</th>' : ''}</tr></thead>
       <tbody>${sorted
         .map((p) => {
           const lower = p.name.toLowerCase();
@@ -2183,9 +2183,9 @@ async function loadAllPlayers() {
           </td>
           <td><div class="badge-row">${badges.join('')}</div></td>
           <td class="dim">${online ? 'Now' : formatLastSeen(p.lastSeen)}</td>
-          <td>${discordLinkCell(p.name, linksMap)}</td>
-          <td>${panelLinkCell(p.name, panelMap)}</td>
-          ${canManagePlayers ? `<td class="action-cell">${actions.join('')}</td>` : ''}
+          <td class="hide-mobile">${discordLinkCell(p.name, linksMap)}</td>
+          <td class="hide-mobile">${panelLinkCell(p.name, panelMap)}</td>
+          ${canManagePlayers && actions.length ? `<td class="action-cell"><div class="action-btns">${actions.join('')}</div></td>` : canManagePlayers ? '<td></td>' : ''}
         </tr>`;
         })
         .join('')}
