@@ -158,6 +158,7 @@ const SYSTEM_SOURCES = new Set([
   'de.gi.js.th.pa.EnchantmentParser',
   'de.gi.js.th.pa.CreativeModeTabParser',
   'de.gi.js.th.pa.FluidTypeParser',
+  'ne.mi.fm.VersionChecker',
 ]);
 
 /**
@@ -174,6 +175,7 @@ export class ModStartupParser {
     this._mapReady = false;
     this._buffer = []; // buffered lines waiting for map
     this._onMapReady = null; // callback for broadcasting buffered results
+    this._lastVersionCheckModId = null; // tracks [modid] from version check INFO lines
   }
 
   /** Set the source-to-filename mapping and replay buffered lines. */
@@ -199,6 +201,7 @@ export class ModStartupParser {
     this._finalized = false;
     this._mapReady = false;
     this._buffer = [];
+    this._lastVersionCheckModId = null;
   }
 
   /**
@@ -272,13 +275,27 @@ export class ModStartupParser {
     // System-sourced issues (tag loading, recipe parsing, mixin refs) are always "warning" —
     // the mod itself loaded, but some of its data/config has problems.
     if (isSystemSource) {
+      // Track version check mod IDs: "[modid] Starting version check..."
+      if (source === VERSION_CHECK_SOURCE && level === 'INFO') {
+        const vcMod = text.match(/^\[(\w+)\]/);
+        if (vcMod) this._lastVersionCheckModId = vcMod[1].toLowerCase();
+        return null;
+      }
+      // Version check failure — attribute to the last checked mod
+      if (source === VERSION_CHECK_SOURCE && (level === 'WARN' || level === 'ERROR') && this._lastVersionCheckModId) {
+        const r = this._resolveModRef(this._lastVersionCheckModId);
+        if (r) {
+          this._lastVersionCheckModId = null;
+          return this._addMessage(r.filename, r.modId, 'warning', level, source, text);
+        }
+      }
       if (level === 'ERROR' || level === 'FATAL' || level === 'WARN') {
         const modRef = this._extractModRefFromText(text);
         if (modRef) {
           return this._addMessage(modRef.filename, modRef.modId, 'warning', level, source, text);
         }
       }
-      return null; // system source INFO or no mod ref found
+      return null; // system source with no extractable mod ref
     }
 
     // Resolve non-system source to filename
@@ -351,45 +368,81 @@ export class ModStartupParser {
 
   /**
    * Extract a mod reference from a system-sourced error/warning message.
-   * Looks for patterns like:
-   *   - "modid:path/to/resource" (namespace references)
-   *   - "modid.mixins.json" (mixin config references)
-   *   - "mod:modid" (Missing data pack references)
+   * Covers mixin configs, namespace refs, data packs, refmaps, config files,
+   * JarJar sources, and registry entries.
    */
   _extractModRefFromText(text) {
-    // Pattern 1: "mod:modid" from "Missing data pack mod:modid"
+    // Try each pattern in order of specificity
+
+    // "Missing data pack mod:modid"
     const dataPack = text.match(/Missing data pack mod:(\w+)/);
     if (dataPack) {
-      const id = dataPack[1].toLowerCase();
-      const filename = this.modIdMap.get(id);
-      if (filename) return { filename, modId: id };
+      const r = this._resolveModRef(dataPack[1]);
+      if (r) return r;
     }
 
-    // Pattern 2: "modid.mixins.json" or "modid-common.mixins.json"
-    const mixinRef = text.match(/(\w[\w-]*?)(?:[-_.](?:common|forge|client|server))?\.mixins\.json/);
+    // "modid.mixins.json" / "modid-common.mixins.json" / "mixins.modid.json"
+    const mixinRef =
+      text.match(/(\w[\w-]*?)(?:[-_.](?:common|forge|client|server))?\.mixins\.json/) ||
+      text.match(/mixins\.(\w[\w-]*?)\.json/);
     if (mixinRef) {
-      const id = mixinRef[1].toLowerCase().replace(/[-_]/g, '');
-      // Try with and without separators
-      const filename = this.modIdMap.get(id) || this.modIdMap.get(mixinRef[1].toLowerCase());
-      if (filename) return { filename, modId: mixinRef[1].toLowerCase() };
+      const r = this._resolveModRef(mixinRef[1]);
+      if (r) return r;
     }
 
-    // Pattern 3: "modid:resource_path" (Minecraft namespace like "create:crushed_ores")
-    const nsRef = text.match(/\b([a-z_][\w-]*):[\w/.-]+/);
-    if (nsRef && nsRef[1] !== 'minecraft' && nsRef[1] !== 'forge' && nsRef[1] !== 'java' && nsRef[1] !== 'net') {
-      const id = nsRef[1].toLowerCase();
-      const filename = this.modIdMap.get(id);
-      if (filename) return { filename, modId: id };
-    }
-
-    // Pattern 4: "modid.refmap.json" (reference map files)
+    // "modid.refmap.json" / "modid-refmap.json"
     const refmapRef = text.match(/(\w[\w-]*?)(?:[-.].*)?\.refmap\.json/);
     if (refmapRef) {
-      const id = refmapRef[1].toLowerCase();
-      const filename = this.modIdMap.get(id);
-      if (filename) return { filename, modId: id };
+      const r = this._resolveModRef(refmapRef[1]);
+      if (r) return r;
     }
 
+    // "Configuration file .../modid-common.toml" (ForgeConfigSpec corrections)
+    const configFile = text.match(/config\/(\w[\w-]*?)(?:-(?:common|server|client))?\.toml/);
+    if (configFile) {
+      const r = this._resolveModRef(configFile[1]);
+      if (r) return r;
+    }
+
+    // "source: modid" (JarJar dependency source)
+    const jarjar = text.match(/passed in as source:\s*(\w+)/);
+    if (jarjar) {
+      const r = this._resolveModRef(jarjar[1]);
+      if (r) return r;
+    }
+
+    // "Registry Entry [type / modid:name]" (Architectury registry warnings)
+    const registry = text.match(/Registry Entry \[.*?\/\s*(\w+):/);
+    if (registry) {
+      const r = this._resolveModRef(registry[1]);
+      if (r) return r;
+    }
+
+    // "modid:resource_path" (namespace references like "create:crushed_ores")
+    const nsRef = text.match(/\b([a-z_][\w-]*):[\w/.-]+/);
+    if (nsRef) {
+      const skip = new Set(['minecraft', 'forge', 'java', 'net', 'com', 'org', 'path', 'http', 'https', 'file']);
+      if (!skip.has(nsRef[1])) {
+        const r = this._resolveModRef(nsRef[1]);
+        if (r) return r;
+      }
+    }
+
+    return null;
+  }
+
+  /** Try to resolve a raw mod reference string to a filename. */
+  _resolveModRef(raw) {
+    const id = raw.toLowerCase().replace(/[-_]/g, '');
+    const filename = this.modIdMap.get(id) || this.modIdMap.get(raw.toLowerCase());
+    if (filename) return { filename, modId: raw.toLowerCase() };
+    // Fuzzy: check if any known mod ID contains or is contained by the ref
+    for (const [knownId, knownFile] of this.modIdMap) {
+      if (knownId.length < 4) continue;
+      if (id.includes(knownId) || knownId.includes(id)) {
+        return { filename: knownFile, modId: knownId };
+      }
+    }
     return null;
   }
 

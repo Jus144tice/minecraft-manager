@@ -219,6 +219,77 @@ test('system-sourced Missing data pack attributes to correct mod', () => {
   assert.equal(result.status, 'warning');
 });
 
+test('mixin config error attributes to correct mod', () => {
+  // Add furniture to the map
+  const p = new ModStartupParser();
+  p.reset();
+  p.setModIdMap(new Map([['furniture', 'furniture-1.0.jar']]));
+  const result = p.parseLine(
+    '[09:35:10] [main/ERROR] [mixin/]: Mixin config furniture-common.mixins.json does not specify "minVersion" property',
+  );
+  assert.ok(result);
+  assert.equal(result.filename, 'furniture-1.0.jar');
+  assert.equal(result.status, 'warning');
+});
+
+test('mixin refmap warning attributes to correct mod', () => {
+  const p = new ModStartupParser();
+  p.reset();
+  p.setModIdMap(new Map([['createframed', 'createframed-1.0.jar']]));
+  const result = p.parseLine(
+    "[09:35:11] [main/WARN] [mixin/]: Reference map 'createframed.refmap.json' for createframed.mixins.json could not be read",
+  );
+  assert.ok(result);
+  assert.equal(result.filename, 'createframed-1.0.jar');
+});
+
+test('mixin target not found attributes to correct mod', () => {
+  const p = new ModStartupParser();
+  p.reset();
+  p.setModIdMap(new Map([['relics', 'relics-1.0.jar']]));
+  const result = p.parseLine(
+    '[09:35:13] [main/WARN] [mixin/]: @Mixin target net.minecraft.client.gui.screens.Screen was not found relics.mixins.json:ScreenMixin',
+  );
+  assert.ok(result);
+  assert.equal(result.filename, 'relics-1.0.jar');
+});
+
+test('config file correction attributes to correct mod', () => {
+  const p = new ModStartupParser();
+  p.reset();
+  p.setModIdMap(new Map([['sliceanddice', 'sliceanddice-1.0.jar']]));
+  const result = p.parseLine(
+    '[09:35:52] [main/WARN] [ne.mi.co.ForgeConfigSpec/CORE]: Configuration file /home/minecraft/server/config/sliceanddice-common.toml is not correct. Correcting',
+  );
+  assert.ok(result);
+  assert.equal(result.filename, 'sliceanddice-1.0.jar');
+});
+
+test('registry entry warning attributes to correct mod', () => {
+  const result = parser.parseLine(
+    '[09:35:49] [main/WARN] [de.ar.re.re.fo.RegistrarManagerImpl/]: Registry entry listened Registry Entry [minecraft:entity_type / create:contraption] was not realized!',
+  );
+  assert.ok(result);
+  assert.equal(result.filename, 'create-1.20.1-0.5.1.f.jar');
+});
+
+test('version check failure attributes to last checked mod', () => {
+  const p = new ModStartupParser();
+  p.reset();
+  p.setModIdMap(new Map([['framework', 'framework-1.0.jar']]));
+  // First line sets the last version check mod
+  p.parseLine(
+    '[09:35:53] [Forge Version Check/INFO] [ne.mi.fm.VersionChecker/]: [framework] Starting version check at https://example.com',
+  );
+  // Failure line should be attributed to framework
+  const result = p.parseLine(
+    '[09:35:53] [Forge Version Check/WARN] [ne.mi.fm.VersionChecker/]: Failed to process update information',
+  );
+  assert.ok(result);
+  assert.equal(result.filename, 'framework-1.0.jar');
+  assert.equal(result.status, 'warning');
+});
+
 test('finalize does not mark unmapped mods (missing mods.toml)', () => {
   parser.parseLine('[00:06:27] [main/INFO] [voicechat/]: loaded');
   parser.finalize();
