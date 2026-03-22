@@ -790,10 +790,19 @@
 
         <!-- Mod detail panel — shown instead of subtab content -->
         <div id="mod-detail-panel" class="subtab-content hidden">
-          <button class="btn btn-sm btn-ghost" id="btn-mod-detail-back">← Back to results</button>
-          <div id="mod-detail-content">
+          <div class="mod-detail-topbar">
+            <button class="btn btn-sm btn-ghost" id="btn-mod-detail-back">← Back</button>
+            <div class="mod-detail-tabs" id="mod-detail-tabs">
+              <button class="mod-detail-tab active" data-mod-tab="detail">Details</button>
+              <button class="mod-detail-tab" data-mod-tab="settings">Settings</button>
+              <button class="mod-detail-tab" data-mod-tab="log">Startup Log</button>
+            </div>
+          </div>
+          <div id="mod-detail-content" class="mod-detail-tab-content">
             <p class="dim">Loading mod details...</p>
           </div>
+          <div id="mod-settings-content" class="mod-detail-tab-content hidden"></div>
+          <div id="mod-log-content" class="mod-detail-tab-content hidden"></div>
         </div>
 
         <!-- Shared pagination bar — used by both Installed and Browse subtabs -->

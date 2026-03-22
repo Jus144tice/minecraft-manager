@@ -35,6 +35,13 @@ document.addEventListener('click', async (e) => {
     case 'mod-startup-detail':
       openModStartupDetail(el.dataset.filename);
       break;
+    case 'mod-settings':
+      openModDetail(el.dataset.id || el.dataset.filename, el.dataset.id ? 'installed' : 'filename-only', {
+        filename: el.dataset.filename,
+        author: el.dataset.author || '',
+        tab: 'settings',
+      });
+      break;
     case 'close-mod-startup-modal':
       hide('mod-startup-modal');
       break;
@@ -1364,20 +1371,21 @@ function renderMods() {
           <span class="dim">${formatSize(mod.size)}</span>
         </div>
       </div>
-      ${
-        can('server.manage_mods')
-          ? `<div class="mod-actions">
-        <button class="btn btn-sm ${mod.enabled ? 'btn-warning' : 'btn-success'}"
+      <div class="mod-actions">
+        <button class="btn btn-sm btn-ghost mod-gear-btn" data-action="mod-settings" data-filename="${esc(mod.filename)}" data-id="${esc(md?.projectSlug || md?.projectId || '')}" data-author="${esc(md?.author || '')}" title="Settings & Log">&#9881;</button>
+        ${
+          can('server.manage_mods')
+            ? `<button class="btn btn-sm ${mod.enabled ? 'btn-warning' : 'btn-success'}"
           data-action="toggle-mod" data-filename="${esc(mod.filename)}" data-enable="${!mod.enabled}">
           ${mod.enabled ? 'Disable' : 'Enable'}
         </button>
         <button class="btn btn-sm btn-danger"
           data-action="delete-mod" data-filename="${esc(mod.filename)}">
           Delete
-        </button>
-      </div>`
-          : ''
-      }
+        </button>`
+            : ''
+        }
+      </div>
     </div>`;
     })
     .join('');
@@ -1802,23 +1810,175 @@ function closeModDetail() {
 }
 window.closeModDetail = closeModDetail;
 
+// Mod detail tab switching
+document.getElementById('mod-detail-tabs').addEventListener('click', (e) => {
+  const tab = e.target.closest('.mod-detail-tab');
+  if (!tab) return;
+  const target = tab.dataset.modTab;
+  document.querySelectorAll('.mod-detail-tab').forEach((t) => t.classList.toggle('active', t === tab));
+  $('mod-detail-content').classList.toggle('hidden', target !== 'detail');
+  $('mod-settings-content').classList.toggle('hidden', target !== 'settings');
+  $('mod-log-content').classList.toggle('hidden', target !== 'log');
+});
+
+// Track current mod detail context for tab population
+let _currentDetailFilename = null;
+let _currentDetailSlug = null;
+
 window.openModDetail = async function (idOrSlug, source, context = {}) {
   modDetailState = { source, ...context };
+  _currentDetailFilename = context.filename || null;
+  _currentDetailSlug = idOrSlug;
 
   // Hide subtab content and pagination; show detail panel
   hide('subtab-installed');
   hide('subtab-browse');
   modsPager.hide();
   show('mod-detail-panel');
-  $('mod-detail-content').innerHTML = '<p class="dim">Loading mod details...</p>';
 
-  try {
-    const project = await GET(`/modrinth/project/${encodeURIComponent(idOrSlug)}`);
-    renderModDetail(project, context);
-  } catch (err) {
-    $('mod-detail-content').innerHTML = `<p class="error-msg">Failed to load details: ${esc(err.message)}</p>`;
+  // Reset to requested tab (default: detail, but gear icon opens settings)
+  const initialTab = context.tab || 'detail';
+  document
+    .querySelectorAll('.mod-detail-tab')
+    .forEach((t) => t.classList.toggle('active', t.dataset.modTab === initialTab));
+  $('mod-detail-content').classList.toggle('hidden', initialTab !== 'detail');
+  $('mod-settings-content').classList.toggle('hidden', initialTab !== 'settings');
+  $('mod-log-content').classList.toggle('hidden', initialTab !== 'log');
+
+  // Populate settings tab
+  loadModDetailSettingsTab();
+  // Populate log tab
+  loadModDetailLogTab();
+
+  // Load Modrinth detail for the Detail tab
+  $('mod-detail-content').innerHTML = '<p class="dim">Loading mod details...</p>';
+  if (idOrSlug && source !== 'filename-only') {
+    try {
+      const project = await GET(`/modrinth/project/${encodeURIComponent(idOrSlug)}`);
+      renderModDetail(project, context);
+    } catch {
+      // Mod not on Modrinth — show basic info
+      renderBasicModDetail(context);
+    }
+  } else {
+    renderBasicModDetail(context);
   }
 };
+
+function renderBasicModDetail(context) {
+  const filename = context.filename || '';
+  const title = filename.replace(/\.jar$/i, '').replace(/[-_]/g, ' ');
+  $('mod-detail-content').innerHTML = `
+    <div class="mod-detail-header">
+      <div class="mod-detail-hero">
+        <div class="mod-detail-icon mod-icon-placeholder"></div>
+        <div class="mod-detail-info">
+          <h2 class="mod-detail-title">${esc(title)}</h2>
+          <p class="dim">This mod is not on Modrinth. Use the Settings and Startup Log tabs for more info.</p>
+        </div>
+      </div>
+    </div>`;
+}
+
+async function loadModDetailSettingsTab() {
+  const container = $('mod-settings-content');
+  container.innerHTML = '<p class="dim">Checking for config files...</p>';
+
+  const slug = _currentDetailSlug || '';
+  const filename = _currentDetailFilename || '';
+  const allConfigs = await getModConfigsCache();
+  const slugLower = slug.toLowerCase().replace(/[-_]/g, '');
+  const filenameLower = filename
+    .toLowerCase()
+    .replace(/[-_](?:forge|fabric|neoforge|mc|quilt).*$/i, '')
+    .replace(/\.jar$/i, '')
+    .replace(/[-_]/g, '');
+
+  const match = allConfigs.find(
+    (m) =>
+      m.modId === slugLower ||
+      m.modId === filenameLower ||
+      m.modId.includes(slugLower) ||
+      slugLower.includes(m.modId) ||
+      m.modId.includes(filenameLower) ||
+      filenameLower.includes(m.modId),
+  );
+
+  if (!match || !match.files.length) {
+    container.innerHTML = '<p class="dim">No config files found for this mod.</p>';
+    return;
+  }
+
+  container.innerHTML = '';
+  for (const file of match.files) {
+    const filePanel = document.createElement('details');
+    filePanel.className = 'mod-config-panel';
+    filePanel.style.marginBottom = '0.5rem';
+
+    const summary = document.createElement('summary');
+    summary.innerHTML = `<span style="font-family:monospace;font-size:0.85rem">${esc(file.fileName)}</span> <span class="dim" style="font-size:0.75rem">${esc(file.configId)}</span>`;
+    filePanel.appendChild(summary);
+
+    const body = document.createElement('div');
+    body.className = 'mod-config-body';
+    body.dataset.loaded = 'false';
+    body.innerHTML = '<p class="dim">Loading...</p>';
+    filePanel.appendChild(body);
+
+    filePanel.addEventListener('toggle', () => {
+      if (filePanel.open && body.dataset.loaded === 'false') {
+        loadModConfigEntries(file.configId, body);
+      }
+    });
+
+    container.appendChild(filePanel);
+  }
+}
+
+function loadModDetailLogTab() {
+  const container = $('mod-log-content');
+  const filename = _currentDetailFilename;
+  if (!filename) {
+    container.innerHTML = '<p class="dim">No startup log data available.</p>';
+    return;
+  }
+
+  const s = modStartupStatuses[filename];
+  if (!s) {
+    container.innerHTML = '<p class="dim">No startup status recorded. Start the server to see mod loading info.</p>';
+    return;
+  }
+
+  const statusLabels = { loaded: 'Loaded OK', warning: 'Warning', error: 'Error', critical: 'Critical' };
+  let html = `<div style="margin-bottom:1rem"><span class="startup-badge startup-${s.status}" style="font-size:0.85rem;padding:0.25rem 0.6rem">${statusLabels[s.status] || s.status}</span></div>`;
+
+  if (s.messages.length === 0) {
+    html += '<p class="dim">Mod loaded cleanly — no log output during startup.</p>';
+  } else {
+    for (const msg of s.messages) {
+      const levelCls =
+        msg.level === 'ERROR' || msg.level === 'FATAL'
+          ? 'startup-level-error'
+          : msg.level === 'WARN'
+            ? 'startup-level-warn'
+            : 'startup-level-info';
+      html += `<div class="startup-message">
+        <div class="startup-message-header">
+          <span class="startup-level-badge ${levelCls}">${esc(msg.level)}</span>
+          <span class="dim">${esc(msg.source)}</span>
+        </div>
+        <div class="startup-message-text">${esc(msg.text)}</div>`;
+      if (msg.stackTrace && msg.stackTrace.length > 0) {
+        html += `<details class="startup-stacktrace">
+          <summary>Stack trace (${msg.stackTrace.length} lines)</summary>
+          <pre>${esc(msg.stackTrace.join('\n'))}</pre>
+        </details>`;
+      }
+      html += '</div>';
+    }
+  }
+  container.innerHTML = html;
+}
 
 function renderModDetail(project, context = {}) {
   // Check if this mod is currently installed
@@ -1929,13 +2089,7 @@ function renderModDetail(project, context = {}) {
       </section>`
         : ''
     }
-    ${isInstalled ? '<section class="mod-detail-section"><h3>Configuration</h3><div id="mod-detail-configs"><p class="dim">Checking for config files...</p></div></section>' : ''}
   `;
-
-  // Load config files for installed mods
-  if (isInstalled) {
-    loadModDetailConfigs(project.slug || project.id);
-  }
 }
 
 window.openVersionModal = async function (btn) {
@@ -2650,49 +2804,6 @@ async function getModConfigsCache() {
     _modConfigsCache = [];
   }
   return _modConfigsCache;
-}
-
-async function loadModDetailConfigs(modSlug) {
-  const container = document.getElementById('mod-detail-configs');
-  if (!container) return;
-
-  const allConfigs = await getModConfigsCache();
-  const slugLower = (modSlug || '').toLowerCase().replace(/[-_]/g, '');
-
-  // Find matching mod config by modId
-  const match = allConfigs.find(
-    (m) => m.modId === slugLower || m.modId.includes(slugLower) || slugLower.includes(m.modId),
-  );
-
-  if (!match || !match.files.length) {
-    container.innerHTML = '<p class="dim">No config files found for this mod.</p>';
-    return;
-  }
-
-  container.innerHTML = '';
-  for (const file of match.files) {
-    const filePanel = document.createElement('details');
-    filePanel.className = 'mod-config-panel';
-    filePanel.style.marginBottom = '0.5rem';
-
-    const summary = document.createElement('summary');
-    summary.innerHTML = `<span style="font-family:monospace;font-size:0.85rem">${esc(file.configId)}</span>`;
-    filePanel.appendChild(summary);
-
-    const body = document.createElement('div');
-    body.className = 'mod-config-body';
-    body.dataset.loaded = 'false';
-    body.innerHTML = '<p class="dim">Loading...</p>';
-    filePanel.appendChild(body);
-
-    filePanel.addEventListener('toggle', () => {
-      if (filePanel.open && body.dataset.loaded === 'false') {
-        loadModConfigEntries(file.configId, body);
-      }
-    });
-
-    container.appendChild(filePanel);
-  }
 }
 
 async function loadModConfigs() {
