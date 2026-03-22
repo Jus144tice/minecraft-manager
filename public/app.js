@@ -1840,6 +1840,16 @@ window.openModDetail = async function (idOrSlug, source, context = {}) {
   $('mod-settings-content').classList.toggle('hidden', initialTab !== 'settings');
   $('mod-log-content').classList.toggle('hidden', initialTab !== 'log');
 
+  // Set persistent title bar (visible across all tabs)
+  const md = _currentDetailFilename ? currentModData[_currentDetailFilename]?.modrinth : null;
+  const modTitle =
+    md?.projectTitle || (_currentDetailFilename || idOrSlug).replace(/\.jar$/i, '').replace(/[-_]/g, ' ');
+  const hash = _currentDetailFilename ? currentModData[_currentDetailFilename]?.hash : null;
+  const iconSrc = hash ? `/api/mod-icon/${hash}` : md?.iconUrl;
+  const titleBar = $('mod-detail-title-bar');
+  titleBar.innerHTML = `${iconSrc ? `<img src="${esc(iconSrc)}" alt="" onerror="this.style.display='none'" />` : ''}<h3>${esc(modTitle)}</h3>`;
+  show(titleBar);
+
   // Populate settings tab
   loadModDetailSettingsTab();
   // Populate log tab
@@ -1850,6 +1860,12 @@ window.openModDetail = async function (idOrSlug, source, context = {}) {
   if (idOrSlug && source !== 'filename-only') {
     try {
       const project = await GET(`/modrinth/project/${encodeURIComponent(idOrSlug)}`);
+      // Update title bar with Modrinth project name + icon
+      const tb = $('mod-detail-title-bar');
+      const tbIcon = project.icon_url
+        ? `<img src="${esc(project.icon_url)}" alt="" onerror="this.style.display='none'" />`
+        : '';
+      tb.innerHTML = `${tbIcon}<h3>${esc(project.title)}</h3>`;
       renderModDetail(project, context);
     } catch {
       // Mod not on Modrinth — show basic info

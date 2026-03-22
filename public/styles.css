@@ -2537,6 +2537,21 @@ textarea:focus {
   background: var(--primary);
   color: #fff;
 }
+.mod-detail-title-bar {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin-bottom: 0.75rem;
+}
+.mod-detail-title-bar img {
+  width: 32px;
+  height: 32px;
+  border-radius: 4px;
+}
+.mod-detail-title-bar h3 {
+  margin: 0;
+  font-size: 1.1rem;
+}
 .mod-detail-header {
   background: var(--surface);
   border: 1px solid var(--border);
