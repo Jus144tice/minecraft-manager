@@ -1355,7 +1355,7 @@ function renderMods() {
           ${
             md?.projectSlug || md?.projectId
               ? `<span class="mod-title-link" data-action="mod-detail" data-id="${esc(md.projectSlug || md.projectId)}" data-source="installed" data-filename="${esc(mod.filename)}" data-author="${esc(md.author || '')}">${esc(title)}</span>`
-              : `<span>${esc(title)}</span>`
+              : `<span class="mod-title-link" data-action="mod-detail" data-id="${esc(mod.filename)}" data-source="filename-only" data-filename="${esc(mod.filename)}">${esc(title)}</span>`
           }
           <span class="side-badge ${side.cls}">${side.text}</span>
           ${!mod.enabled ? '<span class="side-badge mod-off-badge">Disabled</span>' : ''}
