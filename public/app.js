@@ -486,6 +486,7 @@ document.querySelectorAll('.subtab-btn').forEach((btn) => {
 });
 
 function onTabActivate(tab) {
+  if (tab === 'dashboard') loadAnalytics();
   if (tab === 'mods') loadMods();
   if (tab === 'players') {
     loadOnlinePlayers();
@@ -6202,3 +6203,316 @@ $('btn-browse-env-path').addEventListener('click', async () => {
     /* ignore */
   }
 });
+
+// ===================== Performance History / Analytics =====================
+
+const analyticsCharts = {};
+let analyticsRange = '1h';
+
+// Range string → milliseconds
+function rangeToMs(range) {
+  const map = { '15m': 15 * 60000, '1h': 3600000, '6h': 6 * 3600000, '24h': 86400000, '7d': 7 * 86400000 };
+  return map[range] || 3600000;
+}
+
+// Range button clicks
+$('analytics-range-btns').addEventListener('click', (e) => {
+  const btn = e.target.closest('[data-range]');
+  if (!btn) return;
+  analyticsRange = btn.dataset.range;
+  $('analytics-range-btns')
+    .querySelectorAll('.btn')
+    .forEach((b) => b.classList.remove('active'));
+  btn.classList.add('active');
+  loadAnalytics();
+});
+
+// Chart.js defaults for dark theme
+function configureChartDefaults() {
+  if (typeof Chart === 'undefined') return;
+  Chart.defaults.color = '#8b949e';
+  Chart.defaults.borderColor = 'rgba(139,148,158,0.15)';
+  Chart.defaults.font.size = 11;
+  Chart.defaults.font.family = "'Segoe UI', system-ui, sans-serif";
+  Chart.defaults.plugins.legend.display = false;
+  Chart.defaults.animation.duration = 400;
+  Chart.defaults.elements.point.radius = 0;
+  Chart.defaults.elements.point.hoverRadius = 4;
+  Chart.defaults.elements.line.tension = 0.3;
+  Chart.defaults.elements.line.borderWidth = 2;
+}
+
+function formatChartTime(ts) {
+  const d = new Date(ts);
+  if (analyticsRange === '7d' || analyticsRange === '24h') {
+    return (
+      d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' }) +
+      ' ' +
+      d.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' })
+    );
+  }
+  return d.toLocaleTimeString(undefined, {
+    hour: '2-digit',
+    minute: '2-digit',
+    second: analyticsRange === '15m' ? '2-digit' : undefined,
+  });
+}
+
+function createOrUpdateChart(canvasId, config) {
+  if (typeof Chart === 'undefined') return null;
+  if (analyticsCharts[canvasId]) {
+    analyticsCharts[canvasId].destroy();
+  }
+  const ctx = $(canvasId).getContext('2d');
+  analyticsCharts[canvasId] = new Chart(ctx, config);
+  return analyticsCharts[canvasId];
+}
+
+function buildLineChartConfig(labels, datasets, options = {}) {
+  return {
+    type: 'line',
+    data: { labels, datasets },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      interaction: { mode: 'index', intersect: false },
+      scales: {
+        x: {
+          ticks: { maxTicksLimit: 8, maxRotation: 0, callback: (_val, idx) => formatChartTime(labels[idx]) },
+          grid: { display: false },
+        },
+        y: {
+          beginAtZero: options.beginAtZero ?? false,
+          min: options.min,
+          max: options.max,
+          ticks: {
+            callback: options.yFormat || ((v) => v),
+            maxTicksLimit: 5,
+          },
+        },
+      },
+      plugins: {
+        tooltip: {
+          callbacks: {
+            title: (items) => (items[0] ? new Date(items[0].label).toLocaleString() : ''),
+            label: options.tooltipLabel || ((ctx) => `${ctx.dataset.label}: ${ctx.parsed.y}`),
+          },
+        },
+      },
+      ...options.chartOptions,
+    },
+  };
+}
+
+async function loadAnalytics() {
+  const now = new Date();
+  const from = new Date(now.getTime() - rangeToMs(analyticsRange));
+  const params = `from=${from.toISOString()}&to=${now.toISOString()}`;
+
+  try {
+    const [metricsRes, eventsRes, summaryRes] = await Promise.all([
+      GET(`/analytics/metrics?${params}`),
+      GET(`/analytics/events?${params}`),
+      GET(`/analytics/summary?${params}`),
+    ]);
+
+    const metrics = metricsRes.metrics || [];
+    const events = eventsRes.events || [];
+    const summary = summaryRes.summary;
+
+    renderInsightCards(summary);
+    renderCharts(metrics);
+    renderEventTimeline(events);
+  } catch (err) {
+    console.warn('Analytics load failed:', err);
+  }
+}
+
+function renderInsightCards(summary) {
+  if (!summary) {
+    for (const id of [
+      'insight-avg-tps',
+      'insight-min-tps',
+      'insight-peak-players',
+      'insight-peak-mem',
+      'insight-uptime',
+      'insight-lag',
+    ]) {
+      $(id).textContent = '-';
+      $(id).className = 'insight-value';
+    }
+    return;
+  }
+
+  const avgTpsEl = $('insight-avg-tps');
+  avgTpsEl.textContent = summary.avgTps != null ? summary.avgTps.toFixed(1) : '-';
+  avgTpsEl.className =
+    'insight-value' +
+    (summary.avgTps != null
+      ? summary.avgTps >= 18
+        ? ' text-green'
+        : summary.avgTps >= 15
+          ? ' text-yellow'
+          : ' text-red'
+      : '');
+
+  const minTpsEl = $('insight-min-tps');
+  minTpsEl.textContent = summary.minTps != null ? summary.minTps.toFixed(1) : '-';
+  minTpsEl.className =
+    'insight-value' +
+    (summary.minTps != null
+      ? summary.minTps >= 18
+        ? ' text-green'
+        : summary.minTps >= 15
+          ? ' text-yellow'
+          : ' text-red'
+      : '');
+
+  $('insight-peak-players').textContent = summary.peakPlayers != null ? summary.peakPlayers : '-';
+  $('insight-peak-mem').textContent = summary.peakMem != null ? formatSize(summary.peakMem) : '-';
+
+  const uptimeEl = $('insight-uptime');
+  uptimeEl.textContent = summary.uptimePercent != null ? summary.uptimePercent + '%' : '-';
+  uptimeEl.className =
+    'insight-value' +
+    (summary.uptimePercent != null
+      ? summary.uptimePercent >= 99
+        ? ' text-green'
+        : summary.uptimePercent >= 90
+          ? ' text-yellow'
+          : ' text-red'
+      : '');
+
+  const lagEl = $('insight-lag');
+  lagEl.textContent = summary.lagSamples != null ? summary.lagSamples : '-';
+  lagEl.className = 'insight-value' + (summary.lagSamples > 0 ? ' text-yellow' : '');
+}
+
+function renderCharts(metrics) {
+  configureChartDefaults();
+  if (typeof Chart === 'undefined' || metrics.length === 0) return;
+
+  const labels = metrics.map((m) => m.timestamp);
+
+  // TPS chart
+  const tpsData = metrics.map((m) => (m.status === 'running' ? m.tps : null));
+  createOrUpdateChart(
+    'chart-tps',
+    buildLineChartConfig(
+      labels,
+      [{ label: 'TPS', data: tpsData, borderColor: '#3fb950', backgroundColor: 'rgba(63,185,80,0.1)', fill: true }],
+      {
+        min: 0,
+        max: 22,
+        yFormat: (v) => v.toFixed(0),
+        tooltipLabel: (ctx) => `TPS: ${ctx.parsed.y != null ? ctx.parsed.y.toFixed(1) : 'N/A'}`,
+        chartOptions: {
+          plugins: {
+            annotation: undefined, // Chart.js annotation plugin not loaded; use dataset approach
+          },
+        },
+      },
+    ),
+  );
+
+  // Memory chart
+  const memData = metrics.map((m) => (m.memBytes != null ? m.memBytes / (1024 * 1024 * 1024) : null));
+  const memMaxData = metrics.map((m) => (m.memMax != null ? m.memMax / (1024 * 1024 * 1024) : null));
+  createOrUpdateChart(
+    'chart-memory',
+    buildLineChartConfig(
+      labels,
+      [
+        { label: 'Used', data: memData, borderColor: '#da3633', backgroundColor: 'rgba(218,54,51,0.1)', fill: true },
+        { label: 'Allocated', data: memMaxData, borderColor: '#8b949e', borderDash: [5, 3], borderWidth: 1 },
+      ],
+      {
+        beginAtZero: true,
+        yFormat: (v) => v.toFixed(1) + ' GB',
+        tooltipLabel: (ctx) =>
+          `${ctx.dataset.label}: ${ctx.parsed.y != null ? ctx.parsed.y.toFixed(2) + ' GB' : 'N/A'}`,
+      },
+    ),
+  );
+
+  // CPU chart
+  const cpuData = metrics.map((m) => (m.status === 'running' ? m.cpuPercent : null));
+  createOrUpdateChart(
+    'chart-cpu',
+    buildLineChartConfig(
+      labels,
+      [{ label: 'CPU %', data: cpuData, borderColor: '#d29922', backgroundColor: 'rgba(210,153,34,0.1)', fill: true }],
+      {
+        beginAtZero: true,
+        max: 100,
+        yFormat: (v) => v + '%',
+        tooltipLabel: (ctx) => `CPU: ${ctx.parsed.y != null ? ctx.parsed.y.toFixed(1) + '%' : 'N/A'}`,
+      },
+    ),
+  );
+
+  // Players chart
+  const playerData = metrics.map((m) => m.onlineCount ?? 0);
+  createOrUpdateChart(
+    'chart-players',
+    buildLineChartConfig(
+      labels,
+      [
+        {
+          label: 'Players',
+          data: playerData,
+          borderColor: '#58a6ff',
+          backgroundColor: 'rgba(88,166,255,0.1)',
+          fill: true,
+          stepped: 'before',
+        },
+      ],
+      {
+        beginAtZero: true,
+        yFormat: (v) => Math.round(v),
+        tooltipLabel: (ctx) => `Players: ${Math.round(ctx.parsed.y)}`,
+      },
+    ),
+  );
+}
+
+function renderEventTimeline(events) {
+  const container = $('analytics-event-timeline');
+  if (!events || events.length === 0) {
+    container.innerHTML = '<span class="dim">No events in this range</span>';
+    return;
+  }
+
+  const icons = {
+    start: '\u25B6',
+    stop: '\u25A0',
+    crash: '\u26A0',
+    restart: '\u21BB',
+    backup: '\uD83D\uDCBE',
+    restore: '\u21A9',
+    env_deploy: '\uD83D\uDE80',
+  };
+  const typeLabels = {
+    start: 'Start',
+    stop: 'Stop',
+    crash: 'Crash',
+    restart: 'Restart',
+    backup: 'Backup',
+    restore: 'Restore',
+    env_deploy: 'Deploy',
+  };
+
+  container.innerHTML = events
+    .map((e) => {
+      const time = new Date(e.timestamp).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
+      const date = new Date(e.timestamp).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+      const cls = e.event_type;
+      const icon = icons[cls] || '\u2022';
+      const label = typeLabels[cls] || cls;
+      return `<span class="event-chip event-${esc(cls)}"><span class="event-icon">${icon}</span>${esc(label)}<span class="event-time">${esc(date)} ${esc(time)}</span></span>`;
+    })
+    .join('');
+}
+
+// Load analytics on initial page load after Chart.js loads
+setTimeout(() => loadAnalytics(), 1500);

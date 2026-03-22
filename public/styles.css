@@ -3269,3 +3269,131 @@ textarea:focus {
     gap: 4px;
   }
 }
+
+/* ---- Analytics / Performance History ---- */
+
+.analytics-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+.analytics-header h3 {
+  margin: 0;
+}
+.analytics-range-btns {
+  display: flex;
+  gap: 4px;
+}
+.analytics-range-btns .btn.active {
+  background: var(--primary);
+  color: #fff;
+}
+
+.analytics-insights {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+  gap: 8px;
+  margin-bottom: 16px;
+}
+.insight-card {
+  background: var(--surface2);
+  border-radius: var(--radius);
+  padding: 10px 12px;
+  text-align: center;
+}
+.insight-label {
+  display: block;
+  font-size: 0.75rem;
+  color: var(--text-dim);
+  margin-bottom: 2px;
+}
+.insight-value {
+  display: block;
+  font-size: 1.1rem;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.analytics-charts {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 380px), 1fr));
+  gap: 16px;
+  margin-bottom: 16px;
+}
+.chart-container {
+  background: var(--surface2);
+  border-radius: var(--radius);
+  padding: 12px;
+}
+.chart-container h4 {
+  margin: 0 0 8px 0;
+  font-size: 0.85rem;
+  color: var(--text-dim);
+}
+.chart-container canvas {
+  width: 100% !important;
+  height: 180px !important;
+}
+
+.analytics-events h4 {
+  margin: 0 0 8px 0;
+  font-size: 0.85rem;
+  color: var(--text-dim);
+}
+.event-timeline {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.event-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  font-size: 0.78rem;
+  background: var(--surface2);
+  border: 1px solid var(--border);
+}
+.event-chip .event-icon {
+  font-size: 0.85rem;
+}
+.event-chip.event-start {
+  border-color: var(--success);
+  color: var(--success);
+}
+.event-chip.event-stop {
+  border-color: var(--text-dim);
+  color: var(--text-dim);
+}
+.event-chip.event-crash {
+  border-color: var(--danger);
+  color: var(--danger);
+}
+.event-chip.event-restart {
+  border-color: var(--warning);
+  color: var(--warning);
+}
+.event-chip.event-backup {
+  border-color: var(--primary);
+  color: var(--primary);
+}
+.event-chip .event-time {
+  color: var(--text-dim);
+  font-size: 0.72rem;
+}
+
+@media (max-width: 600px) {
+  .analytics-insights {
+    grid-template-columns: repeat(3, 1fr);
+  }
+  .analytics-charts {
+    grid-template-columns: 1fr;
+  }
+  .chart-container canvas {
+    height: 150px !important;
+  }
+}

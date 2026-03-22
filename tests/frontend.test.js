@@ -401,6 +401,34 @@ test('DOM: demo banner has close button', () => {
   dom.window.close();
 });
 
+// ===================== Analytics / Performance History =====================
+
+test('HTML: has analytics section with charts and insights', () => {
+  const dom = createDOM();
+  const doc = dom.window.document;
+  assert.ok(doc.getElementById('analytics-section'), 'Should have analytics section');
+  assert.ok(doc.getElementById('analytics-range-btns'), 'Should have range buttons');
+  assert.ok(doc.getElementById('chart-tps'), 'Should have TPS chart canvas');
+  assert.ok(doc.getElementById('chart-memory'), 'Should have memory chart canvas');
+  assert.ok(doc.getElementById('chart-cpu'), 'Should have CPU chart canvas');
+  assert.ok(doc.getElementById('chart-players'), 'Should have players chart canvas');
+  assert.ok(doc.getElementById('insight-avg-tps'), 'Should have avg TPS insight');
+  assert.ok(doc.getElementById('insight-peak-players'), 'Should have peak players insight');
+  assert.ok(doc.getElementById('analytics-event-timeline'), 'Should have event timeline');
+  dom.window.close();
+});
+
+test('HTML: analytics range buttons have correct data-range attributes', () => {
+  const dom = createDOM();
+  const doc = dom.window.document;
+  const ranges = ['15m', '1h', '6h', '24h', '7d'];
+  for (const range of ranges) {
+    const btn = doc.querySelector(`[data-range="${range}"]`);
+    assert.ok(btn, `Range button for "${range}" should exist`);
+  }
+  dom.window.close();
+});
+
 // ===================== Mod detail panel =====================
 
 test('HTML: has mod detail panel structure', () => {

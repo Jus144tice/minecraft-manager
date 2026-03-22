@@ -6,6 +6,7 @@
     <title>Minecraft Server Manager</title>
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <link rel="stylesheet" href="styles.css" />
+    <script src="chart.min.js" defer></script>
   </head>
   <body>
     <!-- LOGIN MODAL (overlay on top of dashboard) -->
@@ -299,6 +300,76 @@
           <h3>Setup Checks</h3>
           <div id="preflight-summary" class="preflight-summary"></div>
           <div id="preflight-checks" class="preflight-checks"></div>
+        </div>
+
+        <!-- Historical Analytics -->
+        <div class="control-section" id="analytics-section">
+          <div class="analytics-header">
+            <h3>Performance History</h3>
+            <div class="analytics-range-btns" id="analytics-range-btns">
+              <button class="btn btn-xs btn-ghost" data-range="15m">15m</button>
+              <button class="btn btn-xs btn-ghost active" data-range="1h">1h</button>
+              <button class="btn btn-xs btn-ghost" data-range="6h">6h</button>
+              <button class="btn btn-xs btn-ghost" data-range="24h">24h</button>
+              <button class="btn btn-xs btn-ghost" data-range="7d">7d</button>
+            </div>
+          </div>
+
+          <!-- Insight cards -->
+          <div class="analytics-insights" id="analytics-insights">
+            <div class="insight-card">
+              <span class="insight-label">Avg TPS</span>
+              <span class="insight-value" id="insight-avg-tps">-</span>
+            </div>
+            <div class="insight-card">
+              <span class="insight-label">Min TPS</span>
+              <span class="insight-value" id="insight-min-tps">-</span>
+            </div>
+            <div class="insight-card">
+              <span class="insight-label">Peak Players</span>
+              <span class="insight-value" id="insight-peak-players">-</span>
+            </div>
+            <div class="insight-card">
+              <span class="insight-label">Peak Memory</span>
+              <span class="insight-value" id="insight-peak-mem">-</span>
+            </div>
+            <div class="insight-card">
+              <span class="insight-label">Uptime</span>
+              <span class="insight-value" id="insight-uptime">-</span>
+            </div>
+            <div class="insight-card">
+              <span class="insight-label">Lag Samples</span>
+              <span class="insight-value" id="insight-lag">-</span>
+            </div>
+          </div>
+
+          <!-- Charts -->
+          <div class="analytics-charts">
+            <div class="chart-container">
+              <h4>TPS</h4>
+              <canvas id="chart-tps"></canvas>
+            </div>
+            <div class="chart-container">
+              <h4>Memory Usage</h4>
+              <canvas id="chart-memory"></canvas>
+            </div>
+            <div class="chart-container">
+              <h4>CPU Usage</h4>
+              <canvas id="chart-cpu"></canvas>
+            </div>
+            <div class="chart-container">
+              <h4>Players Online</h4>
+              <canvas id="chart-players"></canvas>
+            </div>
+          </div>
+
+          <!-- Event timeline -->
+          <div class="analytics-events">
+            <h4>Event Timeline</h4>
+            <div id="analytics-event-timeline" class="event-timeline">
+              <span class="dim">No events in this range</span>
+            </div>
+          </div>
         </div>
       </section>
 

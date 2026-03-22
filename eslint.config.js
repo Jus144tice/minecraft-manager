@@ -33,6 +33,7 @@ export default [
       sourceType: 'script',
       globals: {
         ...globals.browser,
+        Chart: 'readonly',
       },
     },
   },

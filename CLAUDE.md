@@ -63,7 +63,7 @@ If you touch **auth, RBAC, or identity linking**, review all of these — they a
 
 In `server.js`, routes are mounted in two groups. **Do not move routes between groups without understanding the security implications.**
 
-**Guest-accessible** (before `requireSession`, ~L323): `status`, `players`, `mods`, `modrinth`, `settings` (read-only GET endpoints within these; mutating POST/PUT/DELETE endpoints use `requireCapability` internally)
+**Guest-accessible** (before `requireSession`, ~L323): `status`, `players`, `mods`, `modrinth`, `settings`, `analytics` (read-only GET endpoints within these; mutating POST/PUT/DELETE endpoints use `requireCapability` internally)
 
 **Authenticated** (after `requireSession` + CSRF, ~L338): `server`, `users`, `backups`, `modpack`, `audit`, `identity`, `environments`, `rcon/connect`
 
@@ -82,7 +82,7 @@ In `server.js`, routes are mounted in two groups. **Do not move routes between g
 
 ### Entry Point
 
-`server.js` — Express bootstrap, middleware stack, WebSocket server, graceful shutdown. Key structural landmarks: WebSocket server creation (~L168), middleware stack (~L249), guest route mounting (~L323), authenticated route mounting (~L338), metrics broadcast interval (~L184), `gracefulShutdown()` (~L516).
+`server.js` — Express bootstrap, middleware stack, WebSocket server, graceful shutdown. Key structural landmarks: WebSocket server creation (~L184), middleware stack (~L264), guest route mounting (~L353), authenticated route mounting (~L365), metrics broadcast interval (~L516), analytics collector (~L518), `gracefulShutdown()` (~L652).
 
 ### Core Modules (`src/`)
 
@@ -99,6 +99,7 @@ In `server.js`, routes are mounted in two groups. **Do not move routes between g
 | `operationLock.js`    | Mutex for destructive ops                           | `acquireOp()`, `releaseOp()`, `getActiveOps()`                                                                                                                                                                                                                                                       |
 | `backup.js`           | tar.gz backup/restore, cron scheduling              | `createBackup()`, `restoreBackup()`, `listBackups()`, `initBackupScheduler()`                                                                                                                                                                                                                        |
 | `environments.js`     | Multi-environment management, migration, resolution | `ENV_KEYS`, `validateEnvironmentId()`, `validateEnvironmentConfig()`, `slugify()`, `migrateToEnvironments()`, `resolveConfig()`, `getSelectedConfig()`, `getSelectedEnvId()`, `listEnvironments()`, `createEnvironment()`, `updateEnvironment()`, `deleteEnvironment()`, `switchActiveEnvironment()` |
+| `analytics.js`        | Historical metrics persistence, query, demo data    | `initAnalyticsSchema()`, `insertSnapshot()`, `insertEvent()`, `startCollector()`, `stopCollector()`, `queryMetrics()`, `queryEvents()`, `querySummary()`, `pruneOldData()`, `generateDemoMetrics()`, `generateDemoEvents()`, `generateDemoSummary()`                                                 |
 | `metrics.js`          | TPS, CPU, RAM, disk, player count                   | `collectMetrics()`, `parseTps()`, `collectDemoMetrics()`, `resetCaches()`                                                                                                                                                                                                                            |
 | `notify.js`           | Webhook + Discord notifications                     | `initNotifications()`, `onAuditEvent()`, `notifyLagSpike()`                                                                                                                                                                                                                                          |
 | `validate.js`         | Input validation & config migration                 | `isValidMinecraftName()`, `isSafeModFilename()`, `isSafeMrpackFilename()`, `validateConfig()`, `parseLaunchCommand()`, `migrateLaunchConfig()`                                                                                                                                                       |
@@ -129,6 +130,7 @@ All export `(ctx) => router`. Mounted under `/api/` in server.js unless noted.
 | `settings.js`     | `GET/POST /settings/{properties,jvm-args,voicechat,ftbchunks,mod-configs,mod-configs/file/*}`, `GET/POST /config`, `GET /browse-dirs`, `POST /mkdir`, `GET /discord/status`, `POST /discord/{test-connection,test-notification,send-message}`, `GET /preflight` |
 | `users.js`        | `GET /users`, `GET /users/:email`, `PUT /users/:email/{role,admin}`, `DELETE /users/:email`, `GET /roles`, `PUT /roles/capabilities`                                                                                                                            |
 | `environments.js` | `GET/POST /environments`, `GET/PUT/DELETE /environments/:id`, `POST /environments/:id/deploy`, `POST /environments/select`                                                                                                                                      |
+| `analytics.js`    | `GET /analytics/{metrics,events,summary}` (guest-accessible, read-only)                                                                                                                                                                                         |
 | `audit.js`        | `GET /audit-logs`                                                                                                                                                                                                                                               |
 | `identity.js`     | `GET /identity/me`, `POST /identity/link`, `GET /identity/link/status`, `DELETE /identity/link`, `GET /panel-links`, `POST /panel-link`, `DELETE /panel-link/:email`                                                                                            |
 | `health.js`       | `GET /healthz`, `GET /readyz`, `GET /metrics` (unauthenticated, mounted outside `/api/`)                                                                                                                                                                        |
@@ -151,9 +153,9 @@ All export `(ctx) => router`. Mounted under `/api/` in server.js unless noted.
 
 | File                       | Purpose                                                                                                                                                                                                                             |
 | -------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `index.html` (~1480 lines) | SPA shell: 7 tabs (dashboard, console, mods, players, backups, access control, settings), 10+ modals (login, player profile, user profile, modpack, version picker, env create/edit, deploy, etc.), user menu, environment selector |
-| `app.js` (~5500 lines)     | All frontend logic: delegated click handler (`data-action`), `can()` permission check, `api()` fetch wrapper, `connectWs()` WebSocket, tab/modal management, environment management, all data loading and rendering functions       |
-| `styles.css` (~2970 lines) | Dark theme, responsive layout                                                                                                                                                                                                       |
+| `index.html` (~1610 lines) | SPA shell: 7 tabs (dashboard, console, mods, players, backups, access control, settings), 10+ modals, user menu, environment selector, analytics charts section                                                                     |
+| `app.js` (~6430 lines)     | All frontend logic: delegated click handler (`data-action`), `can()` permission check, `api()` fetch wrapper, `connectWs()` WebSocket, tab/modal management, environment management, analytics/charting, all data loading functions |
+| `styles.css` (~3400 lines) | Dark theme, responsive layout, analytics chart/insight styles                                                                                                                                                                       |
 
 ### Tests (`tests/`)
 
@@ -186,6 +188,7 @@ All export `(ctx) => router`. Mounted under `/api/` in server.js unless noted.
 | `environmentRoutes.test.js` | Environment REST API endpoints, permission checks, deploy flow                 |
 | `modCache.test.js`          | Mod metadata cache: positive/negative entries, batch, invalidation, TTL        |
 | `modStartupStatus.test.js`  | Forge log parsing: INFO/WARN/ERROR tracking, stack traces, finalization        |
+| `analytics.test.js`         | Demo data generation, snapshot/event shapes, summary statistics                |
 | `crashDetection.test.js`    | Auto-restart, restart window                                                   |
 | `frontend.test.js`          | HTML/CSS parsing (jsdom)                                                       |
 | `demoIcons.integration.js`  | Modrinth API icon fetch (network-dependent, excluded from `npm test`)          |
@@ -258,17 +261,19 @@ Default capabilities (owners can customize per-role via Access Control UI):
 
 ## DB Tables
 
-Defined in `db.js` → `SCHEMA_SQL`:
+Defined in `db.js` → `SCHEMA_SQL` and `analytics.js` → `ANALYTICS_SCHEMA_SQL`:
 
-| Table             | Primary Key  | Purpose                                                   |
-| ----------------- | ------------ | --------------------------------------------------------- |
-| `users`           | `email`      | Panel accounts (email, name, provider, role, admin_level) |
-| `audit_logs`      | `id`         | Structured audit trail (action, user, ip, details JSONB)  |
-| `session`         | `sid`        | Express sessions (connect-pg-simple)                      |
-| `discord_links`   | `discord_id` | Discord ↔ MC player links                                 |
-| `panel_links`     | `user_email` | Panel ↔ MC player links                                   |
-| `mod_cache`       | `sha1`       | Modrinth metadata cache (found flag, JSONB metadata, TTL) |
-| `player_sessions` | `id`         | Player join/leave events (name, uuid, action, timestamp)  |
+| Table               | Primary Key  | Purpose                                                           |
+| ------------------- | ------------ | ----------------------------------------------------------------- |
+| `users`             | `email`      | Panel accounts (email, name, provider, role, admin_level)         |
+| `audit_logs`        | `id`         | Structured audit trail (action, user, ip, details JSONB)          |
+| `session`           | `sid`        | Express sessions (connect-pg-simple)                              |
+| `discord_links`     | `discord_id` | Discord ↔ MC player links                                         |
+| `panel_links`       | `user_email` | Panel ↔ MC player links                                           |
+| `mod_cache`         | `sha1`       | Modrinth metadata cache (found flag, JSONB metadata, TTL)         |
+| `player_sessions`   | `id`         | Player join/leave events (name, uuid, action, timestamp)          |
+| `metrics_snapshots` | `id`         | Time-series server metrics (TPS, CPU, RAM, disk, players, status) |
+| `server_events`     | `id`         | Notable events (start, stop, crash, restart, backup, env_deploy)  |
 
 ## Identity Linking
 

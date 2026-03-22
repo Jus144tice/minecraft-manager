@@ -31,6 +31,8 @@ import { initIconCache, getIconPath } from './src/modCache.js';
 import { ModStartupParser, buildModIdMap } from './src/modStartupStatus.js';
 import { initNotifications, onAuditEvent, notifyLagSpike, updateNotificationsConfig } from './src/notify.js';
 import { initDiscord, shutdownDiscord, notifyDiscord } from './src/integrations/discord/index.js';
+import { initAnalyticsSchema, startCollector, stopCollector, insertEvent, pruneOldData } from './src/analytics.js';
+import analyticsRoutes from './src/routes/analytics.js';
 
 // Route modules
 import statusRoutes from './src/routes/status.js';
@@ -134,8 +136,17 @@ async function saveEnvConfig(envId, updates) {
 initNotifications(config);
 setNotifyHook((action, details) => {
   onAuditEvent(action, details);
-  // Also forward to Discord bot notifications (no-ops if disabled)
   notifyDiscord(action, details);
+  // Record select audit events as analytics server_events
+  const analyticsActions = {
+    BACKUP_CREATED: 'backup',
+    BACKUP_RESTORED: 'restore',
+    SERVER_RESTART: 'restart',
+    ENV_DEPLOYED: 'env_deploy',
+  };
+  if (analyticsActions[action]) {
+    insertEvent(analyticsActions[action], details, rawConfig?.activeEnvironment).catch(() => {});
+  }
 });
 
 // ============================================================
@@ -143,6 +154,9 @@ setNotifyHook((action, details) => {
 // ============================================================
 
 const dbReady = await initDatabase();
+
+// Analytics schema (depends on DB being ready)
+if (dbReady) await initAnalyticsSchema();
 
 // ============================================================
 // Trust proxy
@@ -345,6 +359,7 @@ app.use('/api', playerRoutes(ctx));
 app.use('/api', modRoutes(ctx));
 app.use('/api', modrinthRoutes(ctx));
 app.use('/api', settingsRoutes(ctx));
+app.use('/api', analyticsRoutes(ctx));
 
 // ============================================================
 // All routes below require a valid session + CSRF
@@ -468,6 +483,9 @@ mc.on('log', (entry) => {
   }
 
   // Detect server start and reset mod status parser
+  if (entry.line === '[Manager] Server process starting...' && dbReady && !config.demoMode) {
+    insertEvent('start', {}, rawConfig.activeEnvironment);
+  }
   if (entry.line === '[Manager] Server process starting...') {
     modStartupParser.reset();
     const resetMsg = JSON.stringify({ type: 'mod-status-reset' });
@@ -496,6 +514,43 @@ mc.on('log', (entry) => {
 });
 
 const metricsInterval = setInterval(broadcastMetrics, 10000);
+
+// ---- Analytics: background metrics persistence ----
+if (!config.demoMode && dbReady) {
+  startCollector(async () => {
+    const running = mc.running;
+    const status = !running ? 'stopped' : mc.stopping ? 'stopping' : ctx.rconConnected ? 'running' : 'starting';
+    if (status === 'stopped') {
+      return { status, onlineCount: 0 };
+    }
+    const m = await collectMetrics({ mc, rconCmd: ctx.rconCmd, rconConnected: ctx.rconConnected, config });
+    return {
+      status,
+      tps: m.tps,
+      cpuPercent: m.cpuPercent,
+      memBytes: m.memBytes,
+      diskBytes: m.diskBytes,
+      onlineCount: m.onlineCount,
+      players: m.players,
+      uptime: mc.getUptime(),
+      environment: rawConfig.activeEnvironment || 'default',
+    };
+  }, 15000);
+
+  // Record server lifecycle events
+  mc.on('stopped', (code) => {
+    if (code !== 0 && code != null) {
+      insertEvent('crash', { exitCode: code }, rawConfig.activeEnvironment);
+    } else {
+      insertEvent('stop', {}, rawConfig.activeEnvironment);
+    }
+  });
+
+  // Prune old analytics data once per hour
+  const pruneInterval = setInterval(() => pruneOldData(30), 60 * 60 * 1000);
+  // Store for cleanup
+  ctx._pruneInterval = pruneInterval;
+}
 
 // ============================================================
 // Config validation
@@ -599,8 +654,10 @@ async function gracefulShutdown(signal) {
   shuttingDown = true;
   console.log(`\n[Manager] Received ${signal} — shutting down gracefully...`);
 
-  // Stop timers that could fire during shutdown (cron, metrics broadcast)
+  // Stop timers that could fire during shutdown (cron, metrics broadcast, analytics)
   clearInterval(metricsInterval);
+  stopCollector();
+  if (ctx._pruneInterval) clearInterval(ctx._pruneInterval);
   Backup.stopBackupSchedule();
 
   // Disconnect Discord bot
