@@ -77,10 +77,10 @@ test('login: modal shows demo hint, login succeeds, session persists', async ({ 
 });
 
 // ============================================================
-// Dashboard + server controls (single login, multiple checks)
+// Dashboard — status, controls, analytics, online players
 // ============================================================
 
-test('dashboard: status, banner, and server controls', async ({ page }) => {
+test('dashboard: status, banner, server address, online players, and analytics', async ({ page }) => {
   await login(page);
 
   // Server status visible
@@ -92,30 +92,130 @@ test('dashboard: status, banner, and server controls', async ({ page }) => {
   const banner = page.locator('#demo-banner');
   await expect(banner).toBeVisible();
   await expect(banner).toContainText('Demo Mode');
+
+  // Server address bar visible with address text
+  await expect(page.locator('#server-url-bar')).toBeVisible();
+  const serverUrl = await page.textContent('#server-url-text');
+  expect(serverUrl.length).toBeGreaterThan(0);
+
+  // Online players rendered (demo has 3 players — rendered as .chip elements)
+  await page.waitForFunction(
+    () => {
+      const el = document.getElementById('online-players-list');
+      return el && el.querySelectorAll('.chip').length >= 3;
+    },
+    { timeout: 5000 },
+  );
+
+  // Preflight panel shows demo mode warning
+  await expect(page.locator('#preflight-panel')).toBeVisible();
+  await expect(page.locator('#preflight-panel')).toContainText('Demo mode');
+
+  // Analytics section visible with range buttons and insight cards
+  await expect(page.locator('#analytics-section')).toBeVisible();
+  await expect(page.locator('#analytics-range-btns')).toBeVisible();
+
+  // Insight cards populate after analytics loads
+  await page.waitForFunction(
+    () => {
+      const el = document.getElementById('insight-avg-tps');
+      return el && el.textContent !== '-';
+    },
+    { timeout: 5000 },
+  );
+  const avgTps = await page.textContent('#insight-avg-tps');
+  expect(parseFloat(avgTps)).toBeGreaterThan(0);
+
+  // Event timeline has content
+  await page.waitForFunction(
+    () => {
+      const el = document.getElementById('analytics-event-timeline');
+      return el && el.querySelectorAll('.event-chip').length > 0;
+    },
+    { timeout: 5000 },
+  );
+
+  // Clicking a different range button reloads data
+  await page.click('[data-range="24h"]');
+  await expect(page.locator('[data-range="24h"]')).toHaveClass(/active/);
+  await expect(page.locator('[data-range="1h"]')).not.toHaveClass(/active/);
 });
 
 // ============================================================
-// Tab navigation (single login, visit all tabs)
+// User profile modal
 // ============================================================
 
-test('tabs: all main tabs are navigable and show content', async ({ page }) => {
+test('user profile: modal opens from user menu', async ({ page }) => {
   await login(page);
 
-  // Console tab
+  // Open user menu and click View Profile
+  await page.click('#user-menu-btn');
+  await expect(page.locator('#user-menu-authed')).toBeVisible();
+  await page.click('#btn-view-profile');
+
+  // Profile modal opens
+  await expect(page.locator('#user-profile-modal')).toBeVisible();
+
+  // Close it
+  await page.click('#user-profile-close');
+  await expect(page.locator('#user-profile-modal')).toBeHidden();
+});
+
+// ============================================================
+// Player profile modal
+// ============================================================
+
+test('player profile: clicking online player opens profile modal', async ({ page }) => {
+  await login(page);
+
+  // Wait for online players to render as .chip elements
+  await page.waitForFunction(
+    () => {
+      const el = document.getElementById('online-players-list');
+      return el && el.querySelectorAll('.chip').length >= 1;
+    },
+    { timeout: 5000 },
+  );
+
+  // Click a player chip to open profile
+  await page.click('#online-players-list .chip');
+  await expect(page.locator('#player-profile-modal')).toBeVisible({ timeout: 3000 });
+
+  // Profile has player name
+  const title = await page.textContent('#player-profile-title');
+  expect(title.length).toBeGreaterThan(0);
+
+  // Close profile modal
+  await page.click('#player-profile-close');
+  await expect(page.locator('#player-profile-modal')).toBeHidden();
+});
+
+// ============================================================
+// Tab navigation — comprehensive subtab coverage
+// ============================================================
+
+test('tabs: all main tabs and subtabs are navigable', async ({ page }) => {
+  await login(page);
+
+  // ---- Console tab ----
   await page.click('.tab-btn[data-tab="console"]');
   await expect(page.locator('#console-output')).toBeVisible();
   await expect(page.locator('#console-cmd')).toBeVisible();
   await expect(page.locator('#console-output')).not.toBeEmpty({ timeout: 5000 });
 
-  // Mods tab — installed mods
+  // ---- Mods tab — installed ----
   await page.click('.tab-btn[data-tab="mods"]');
   await expect(page.locator('#mods-list')).toBeVisible();
-  await page.waitForFunction(
-    () => document.querySelectorAll('#mods-list .mod-card, #mods-list .mod-row, #mods-list tr').length > 3,
-    { timeout: 5000 },
-  );
+  await page.waitForFunction(() => document.querySelectorAll('#mods-list .mod-card').length > 3, { timeout: 5000 });
 
-  // Mods tab — browse
+  // Click a mod name to open detail panel
+  await page.click('#mods-list .mod-title-link');
+  await expect(page.locator('#mod-detail-panel')).toBeVisible({ timeout: 3000 });
+
+  // Go back to list
+  await page.click('#btn-mod-detail-back');
+
+  // ---- Mods tab — browse ----
   await page.click('.subtab-btn[data-subtab="browse"]');
   await expect(page.locator('#browse-results')).toBeVisible();
   await page.waitForFunction(
@@ -125,28 +225,52 @@ test('tabs: all main tabs are navigable and show content', async ({ page }) => {
     { timeout: 5000 },
   );
 
-  // Players tab — whitelist subtab
+  // ---- Players tab — all subtabs ----
   await page.click('.tab-btn[data-tab="players"]');
+  await expect(page.locator('.subtab-btn[data-subtab="online"]')).toBeVisible();
+
+  await page.click('.subtab-btn[data-subtab="all-players"]');
+  await expect(page.locator('#all-players-list')).toBeVisible();
+
   await page.click('.subtab-btn[data-subtab="whitelist"]');
   await expect(page.locator('#whitelist-list')).toBeVisible();
 
-  // Access Control tab — operators subtab
+  await page.click('.subtab-btn[data-subtab="bans"]');
+  await expect(page.locator('#bans-list')).toBeVisible();
+
+  // ---- Access Control tab — all subtabs ----
   await page.click('.tab-btn[data-tab="access"]');
+  await expect(page.locator('.subtab-btn[data-subtab="ac-roles"]')).toBeVisible();
+
+  await page.click('.subtab-btn[data-subtab="ac-users"]');
+  await expect(page.locator('#ac-users-list')).toBeVisible();
+
   await page.click('.subtab-btn[data-subtab="ac-ops"]');
   await expect(page.locator('#ops-list')).toBeVisible();
 
-  // Backups tab
+  await page.click('.subtab-btn[data-subtab="ac-policy"]');
+  await expect(page.locator('#subtab-ac-policy')).toBeVisible();
+
+  // ---- Backups tab ----
   await page.click('.tab-btn[data-tab="backups"]');
   await expect(page.locator('#backups-list')).toBeVisible();
   await expect(page.locator('#backup-schedule-form')).toBeVisible();
 
-  // Settings tab — app config
+  // ---- Settings tab — all subtabs ----
   await page.click('.tab-btn[data-tab="settings"]');
   await expect(page.locator('#app-config-form')).toBeVisible();
 
-  // Settings tab — server.properties subtab
   await page.click('.subtab-btn[data-subtab="server-props"]');
   await expect(page.locator('#props-form')).toBeVisible();
+
+  await page.click('.subtab-btn[data-subtab="jvm-args"]');
+  await expect(page.locator('#jvm-args-form')).toBeVisible();
+
+  await page.click('.subtab-btn[data-subtab="environments"]');
+  await expect(page.locator('#env-list')).toBeVisible();
+
+  await page.click('.subtab-btn[data-subtab="mod-configs"]');
+  await expect(page.locator('#mod-configs-list')).toBeVisible();
 });
 
 // ============================================================
@@ -168,6 +292,38 @@ test('demo server can be stopped and started', async ({ page }) => {
     await startBtn.click();
     await page.waitForTimeout(500);
   }
+});
+
+// ============================================================
+// Analytics API endpoints (no browser needed)
+// ============================================================
+
+test('analytics API returns valid data in demo mode', async ({ request }) => {
+  const now = new Date().toISOString();
+  const oneHourAgo = new Date(Date.now() - 3600000).toISOString();
+
+  // Metrics endpoint
+  const metricsResp = await request.get(`/api/analytics/metrics?from=${oneHourAgo}&to=${now}`);
+  expect(metricsResp.ok()).toBe(true);
+  const { metrics } = await metricsResp.json();
+  expect(Array.isArray(metrics)).toBe(true);
+  expect(metrics.length).toBeGreaterThan(0);
+  expect(metrics[0]).toHaveProperty('timestamp');
+  expect(metrics[0]).toHaveProperty('status');
+
+  // Events endpoint
+  const eventsResp = await request.get(`/api/analytics/events?from=${oneHourAgo}&to=${now}`);
+  expect(eventsResp.ok()).toBe(true);
+  const { events } = await eventsResp.json();
+  expect(Array.isArray(events)).toBe(true);
+
+  // Summary endpoint
+  const summaryResp = await request.get(`/api/analytics/summary?from=${oneHourAgo}&to=${now}`);
+  expect(summaryResp.ok()).toBe(true);
+  const { summary } = await summaryResp.json();
+  expect(summary).toHaveProperty('avgTps');
+  expect(summary).toHaveProperty('peakPlayers');
+  expect(summary).toHaveProperty('uptimePercent');
 });
 
 // ============================================================
