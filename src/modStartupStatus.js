@@ -170,6 +170,7 @@ export class ModStartupParser {
   constructor() {
     this.modIdMap = new Map(); // source name -> filename (comprehensive)
     this.statuses = new Map(); // filename -> { status, messages[] }
+    this.unmapped = []; // WARN/ERROR lines that couldn't be attributed to any mod
     this._collecting = null; // { filename, messageIndex } when collecting stack trace
     this._started = false;
     this._finalized = false;
@@ -197,6 +198,7 @@ export class ModStartupParser {
   /** Reset all state for a new server start. */
   reset() {
     this.statuses.clear();
+    this.unmapped = [];
     this._collecting = null;
     this._started = true;
     this._finalized = false;
@@ -251,13 +253,10 @@ export class ModStartupParser {
       const isStackLine = STACK_TRACE_PATTERN.test(line) || /^\s/.test(line);
       const logMatch = LOG_PATTERN.exec(line);
       if (isStackLine || !logMatch) {
-        const entry = this.statuses.get(this._collecting.filename);
-        if (entry) {
-          const msg = entry.messages[this._collecting.messageIndex];
-          if (msg) {
-            if (!msg.stackTrace) msg.stackTrace = [];
-            msg.stackTrace.push(line);
-          }
+        const msg = this._getCollectingMessage();
+        if (msg) {
+          if (!msg.stackTrace) msg.stackTrace = [];
+          msg.stackTrace.push(line);
         }
         return null;
       }
@@ -276,13 +275,10 @@ export class ModStartupParser {
           clsLower.startsWith('de.ar.') ||
           clsLower.startsWith('de.gi.');
         if (isSysSource) {
-          const entry = this.statuses.get(this._collecting.filename);
-          if (entry) {
-            const msg = entry.messages[this._collecting.messageIndex];
-            if (msg) {
-              if (!msg.stackTrace) msg.stackTrace = [];
-              msg.stackTrace.push(`[${collLevel}] ${collSource}`);
-            }
+          const msg = this._getCollectingMessage();
+          if (msg) {
+            if (!msg.stackTrace) msg.stackTrace = [];
+            msg.stackTrace.push(`[${collLevel}] ${collSource}`);
           }
           return null; // keep _collecting
         }
@@ -328,12 +324,21 @@ export class ModStartupParser {
           return this._addMessage(modRef.filename, modRef.modId, 'warning', level, source, text);
         }
       }
-      return null; // system source with no extractable mod ref
+      // Track unattributed system WARN/ERROR
+      if (level === 'ERROR' || level === 'FATAL' || level === 'WARN') {
+        this._addUnmapped(level, source, text);
+      }
+      return null;
     }
 
     // Resolve non-system source to filename
     const resolved = this._resolveSource(source, sourceLower);
-    if (!resolved) return null;
+    if (!resolved) {
+      if (level === 'ERROR' || level === 'FATAL' || level === 'WARN') {
+        this._addUnmapped(level, source, text);
+      }
+      return null;
+    }
 
     const { filename, modId } = resolved;
 
@@ -530,5 +535,26 @@ export class ModStartupParser {
   /** Get status for a specific filename. */
   getStatusForFile(filename) {
     return this.statuses.get(filename) || null;
+  }
+
+  /** Get all unattributed WARN/ERROR messages (not mapped to any mod). */
+  getUnmapped() {
+    return this.unmapped;
+  }
+
+  _getCollectingMessage() {
+    if (!this._collecting) return null;
+    if (this._collecting.filename === '__unmapped__') {
+      return this.unmapped[this._collecting.messageIndex] || null;
+    }
+    const entry = this.statuses.get(this._collecting.filename);
+    return entry?.messages[this._collecting.messageIndex] || null;
+  }
+
+  _addUnmapped(level, source, text) {
+    const msg = { level, source, text, stackTrace: null };
+    this.unmapped.push(msg);
+    // Use _collecting to capture stack traces for unmapped messages too
+    this._collecting = { filename: '__unmapped__', messageIndex: this.unmapped.length - 1 };
   }
 }

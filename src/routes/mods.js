@@ -93,6 +93,12 @@ export default function modRoutes(ctx) {
     res.json(parser ? parser.getStatuses() : {});
   });
 
+  router.get('/mods/startup-unmapped', (req, res) => {
+    if (ctx.config.demoMode) return res.json([]);
+    const parser = ctx.modStartupParser;
+    res.json(parser ? parser.getUnmapped() : []);
+  });
+
   router.post('/mods/toggle', requireCapability('server.manage_mods'), async (req, res) => {
     const { filename, enable } = req.body;
     if (!filename) return res.status(400).json({ error: 'filename required' });

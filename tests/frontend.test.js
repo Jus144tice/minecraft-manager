@@ -323,6 +323,7 @@ test('HTML: all data-action elements reference valid actions', () => {
     'server-cmd-prompt',
     'mod-startup-detail',
     'close-mod-startup-modal',
+    'view-unmapped-log',
   ]);
   const actionEls = doc.querySelectorAll('[data-action]');
   for (const el of actionEls) {

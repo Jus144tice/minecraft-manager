@@ -45,6 +45,9 @@ document.addEventListener('click', async (e) => {
     case 'close-mod-startup-modal':
       hide('mod-startup-modal');
       break;
+    case 'view-unmapped-log':
+      openUnmappedLogModal();
+      break;
     case 'toggle-mod':
       await toggleMod(el);
       break;
@@ -701,6 +704,7 @@ function connectWs() {
       if (msg.type === 'mod-status-reset') {
         modStartupStatuses = {};
         if (activeModsSubtab === 'installed') renderMods();
+        hide('unmapped-log-link');
       }
       if (msg.type === 'mod-status' && msg.filename) {
         if (!modStartupStatuses[msg.filename]) modStartupStatuses[msg.filename] = { status: msg.status, messages: [] };
@@ -714,6 +718,7 @@ function connectWs() {
       if (msg.type === 'mod-status-complete') {
         modStartupStatuses = msg.statuses || {};
         if (activeModsSubtab === 'installed') renderMods();
+        show('unmapped-log-link');
       }
       if (msg.type === 'panel-link-verified') {
         // Auto-refresh MC link section if the user profile modal is open
@@ -1247,6 +1252,7 @@ async function loadMods() {
     // Load startup status and config cache (non-blocking, re-render when ready)
     Promise.all([loadModStartupStatuses(), getModConfigsCache()]).then(() => {
       if (activeModsSubtab === 'installed') renderMods();
+      if (Object.keys(modStartupStatuses).length > 0) show('unmapped-log-link');
     });
   } catch (err) {
     $('mods-list').innerHTML = `<p class="error-msg">${esc(err.message)}</p>`;
@@ -1992,6 +1998,41 @@ function loadModDetailLogTab() {
     }
   }
   container.innerHTML = html;
+}
+
+async function openUnmappedLogModal() {
+  $('mod-startup-modal-title').textContent = 'Unmapped Startup Log Entries';
+  $('mod-startup-modal-content').innerHTML = '<p class="dim">Loading...</p>';
+  show('mod-startup-modal');
+
+  try {
+    const messages = await GET('/mods/startup-unmapped');
+    if (!messages || messages.length === 0) {
+      $('mod-startup-modal-content').innerHTML =
+        '<p class="dim">All startup log entries were successfully mapped to mods. Nothing unmapped.</p>';
+      return;
+    }
+    let html = `<p class="dim" style="margin-bottom:0.75rem">${messages.length} warning/error entries could not be attributed to a specific mod:</p>`;
+    for (const msg of messages) {
+      const badge = startupMsgBadge(msg, 'warning');
+      html += `<div class="startup-message">
+        <div class="startup-message-header">
+          <span class="startup-level-badge ${badge.cls}">${esc(badge.label)}</span>
+          <span class="dim">${esc(msg.source)}</span>
+        </div>
+        <div class="startup-message-text">${esc(msg.text)}</div>`;
+      if (msg.stackTrace && msg.stackTrace.length > 0) {
+        html += `<details class="startup-stacktrace">
+          <summary>Stack trace (${msg.stackTrace.length} lines)</summary>
+          <pre>${esc(msg.stackTrace.join('\n'))}</pre>
+        </details>`;
+      }
+      html += '</div>';
+    }
+    $('mod-startup-modal-content').innerHTML = html;
+  } catch (err) {
+    $('mod-startup-modal-content').innerHTML = `<p class="error-msg">${esc(err.message)}</p>`;
+  }
 }
 
 function renderModDetail(project, context = {}) {
