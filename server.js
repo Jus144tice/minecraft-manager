@@ -415,7 +415,31 @@ wss.on('connection', (ws, req) => {
       for (const entry of mc.logs) {
         ws.send(JSON.stringify({ type: 'log', ...entry }));
       }
-      ws.send(JSON.stringify({ type: 'status', running: mc.running, stopping: mc.stopping, uptime: mc.getUptime() }));
+      // Send full metrics on connect (not just bare running state) to avoid zeroing out the dashboard
+      collectMetrics({ mc, rconCmd: ctx.rconCmd, rconConnected: ctx.rconConnected, config })
+        .then((m) => {
+          if (ws.readyState === 1) {
+            ws.send(
+              JSON.stringify({
+                type: 'status',
+                running: mc.running,
+                stopping: mc.stopping,
+                uptime: mc.getUptime(),
+                rconConnected: ctx.rconConnected,
+                minecraftVersion: config.minecraftVersion || 'unknown',
+                ...m,
+              }),
+            );
+          }
+        })
+        .catch(() => {
+          // Fallback: send bare status if metrics collection fails
+          if (ws.readyState === 1) {
+            ws.send(
+              JSON.stringify({ type: 'status', running: mc.running, stopping: mc.stopping, uptime: mc.getUptime() }),
+            );
+          }
+        });
     }
 
     ws.on('close', () => wsClients.delete(ws));
