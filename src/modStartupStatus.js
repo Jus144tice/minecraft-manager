@@ -147,6 +147,7 @@ const SYSTEM_SOURCES = new Set([
   'ne.mi.ja.se.JarSelector',
   'ne.mi.fm.lo.RuntimeDistCleaner',
   'ne.mi.co.ForgeConfigSpec',
+  'ne.mi.co.ForgeHooks',
   'mojang',
   'cp.mo.mo.Launcher',
   'cp.mo.mo.LaunchServiceHandler',
@@ -248,8 +249,8 @@ export class ModStartupParser {
     // Stack trace continuation
     if (this._collecting) {
       const isStackLine = STACK_TRACE_PATTERN.test(line) || /^\s/.test(line);
-      const isLogLine = LOG_PATTERN.test(line);
-      if (isStackLine || !isLogLine) {
+      const logMatch = LOG_PATTERN.exec(line);
+      if (isStackLine || !logMatch) {
         const entry = this.statuses.get(this._collecting.filename);
         if (entry) {
           const msg = entry.messages[this._collecting.messageIndex];
@@ -260,6 +261,32 @@ export class ModStartupParser {
         }
         return null;
       }
+      // It's a new structured log line. If it's a system-sourced WARN/ERROR with no
+      // mod ref, treat it as context for the current collection (e.g., "Unable to decode
+      // loot conditions" following a mod-specific error about the same issue).
+      const collLevel = logMatch[2];
+      const collSource = logMatch[4]; // text content
+      if ((collLevel === 'WARN' || collLevel === 'ERROR') && !this._extractModRefFromText(collSource)) {
+        const clsLower = logMatch[3].toLowerCase();
+        const isSysSource =
+          SYSTEM_SOURCES.has(logMatch[3]) ||
+          SYSTEM_SOURCES.has(clsLower) ||
+          clsLower.startsWith('ne.mi.') ||
+          clsLower.startsWith('cp.mo.') ||
+          clsLower.startsWith('de.ar.') ||
+          clsLower.startsWith('de.gi.');
+        if (isSysSource) {
+          const entry = this.statuses.get(this._collecting.filename);
+          if (entry) {
+            const msg = entry.messages[this._collecting.messageIndex];
+            if (msg) {
+              if (!msg.stackTrace) msg.stackTrace = [];
+              msg.stackTrace.push(`[${collLevel}] ${collSource}`);
+            }
+          }
+          return null; // keep _collecting
+        }
+      }
       this._collecting = null;
     }
 
@@ -269,7 +296,13 @@ export class ModStartupParser {
 
     const [, , level, source, text] = match;
     const sourceLower = source.toLowerCase();
-    const isSystemSource = SYSTEM_SOURCES.has(source) || SYSTEM_SOURCES.has(sourceLower);
+    const isSystemSource =
+      SYSTEM_SOURCES.has(source) ||
+      SYSTEM_SOURCES.has(sourceLower) ||
+      sourceLower.startsWith('ne.mi.') || // net.minecraftforge.* abbreviated
+      sourceLower.startsWith('cp.mo.') || // cpw.mods.* abbreviated
+      sourceLower.startsWith('de.ar.') || // dev.architectury.* abbreviated
+      sourceLower.startsWith('de.gi.'); // dev.gigaherz.* abbreviated (thingpack parsers)
 
     // For system sources: only process WARN/ERROR by extracting mod refs from the message text.
     // System-sourced issues (tag loading, recipe parsing, mixin refs) are always "warning" —
@@ -419,13 +452,14 @@ export class ModStartupParser {
     }
 
     // "modid:resource_path" (namespace references like "create:crushed_ores")
-    const nsRef = text.match(/\b([a-z_][\w-]*):[\w/.-]+/);
-    if (nsRef) {
-      const skip = new Set(['minecraft', 'forge', 'java', 'net', 'com', 'org', 'path', 'http', 'https', 'file']);
-      if (!skip.has(nsRef[1])) {
-        const r = this._resolveModRef(nsRef[1]);
-        if (r) return r;
-      }
+    // Also handles double-colon patterns like "loot_tables:overweight_farming:blocks/..."
+    const skip = new Set(['minecraft', 'forge', 'java', 'net', 'com', 'org', 'path', 'http', 'https', 'file']);
+    // Extract ALL colon-separated identifiers from the text
+    const colonIds = text.matchAll(/\b([a-z_][\w-]*)(?=:)/g);
+    for (const m of colonIds) {
+      if (skip.has(m[1])) continue;
+      const r = this._resolveModRef(m[1]);
+      if (r) return r;
     }
 
     return null;

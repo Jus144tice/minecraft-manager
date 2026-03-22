@@ -290,6 +290,98 @@ test('version check failure attributes to last checked mod', () => {
   assert.equal(result.status, 'warning');
 });
 
+test('version check failure captures stack trace', () => {
+  const p = new ModStartupParser();
+  p.reset();
+  p.setModIdMap(new Map([['framework', 'framework-1.0.jar']]));
+  p.parseLine(
+    '[09:45:55] [Forge Version Check/INFO] [ne.mi.fm.VersionChecker/]: [framework] Starting version check at https://example.com',
+  );
+  p.parseLine('[09:45:56] [Forge Version Check/WARN] [ne.mi.fm.VersionChecker/]: Failed to process update information');
+  p.parseLine(
+    'com.google.gson.JsonSyntaxException: java.lang.IllegalStateException: Expected BEGIN_OBJECT but was STRING',
+  );
+  p.parseLine('\tat com.google.gson.Gson.fromJson(Gson.java:1226) ~[gson-2.10.jar%2372!/:?] {}');
+  p.parseLine('\tat com.google.gson.Gson.fromJson(Gson.java:1124) ~[gson-2.10.jar%2372!/:?] {}');
+  p.parseLine('Caused by: java.lang.IllegalStateException: Expected BEGIN_OBJECT but was STRING');
+  p.parseLine('\tat com.google.gson.stream.JsonReader.beginObject(JsonReader.java:393) ~[gson-2.10.jar%2372!/:?] {}');
+  p.parseLine('\t... 6 more');
+  // Next structured log line ends the stack trace
+  p.parseLine(
+    '[09:45:56] [Forge Version Check/INFO] [ne.mi.fm.VersionChecker/]: [toms_storage] Starting version check',
+  );
+
+  const status = p.getStatusForFile('framework-1.0.jar');
+  assert.ok(status, 'framework should have a status entry');
+  assert.equal(status.messages.length, 1);
+  assert.ok(status.messages[0].stackTrace, 'stack trace should be captured');
+  assert.ok(
+    status.messages[0].stackTrace.length >= 5,
+    `expected >= 5 stack lines, got ${status.messages[0].stackTrace?.length}`,
+  );
+});
+
+test('system-sourced tag error captures stack trace', () => {
+  // Simulate: tag loading error with stack trace from minecraft source
+  parser.parseLine(
+    "[09:46:06] [Worker-Main-1/ERROR] [minecraft/TagLoader]: Couldn't load tag create:crushed_ores as it is missing following references",
+  );
+  parser.parseLine('\tminecraft:crushed_calorite_ore (from create_ad_astra_compat-forge-1.20.1-1.0.0.jar)');
+  parser.parseLine('\tminecraft:crushed_desh_ore (from create_ad_astra_compat-forge-1.20.1-1.0.0.jar)');
+  parser.parseLine('[09:46:07] [main/INFO] [create/]: something else');
+
+  const status = parser.getStatusForFile('create-1.20.1-0.5.1.f.jar');
+  assert.ok(status);
+  // Should have a warning message with the tag lines as stack trace
+  const tagMsg = status.messages.find((m) => m.text.includes('crushed_ores'));
+  assert.ok(tagMsg, 'should have the tag loading message');
+  assert.ok(tagMsg.stackTrace, 'should have stack trace lines');
+  assert.equal(tagMsg.stackTrace.length, 2);
+});
+
+test('ForgeHooks loot table error captures stack trace for the mod', () => {
+  parser.parseLine(
+    "[09:46:40] [Worker-Main-4/ERROR] [ne.mi.co.ForgeHooks/]: Couldn't parse element loot_tables:overweight_farming:blocks/overweight_ginger_block",
+  );
+  parser.parseLine(
+    "com.google.gson.JsonSyntaxException: Expected name to be an item, was unknown string 'snowyspirit:ginger'",
+  );
+  parser.parseLine('\tat net.minecraft.util.GsonHelper.m_13866_(GsonHelper.java:145) ~[server.jar%23413!/:?]');
+  parser.parseLine('\tat java.util.Optional.orElseThrow(Optional.java:403) ~[?:?]');
+  parser.parseLine('[09:46:41] [main/INFO] [create/]: something else'); // ends stack trace
+
+  const status = parser.getStatusForFile('overweight_farming-1.20.1-1.2.jar');
+  assert.ok(status, 'overweight_farming should have a status');
+  assert.equal(status.status, 'warning');
+  const msg = status.messages.find((m) => m.text.includes('overweight_ginger_block'));
+  assert.ok(msg, 'should have the loot table message');
+  assert.ok(msg.stackTrace, 'stack trace should be captured');
+  assert.ok(msg.stackTrace.length >= 3, `expected >= 3 stack lines, got ${msg.stackTrace?.length}`);
+});
+
+test('LootModifierManager error with stack trace attributes to mod via namespace', () => {
+  const p = new ModStartupParser();
+  p.reset();
+  p.setModIdMap(new Map([['nethersdelight', 'nethersdelight-1.0.jar']]));
+  p.parseLine(
+    "[09:46:12] [main/WARN] [ne.mi.co.lo.LootModifierManager/]: Could not decode GlobalLootModifier with json id nethersdelight:chopping_leather - error: Unknown type 'minecraft:alternatives'",
+  );
+  p.parseLine('[09:46:12] [main/WARN] [ne.mi.co.lo.LootModifierManager/]: Unable to decode loot conditions');
+  p.parseLine("com.google.gson.JsonSyntaxException: Unknown type 'minecraft:alternatives'");
+  p.parseLine(
+    '\tat net.minecraft.world.level.storage.loot.GsonAdapterFactory$JsonAdapter.deserialize(GsonAdapterFactory.java:99)',
+  );
+  p.parseLine('\tat com.google.gson.internal.bind.TreeTypeAdapter.read(TreeTypeAdapter.java:76)');
+  p.parseLine('[09:46:12] [main/INFO] [create/]: next log line');
+
+  const status = p.getStatusForFile('nethersdelight-1.0.jar');
+  assert.ok(status, 'nethersdelight should have a status');
+  assert.equal(status.status, 'warning');
+  // Should have at least one message with a stack trace
+  const msgWithTrace = status.messages.find((m) => m.stackTrace && m.stackTrace.length > 0);
+  assert.ok(msgWithTrace, 'should have a message with stack trace');
+});
+
 test('finalize does not mark unmapped mods (missing mods.toml)', () => {
   parser.parseLine('[00:06:27] [main/INFO] [voicechat/]: loaded');
   parser.finalize();
