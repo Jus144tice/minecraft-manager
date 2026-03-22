@@ -2,13 +2,13 @@
 
 > **Implementation workflow** (follow this order for every feature/fix):
 >
-> 1. **Implement** — write the code (backend, frontend, tests)
-> 2. **Test** — run `npm test` to verify correctness. Fix failures before proceeding
+> 1. **Implement + write tests** — write the code (backend, frontend) AND any new/updated tests together. Tests must exist before running them in step 2 so new coverage is verified in a single pass, not as an afterthought
+> 2. **Test** — run `npm run validate` (lint + format check + unit tests + e2e). Fix failures before proceeding. Do NOT skip e2e — they catch real UI regressions
 > 3. **Update docs** — update `CLAUDE.md` and `README.md` in the same commit if the change affects them. Keep symbol references, line landmarks, file maps, and route tables accurate
-> 4. **Lint + format** — run `npm run lint && npx prettier --check .` once at the end. Fix any issues with `npm run lint:fix` and `npx prettier --write .`. Do NOT run formatting checks between intermediate steps — save it for the final pass
-> 5. **Commit + push** — stage, commit, push. CI fails on lint/format errors, so step 4 must pass first
+> 4. **Lint + format** — if `npm run validate` already passed, this is done. Otherwise fix with `npm run lint:fix` and `npx prettier --write .`. Do NOT run formatting checks between intermediate steps — save it for the final pass
+> 5. **Commit + push** — stage, commit, push. CI runs `npm run validate` equivalent, so step 2 must pass first
 >
-> This order avoids repeatedly re-checking formatting after each file edit.
+> This order avoids re-running tests after adding them late and avoids repeatedly re-checking formatting after each file edit.
 
 ## Source of Truth
 
@@ -34,10 +34,10 @@ When docs conflict, prefer implementation in this order:
 ## Commands
 
 ```bash
-npm test                  # Unit tests (tests/*.test.js)
-npm run test:integration  # Network-dependent tests (tests/*.integration.js)
-npm run test:e2e          # Playwright browser tests (demo mode)
-npm run validate          # lint + format:check + test + e2e (~30s total)
+npm run validate          # Full check: lint + format + unit tests + e2e (~30s). Use this before committing
+npm test                  # Unit tests only (tests/*.test.js)
+npm run test:e2e          # Playwright browser tests only (demo mode, 10 smoke tests)
+npm run test:integration  # Network-dependent tests (tests/*.integration.js, excluded from validate)
 npm run lint              # ESLint
 npm run lint:fix          # ESLint autofix
 npm run format            # Prettier write
@@ -300,12 +300,14 @@ Challenge-based verification: user starts challenge from Panel (`identity.js`) o
 
 ## Testing Notes
 
+- **Always run `npm run validate` before committing** — it runs lint, format check, unit tests, AND e2e tests. This is the single command that catches everything
 - Tests use `node:test` with `node:assert/strict` — no external test framework
 - Route tests mock `ctx` with fake services, test Express handlers directly
 - `minecraftProcess.test.js` can be flaky on Windows (child/grandchild process management)
-- Network-dependent tests are in `*.integration.js` (excluded from `npm test`)
-- E2E tests run against demo mode (no real server needed)
-- CI runs on Node 20 and 22; e2e only on Node 22
+- Network-dependent tests are in `*.integration.js` (excluded from `npm run validate`)
+- E2E tests (Playwright) run against demo mode — no real server needed. They test login, dashboard, all tabs/subtabs, modals, analytics, and API endpoints
+- CI runs unit tests on Node 20 and 22; e2e on Node 22 only
+- **Write tests alongside implementation, not after.** New test files should be created in step 1 of the workflow so they're included when `npm run validate` runs in step 2
 
 ## Common Gotchas
 
