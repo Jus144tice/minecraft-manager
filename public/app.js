@@ -2640,20 +2640,21 @@ async function loadModConfigs() {
       return;
     }
     container.innerHTML = '';
-    for (const cfg of configs) {
-      container.appendChild(createModConfigPanel(cfg));
+    for (const mod of configs) {
+      container.appendChild(createModPanel(mod));
     }
   } catch (err) {
     container.innerHTML = `<p class="error-msg">${esc(err.message)}</p>`;
   }
 }
 
-function createModConfigPanel(cfg) {
+function createModPanel(mod) {
   const details = document.createElement('details');
   details.className = 'mod-config-panel';
 
+  const fileCount = mod.files.length;
   const summary = document.createElement('summary');
-  summary.innerHTML = `<strong>${esc(cfg.displayName)}</strong> <span class="dim" style="font-size:0.78rem; margin-left:0.5rem">${esc(cfg.configId)}</span>`;
+  summary.innerHTML = `<strong>${esc(mod.displayName)}</strong> <span class="dim" style="font-size:0.78rem; margin-left:0.5rem">${fileCount} config file${fileCount !== 1 ? 's' : ''}</span>`;
   details.appendChild(summary);
 
   const body = document.createElement('div');
@@ -2664,11 +2665,29 @@ function createModConfigPanel(cfg) {
 
   details.addEventListener('toggle', () => {
     if (details.open && body.dataset.loaded === 'false') {
-      loadModConfigEntries(cfg.configId, body);
+      loadModPanelFiles(mod, body);
     }
   });
 
   return details;
+}
+
+async function loadModPanelFiles(mod, container) {
+  container.innerHTML = '';
+  container.dataset.loaded = 'true';
+  for (const file of mod.files) {
+    if (mod.files.length > 1) {
+      const fileHeader = document.createElement('h4');
+      fileHeader.className = 'mod-config-file-header';
+      fileHeader.textContent = file.fileName;
+      container.appendChild(fileHeader);
+    }
+    const fileBody = document.createElement('div');
+    fileBody.className = 'mod-config-file-body';
+    fileBody.innerHTML = '<p class="dim">Loading...</p>';
+    container.appendChild(fileBody);
+    loadModConfigEntries(file.configId, fileBody);
+  }
 }
 
 async function loadModConfigEntries(configId, container) {

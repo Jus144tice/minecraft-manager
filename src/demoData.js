@@ -910,25 +910,25 @@ export const DEMO_MOD_STARTUP_STATUSES = {
 // --- Mod config list (demo) ---
 export const DEMO_MOD_CONFIG_LIST = [
   {
-    configId: 'config/voicechat/voicechat-server.properties',
-    fileName: 'voicechat-server.properties',
-    format: 'properties',
-    modId: 'voicechat',
-    displayName: 'Voicechat',
-  },
-  {
-    configId: 'world/serverconfig/ftbchunks-world.snbt',
-    fileName: 'ftbchunks-world.snbt',
-    format: 'snbt',
-    modId: 'ftbchunks',
-    displayName: 'Ftbchunks',
-  },
-  {
-    configId: 'config/create-common.toml',
-    fileName: 'create-common.toml',
-    format: 'toml',
     modId: 'create',
     displayName: 'Create',
+    files: [{ configId: 'config/create-common.toml', fileName: 'create-common.toml', format: 'toml' }],
+  },
+  {
+    modId: 'ftbchunks',
+    displayName: 'Ftbchunks',
+    files: [{ configId: 'world/serverconfig/ftbchunks-world.snbt', fileName: 'ftbchunks-world.snbt', format: 'snbt' }],
+  },
+  {
+    modId: 'voicechat',
+    displayName: 'Voicechat',
+    files: [
+      {
+        configId: 'config/voicechat/voicechat-server.properties',
+        fileName: 'voicechat-server.properties',
+        format: 'properties',
+      },
+    ],
   },
 ];
 

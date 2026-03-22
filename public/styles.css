@@ -1567,6 +1567,17 @@ textarea:focus {
 .mod-config-body {
   padding: 0.75rem 1rem;
 }
+.mod-config-file-header {
+  font-size: 0.85rem;
+  color: var(--text-dim);
+  margin: 1.25rem 0 0.5rem;
+  padding: 0.35rem 0;
+  border-bottom: 1px solid var(--border);
+  font-family: monospace;
+}
+.mod-config-file-header:first-child {
+  margin-top: 0;
+}
 .mod-config-section {
   font-size: 0.9rem;
   color: var(--primary);

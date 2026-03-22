@@ -38,9 +38,18 @@ export async function discoverModConfigs(serverPath) {
     }
   }
 
-  // Sort by display name
-  configs.sort((a, b) => a.displayName.localeCompare(b.displayName));
-  return configs;
+  // Group by modId
+  const grouped = {};
+  for (const cfg of configs) {
+    if (!grouped[cfg.modId]) {
+      grouped[cfg.modId] = { modId: cfg.modId, displayName: cfg.displayName, files: [] };
+    }
+    grouped[cfg.modId].files.push({ configId: cfg.configId, fileName: cfg.fileName, format: cfg.format });
+  }
+
+  const mods = Object.values(grouped);
+  mods.sort((a, b) => a.displayName.localeCompare(b.displayName));
+  return mods;
 }
 
 async function scanDir(serverPath, relDir, fullDir, configs) {
