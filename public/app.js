@@ -689,6 +689,7 @@ function connectWs() {
       if (msg.type === 'environment-switched') {
         loadStatus();
         loadEnvironments();
+        _modConfigsCache = null; // invalidate config cache for new env
       }
       if (msg.type === 'mod-status-reset') {
         modStartupStatuses = {};
@@ -1928,7 +1929,13 @@ function renderModDetail(project, context = {}) {
       </section>`
         : ''
     }
+    ${isInstalled ? '<section class="mod-detail-section"><h3>Configuration</h3><div id="mod-detail-configs"><p class="dim">Checking for config files...</p></div></section>' : ''}
   `;
+
+  // Load config files for installed mods
+  if (isInstalled) {
+    loadModDetailConfigs(project.slug || project.id);
+  }
 }
 
 window.openVersionModal = async function (btn) {
@@ -2631,6 +2638,63 @@ $('btn-jvm-save-restart').addEventListener('click', async () => {
 
 // --- Settings: Dynamic Mod Configs ---
 
+// Cache discovered mod configs for cross-referencing from mod detail views
+let _modConfigsCache = null;
+
+async function getModConfigsCache() {
+  if (_modConfigsCache) return _modConfigsCache;
+  try {
+    const { configs } = await GET('/settings/mod-configs');
+    _modConfigsCache = configs || [];
+  } catch {
+    _modConfigsCache = [];
+  }
+  return _modConfigsCache;
+}
+
+async function loadModDetailConfigs(modSlug) {
+  const container = document.getElementById('mod-detail-configs');
+  if (!container) return;
+
+  const allConfigs = await getModConfigsCache();
+  const slugLower = (modSlug || '').toLowerCase().replace(/[-_]/g, '');
+
+  // Find matching mod config by modId
+  const match = allConfigs.find(
+    (m) => m.modId === slugLower || m.modId.includes(slugLower) || slugLower.includes(m.modId),
+  );
+
+  if (!match || !match.files.length) {
+    container.innerHTML = '<p class="dim">No config files found for this mod.</p>';
+    return;
+  }
+
+  container.innerHTML = '';
+  for (const file of match.files) {
+    const filePanel = document.createElement('details');
+    filePanel.className = 'mod-config-panel';
+    filePanel.style.marginBottom = '0.5rem';
+
+    const summary = document.createElement('summary');
+    summary.innerHTML = `<span style="font-family:monospace;font-size:0.85rem">${esc(file.configId)}</span>`;
+    filePanel.appendChild(summary);
+
+    const body = document.createElement('div');
+    body.className = 'mod-config-body';
+    body.dataset.loaded = 'false';
+    body.innerHTML = '<p class="dim">Loading...</p>';
+    filePanel.appendChild(body);
+
+    filePanel.addEventListener('toggle', () => {
+      if (filePanel.open && body.dataset.loaded === 'false') {
+        loadModConfigEntries(file.configId, body);
+      }
+    });
+
+    container.appendChild(filePanel);
+  }
+}
+
 async function loadModConfigs() {
   const container = $('mod-configs-list');
   try {
@@ -2676,17 +2740,26 @@ async function loadModPanelFiles(mod, container) {
   container.innerHTML = '';
   container.dataset.loaded = 'true';
   for (const file of mod.files) {
-    if (mod.files.length > 1) {
-      const fileHeader = document.createElement('h4');
-      fileHeader.className = 'mod-config-file-header';
-      fileHeader.textContent = file.fileName;
-      container.appendChild(fileHeader);
-    }
-    const fileBody = document.createElement('div');
-    fileBody.className = 'mod-config-file-body';
-    fileBody.innerHTML = '<p class="dim">Loading...</p>';
-    container.appendChild(fileBody);
-    loadModConfigEntries(file.configId, fileBody);
+    const filePanel = document.createElement('details');
+    filePanel.className = 'mod-config-panel mod-config-file-panel';
+
+    const summary = document.createElement('summary');
+    summary.innerHTML = `<span style="font-family:monospace;font-size:0.85rem">${esc(file.fileName)}</span> <span class="dim" style="font-size:0.75rem">${esc(file.configId)}</span>`;
+    filePanel.appendChild(summary);
+
+    const body = document.createElement('div');
+    body.className = 'mod-config-body';
+    body.dataset.loaded = 'false';
+    body.innerHTML = '<p class="dim">Loading...</p>';
+    filePanel.appendChild(body);
+
+    filePanel.addEventListener('toggle', () => {
+      if (filePanel.open && body.dataset.loaded === 'false') {
+        loadModConfigEntries(file.configId, body);
+      }
+    });
+
+    container.appendChild(filePanel);
   }
 }
 
