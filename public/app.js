@@ -1244,8 +1244,8 @@ async function loadMods() {
     if (needsLookup && allMods.length > 0) {
       enrichInstalledMods();
     }
-    // Load startup status (non-blocking)
-    loadModStartupStatuses().then(() => {
+    // Load startup status and config cache (non-blocking, re-render when ready)
+    Promise.all([loadModStartupStatuses(), getModConfigsCache()]).then(() => {
       if (activeModsSubtab === 'installed') renderMods();
     });
   } catch (err) {
@@ -1372,7 +1372,7 @@ function renderMods() {
         </div>
       </div>
       <div class="mod-actions">
-        <button class="btn btn-sm btn-ghost mod-gear-btn" data-action="mod-settings" data-filename="${esc(mod.filename)}" data-id="${esc(md?.projectSlug || md?.projectId || '')}" data-author="${esc(md?.author || '')}" title="Settings & Log">&#9881;</button>
+        ${hasModConfig(mod.filename, md) ? `<button class="btn btn-sm btn-ghost mod-gear-btn" data-action="mod-settings" data-filename="${esc(mod.filename)}" data-id="${esc(md?.projectSlug || md?.projectId || '')}" data-author="${esc(md?.author || '')}" title="Settings & Log">&#9881;</button>` : ''}
         ${
           can('server.manage_mods')
             ? `<button class="btn btn-sm ${mod.enabled ? 'btn-warning' : 'btn-success'}"
@@ -1770,15 +1770,10 @@ function openModStartupDetail(filename) {
     html = '<p class="dim">Mod loaded cleanly — no log output during startup.</p>';
   } else {
     for (const msg of s.messages) {
-      const levelCls =
-        msg.level === 'ERROR' || msg.level === 'FATAL'
-          ? 'startup-level-error'
-          : msg.level === 'WARN'
-            ? 'startup-level-warn'
-            : 'startup-level-info';
+      const badge = startupMsgBadge(msg, s.status);
       html += `<div class="startup-message">
         <div class="startup-message-header">
-          <span class="startup-level-badge ${levelCls}">${esc(msg.level)}</span>
+          <span class="startup-level-badge ${badge.cls}">${esc(badge.label)}</span>
           <span class="dim">${esc(msg.source)}</span>
         </div>
         <div class="startup-message-text">${esc(msg.text)}</div>`;
@@ -1935,6 +1930,14 @@ async function loadModDetailSettingsTab() {
   }
 }
 
+function startupMsgBadge(msg, modStatus) {
+  // Map raw Forge log levels to our status classification for display
+  if (msg.level === 'INFO') return { cls: 'startup-level-info', label: 'Info' };
+  if (modStatus === 'warning' || msg.level === 'WARN') return { cls: 'startup-level-warn', label: 'Warning' };
+  if (modStatus === 'critical') return { cls: 'startup-level-error', label: 'Critical' };
+  return { cls: 'startup-level-error', label: 'Error' };
+}
+
 function loadModDetailLogTab() {
   const container = $('mod-log-content');
   const filename = _currentDetailFilename;
@@ -1956,15 +1959,10 @@ function loadModDetailLogTab() {
     html += '<p class="dim">Mod loaded cleanly — no log output during startup.</p>';
   } else {
     for (const msg of s.messages) {
-      const levelCls =
-        msg.level === 'ERROR' || msg.level === 'FATAL'
-          ? 'startup-level-error'
-          : msg.level === 'WARN'
-            ? 'startup-level-warn'
-            : 'startup-level-info';
+      const badge = startupMsgBadge(msg, s.status);
       html += `<div class="startup-message">
         <div class="startup-message-header">
-          <span class="startup-level-badge ${levelCls}">${esc(msg.level)}</span>
+          <span class="startup-level-badge ${badge.cls}">${esc(badge.label)}</span>
           <span class="dim">${esc(msg.source)}</span>
         </div>
         <div class="startup-message-text">${esc(msg.text)}</div>`;
@@ -2795,6 +2793,25 @@ $('btn-jvm-save-restart').addEventListener('click', async () => {
 // Cache discovered mod configs for cross-referencing from mod detail views
 let _modConfigsCache = null;
 
+function hasModConfig(filename, md) {
+  if (!_modConfigsCache) return false;
+  const slug = (md?.projectSlug || md?.projectId || '').toLowerCase().replace(/[-_]/g, '');
+  const fileStem = filename
+    .toLowerCase()
+    .replace(/[-_](?:forge|fabric|neoforge|mc|quilt).*$/i, '')
+    .replace(/\.jar$/i, '')
+    .replace(/[-_]/g, '');
+  return _modConfigsCache.some(
+    (m) =>
+      m.modId === slug ||
+      m.modId === fileStem ||
+      m.modId.includes(slug) ||
+      slug.includes(m.modId) ||
+      m.modId.includes(fileStem) ||
+      fileStem.includes(m.modId),
+  );
+}
+
 async function getModConfigsCache() {
   if (_modConfigsCache) return _modConfigsCache;
   try {
@@ -2937,19 +2954,10 @@ async function loadModConfigEntries(configId, container) {
       form.appendChild(group);
     }
 
-    if (can('panel.configure')) {
-      const btnRow = document.createElement('div');
-      btnRow.className = 'btn-row';
-      btnRow.innerHTML = '<button type="submit" class="btn btn-primary">Save</button>';
-      form.appendChild(btnRow);
-    }
-
     const msg = document.createElement('p');
     msg.className = 'control-msg';
-    form.appendChild(msg);
 
-    form.addEventListener('submit', async (e) => {
-      e.preventDefault();
+    function collectValues() {
       const values = {};
       for (const entry of data.entries) {
         const el = form.querySelector(`[data-key="${entry.fullKey}"]`);
@@ -2969,14 +2977,74 @@ async function loadModConfigEntries(configId, container) {
           values[entry.fullKey] = el.value;
         }
       }
+      return values;
+    }
+
+    async function saveConfig(andRestart) {
       try {
-        await POST('/settings/mod-configs/file/' + configId.split('/').map(encodeURIComponent).join('/'), { values });
-        msg.textContent = 'Saved! Restart the Minecraft server to apply changes.';
-        msg.className = 'control-msg text-green';
+        await POST('/settings/mod-configs/file/' + configId.split('/').map(encodeURIComponent).join('/'), {
+          values: collectValues(),
+        });
+        if (andRestart) {
+          msg.textContent = 'Saved! Restarting server...';
+          msg.className = 'control-msg text-green';
+          try {
+            await POST('/server/restart');
+          } catch {
+            msg.textContent = 'Saved, but restart failed. Restart the server manually.';
+            msg.className = 'control-msg text-yellow';
+          }
+        } else {
+          msg.textContent = 'Saved! Restart the Minecraft server to apply changes.';
+          msg.className = 'control-msg text-green';
+        }
       } catch (err) {
         msg.textContent = err.message;
         msg.className = 'control-msg text-red';
       }
+    }
+
+    if (can('panel.configure')) {
+      const btnRow = document.createElement('div');
+      btnRow.className = 'btn-row';
+      btnRow.style.gap = '0.5rem';
+
+      const saveBtn = document.createElement('button');
+      saveBtn.type = 'submit';
+      saveBtn.className = 'btn btn-primary';
+      saveBtn.textContent = 'Save';
+      btnRow.appendChild(saveBtn);
+
+      if (can('server.restart')) {
+        const saveRestartBtn = document.createElement('button');
+        saveRestartBtn.type = 'button';
+        saveRestartBtn.className = 'btn btn-warning';
+        saveRestartBtn.textContent = 'Save & Restart';
+        saveRestartBtn.addEventListener('click', () => saveConfig(true));
+        btnRow.appendChild(saveRestartBtn);
+      }
+
+      const cancelBtn = document.createElement('button');
+      cancelBtn.type = 'button';
+      cancelBtn.className = 'btn btn-ghost';
+      cancelBtn.textContent = 'Cancel';
+      cancelBtn.addEventListener('click', () => {
+        const panel = container.closest('details');
+        if (panel) {
+          panel.open = false;
+          container.dataset.loaded = 'false';
+        }
+      });
+      btnRow.appendChild(cancelBtn);
+
+      form.appendChild(btnRow);
+    }
+
+    form.appendChild(msg);
+
+    form.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      await saveConfig(false);
     });
 
     container.innerHTML = '';
