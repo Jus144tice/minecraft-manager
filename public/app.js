@@ -582,6 +582,11 @@ async function initApp() {
   // Load full environment details (non-blocking, requires login)
   if (isLoggedIn && can('environments.manage')) loadEnvironments();
 
+  // Check for startup status data (non-blocking — shows unmapped log link on dashboard)
+  loadModStartupStatuses().then(() => {
+    if (Object.keys(modStartupStatuses).length > 0) show('unmapped-log-link');
+  });
+
   // Load preflight checks (non-blocking)
   loadPreflight();
 
