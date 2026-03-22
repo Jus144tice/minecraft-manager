@@ -57,6 +57,6 @@ export default [
     },
   },
   {
-    ignores: ['node_modules/'],
+    ignores: ['node_modules/', 'public/chart.min.js'],
   },
 ];

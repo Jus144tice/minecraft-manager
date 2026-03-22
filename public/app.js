@@ -196,8 +196,11 @@ async function api(method, path, body) {
   if (body !== undefined) opts.body = JSON.stringify(body);
   const res = await fetch('/api' + path, opts);
   if (res.status === 401) {
-    // Session expired or not logged in — show login modal
-    showLoginModal();
+    // Only show login modal for mutating requests or when user was previously logged in.
+    // Don't pop the modal on background GET requests from a guest session.
+    if (method !== 'GET' || isLoggedIn) {
+      showLoginModal();
+    }
     throw new Error('Please log in to perform this action.');
   }
   const data = await res.json().catch(() => ({}));
